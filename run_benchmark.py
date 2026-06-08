@@ -103,10 +103,12 @@ def main() -> int:
             results.append(result)
             print(f"{eval_id:>4} {agent:<9} {result['scorePercent']:>3} {result['result']:<7} {result['durationMs']}ms")
 
-    write_summary(results_dir, eval_ids, agents, results)
+    timeout_seconds = int(os.environ["BENCHMARK_TIMEOUT_SECONDS"])
+    write_summary(results_dir, run_id, eval_ids, agents, parallelism, timeout_seconds, results)
     print()
     print(f"Results: {results_dir}")
     print(f"Summary: {results_dir / 'scores.md'}")
+    print(f"Combined JSON: {results_dir / 'run.json'}")
     return 0
 
 
@@ -169,7 +171,15 @@ def write_error_result(results_dir: Path, run_id: str, eval_id: str, agent: str,
     return result
 
 
-def write_summary(results_dir: Path, eval_ids: list[str], agents: list[str], results: list[dict]) -> None:
+def write_summary(
+    results_dir: Path,
+    run_id: str,
+    eval_ids: list[str],
+    agents: list[str],
+    parallelism: int,
+    timeout_seconds: int,
+    results: list[dict],
+) -> None:
     by_key = {(item["evalId"], item["agent"]): item for item in results}
     lines = ["| Eval | " + " | ".join(agents) + " |", "| --- | " + " | ".join(["---"] * len(agents)) + " |"]
 
@@ -195,7 +205,85 @@ def write_summary(results_dir: Path, eval_ids: list[str], agents: list[str], res
         lines.append(f"| {agent} | {average} | {pass_count} | {partial_count} | {fail_count} |")
 
     (results_dir / "scores.md").write_text("\n".join(lines) + "\n")
-    (results_dir / "summary.json").write_text(json.dumps(results, indent=2))
+    ordered_results = order_results(eval_ids, agents, results)
+    (results_dir / "summary.json").write_text(json.dumps(ordered_results, indent=2))
+    (results_dir / "run.json").write_text(
+        json.dumps(
+            {
+                "runId": run_id,
+                "generatedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                "evalIds": eval_ids,
+                "agents": agents,
+                "parallelism": parallelism,
+                "timeoutSeconds": timeout_seconds,
+                "summary": build_run_summary(eval_ids, agents, ordered_results),
+                "results": ordered_results,
+            },
+            indent=2,
+        )
+    )
+
+
+def order_results(eval_ids: list[str], agents: list[str], results: list[dict]) -> list[dict]:
+    eval_order = {eval_id: index for index, eval_id in enumerate(eval_ids)}
+    agent_order = {agent: index for index, agent in enumerate(agents)}
+    return sorted(
+        results,
+        key=lambda item: (
+            eval_order.get(item.get("evalId"), len(eval_order)),
+            agent_order.get(item.get("agent"), len(agent_order)),
+            item.get("evalId", ""),
+            item.get("agent", ""),
+        ),
+    )
+
+
+def build_run_summary(eval_ids: list[str], agents: list[str], results: list[dict]) -> dict:
+    by_key = {(item["evalId"], item["agent"]): item for item in results}
+    by_eval = {
+        eval_id: {
+            agent: summarize_result(by_key.get((eval_id, agent)))
+            for agent in agents
+        }
+        for eval_id in eval_ids
+    }
+
+    by_agent = {}
+    for agent in agents:
+        agent_results = [item for item in results if item.get("agent") == agent]
+        by_agent[agent] = summarize_group(agent_results)
+
+    return {
+        "overall": summarize_group(results),
+        "byAgent": by_agent,
+        "byEval": by_eval,
+    }
+
+
+def summarize_group(results: list[dict]) -> dict:
+    total = len(results)
+    average = round(sum(item.get("scorePercent", 0) for item in results) / total, 1) if total else 0
+    return {
+        "total": total,
+        "averageScorePercent": average,
+        "pass": sum(1 for item in results if item.get("result") == "pass"),
+        "partial": sum(1 for item in results if item.get("result") == "partial"),
+        "fail": sum(1 for item in results if item.get("result") == "fail"),
+        "timedOut": sum(1 for item in results if item.get("timedOut")),
+        "durationMs": sum(item.get("durationMs", 0) for item in results),
+    }
+
+
+def summarize_result(result: dict | None) -> dict | None:
+    if not result:
+        return None
+    return {
+        "scorePercent": result.get("scorePercent"),
+        "result": result.get("result"),
+        "durationMs": result.get("durationMs"),
+        "timedOut": result.get("timedOut"),
+        "exitCode": result.get("exitCode"),
+    }
 
 
 def format_cell(result: dict | None) -> str:

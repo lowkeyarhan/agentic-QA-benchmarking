@@ -103,8 +103,13 @@ Edit `.env` or the defaults at the top of `run_benchmark.py` to change that.
 ## Output
 
 ```text
+results/<run-id>/run.json
 results/<run-id>/scores.md
 results/<run-id>/summary.json
 results/<run-id>/<eval-id>/<agent>.json
 runs/<run-id>/<eval-id>/<agent>/transcript.log
 ```
+
+`run.json` is the combined machine-readable artifact for a run. It includes
+run metadata, aggregate summary stats, the eval-by-agent matrix, and all
+individual case results in one file.
