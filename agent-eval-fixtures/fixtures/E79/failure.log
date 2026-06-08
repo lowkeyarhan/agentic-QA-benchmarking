@@ -1,0 +1,17 @@
+Running 18 tests using 1 worker
+
+  ✓  1 [chromium] › checkout.spec.ts:31:9 › Checkout Flow Tests › Checkout Information Step › Checkout requires first name (1823ms)
+  ✕  2 [chromium] › checkout.spec.ts:37:9 › Checkout Flow Tests › Checkout Information Step › Valid form proceeds to overview (2341ms)
+
+  1) [chromium] › checkout.spec.ts:37:9 › Checkout Flow Tests › Checkout Information Step › Valid form proceeds to overview ─────────────────────────────────────────────
+
+    Error: locator.fill: Target closed
+    =========================== logs ===========================
+    waiting for locator('[data-test="firstName"]')
+    ============================================================
+
+        at CheckoutPage.fillCheckoutForm (pages/CheckoutPage.ts:28:38)
+        at /fixtures/E79/project/tests/checkout.spec.ts:39:28
+
+  2 failed
+    [chromium] › checkout.spec.ts:37:9 › Checkout Flow Tests › Checkout Information Step › Valid form proceeds to overview

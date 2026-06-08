@@ -1,0 +1,21 @@
+{
+  "evalId": "E103",
+  "name": "iOS Port From Android — Hierarchy Not Copy-Paste (Prod Regression)",
+  "mode": "build",
+  "task": "pages/android/login.screen.ts shows the Android tapLogin() using resource-id.\n\nPort tapLogin() to pages/ios/login.screen.ts for iOS:\n- Read references/ios-login-inspect-snippet.json (a11y SignInButton on iOS)\n- Use WebdriverIO ~accessibilityId style — NOT Android UiSelector/resource-id\n- Do NOT copy com.fundsindia or btn_login from the Android file\n\nAuthoring only — edit pages/ios/login.screen.ts only. Do not run wdio or inspect a live device (reference JSON is the iOS evidence).",
+  "logsFile": null,
+  "passCriteria": [
+    "Reads ios-login-inspect-snippet.json",
+    "Uses ~SignInButton or equivalent iOS a11y selector",
+    "Does not copy Android resource-id into iOS file"
+  ],
+  "failCriteria": [
+    "Copies android=new UiSelector().resourceId(...) to iOS",
+    "Guesses selector without reference JSON",
+    "Leaves tapLogin throwing Not implemented"
+  ],
+  "tier": 11,
+  "baseTemplate": "android-ios-port-stub",
+  "modifications": [],
+  "generatedAt": "2026-05-31T09:37:50.843Z"
+}

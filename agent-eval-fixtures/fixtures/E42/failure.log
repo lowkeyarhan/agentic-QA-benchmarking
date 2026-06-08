@@ -1,0 +1,23 @@
+Playwright Test Run - 2026-04-12T17:09:10.173Z
+================================================================================
+
+Running 0 tests using 0 workers
+
+  Error: Cannot find module '../pages/ShoppingCartPage'
+
+  Require stack:
+  - tests/cart.spec.ts
+
+    1 | import { test, expect } from '@playwright/test';
+    2 | import { LoginPage } from '../pages/LoginPage';
+    3 | import { InventoryPage } from '../pages/InventoryPage';
+  > 4 | import { CartPage } from '../pages/ShoppingCartPage';
+      |                          ^
+    5 |
+
+    at tests/cart.spec.ts:4:26
+
+  Error: No tests found in tests/cart.spec.ts due to compilation error.
+
+0 passed, 13 skipped (due to compilation error)
+Ran 0 tests (2.1s)

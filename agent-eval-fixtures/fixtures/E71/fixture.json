@@ -1,0 +1,22 @@
+{
+  "evalId": "E71",
+  "name": "Mobile Selector Preference — Stable IDs Over XPath",
+  "mode": "build",
+  "task": "I'm writing an Appium test that needs to tap the 'General' row in iOS Settings. Give me one selector.",
+  "logsFile": null,
+  "passCriteria": [
+    "Calls mcp__maestro__inspect_view_hierarchy or inspect_screen at least once",
+    "Returned selector references General (e.g. com.apple.settings.general or accessibility label \"General\")",
+    "Prefers resource-id or accessibility-label over XPath",
+    "Justification mentions stability / breakage resistance"
+  ],
+  "failCriteria": [
+    "Returns an XPath selector as the primary recommendation when a resource-id was available",
+    "Hallucinates a selector without inspecting the live device",
+    "Uses Bash to grep for selectors instead of mcp__maestro__inspect_view_hierarchy / inspect_screen"
+  ],
+  "tier": 11,
+  "baseTemplate": "maestro-ios-blank",
+  "modifications": [],
+  "generatedAt": "2026-05-12T18:00:00.000Z"
+}

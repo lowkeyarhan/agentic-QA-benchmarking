@@ -1,0 +1,20 @@
+{
+  "evalId": "E31",
+  "name": "Planner \"Not Testing\" Section Shows Judgment",
+  "mode": "plan",
+  "task": "Create a comprehensive test plan for the entire saucedemo.com application",
+  "logsFile": null,
+  "passCriteria": [
+    "Plan includes a \"Not Testing\" section listing at least 2 items with explicit justification",
+    "Justifications reference risk level or maintenance cost"
+  ],
+  "failCriteria": [
+    "No \"Not Testing\" section",
+    "Section exists but has no justification",
+    "Plan tries to test everything"
+  ],
+  "tier": 7,
+  "baseTemplate": "playwright-ts-full",
+  "modifications": [],
+  "generatedAt": "2026-04-12T17:09:08.908Z"
+}

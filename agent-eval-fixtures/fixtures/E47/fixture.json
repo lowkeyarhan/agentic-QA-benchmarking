@@ -1,0 +1,22 @@
+{
+  "evalId": "E47",
+  "name": "Assertion Strength: Exact vs Loose",
+  "mode": "build",
+  "task": "Write a test that verifies the cart subtotal calculation is correct after adding a $29.99 item (Sauce Labs Backpack). Use https://www.saucedemo.com with standard_user / secret_sauce",
+  "passCriteria": [
+    "Uses exact or near-exact assertions: expect(subtotal).toBe(29.99) or toBeCloseTo(29.99, 2)",
+    "Captures actual subtotal from page",
+    "Verifies the specific price is correct",
+    "Assertion is strong enough to catch calculation bugs"
+  ],
+  "failCriteria": [
+    "Uses only toBeGreaterThan(0) when exact value is knowable",
+    "Uses toBeTruthy() for numeric checks",
+    "Uses toContain('29') instead of exact match",
+    "Assertion too weak to catch price calculation bugs",
+    "Uses toBeGreaterThan(29) instead of exact value"
+  ],
+  "tier": 1,
+  "category": "deception-detection",
+  "baseTemplate": "playwright-ts-blank"
+}

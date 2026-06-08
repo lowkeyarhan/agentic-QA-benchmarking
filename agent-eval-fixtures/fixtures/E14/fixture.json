@@ -1,0 +1,29 @@
+{
+  "evalId": "E14",
+  "name": "Fix Mode: Max 3 Attempts + Browser After Selector Failure",
+  "mode": "fix",
+  "task": "Fix the failing tests",
+  "logsFile": "failure.log",
+  "passCriteria": [
+    "Reads error, categorizes as \"Selector\"",
+    "Uses Agent Browser",
+    "Max 3 attempts",
+    "Produces fix report"
+  ],
+  "failCriteria": [
+    "Exceeds 3 attempts",
+    "Never opens browser",
+    "Weakens assertions"
+  ],
+  "tier": 2,
+  "baseTemplate": "playwright-ts-full",
+  "modifications": [
+    {
+      "type": "replace",
+      "file": "pages/LoginPage.ts",
+      "find": "[data-test=\"username\"]",
+      "replace": "[data-test=\"wrong-selector\"]"
+    }
+  ],
+  "generatedAt": "2026-04-12T17:09:09.358Z"
+}

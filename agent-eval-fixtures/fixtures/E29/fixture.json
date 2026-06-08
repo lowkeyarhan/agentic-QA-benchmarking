@@ -1,0 +1,30 @@
+{
+  "evalId": "E29",
+  "name": "Fixer Adds Tags to Untagged Tests",
+  "mode": "fix",
+  "task": "Fix the failing tests",
+  "logsFile": "failure.log",
+  "passCriteria": [
+    "After fixing the broken selector, agent also adds { tags: ['@feature:auth', '@priority:...', '@test_type:...'] } to the previously untagged test"
+  ],
+  "failCriteria": [
+    "Fixes the selector but leaves the test without tags"
+  ],
+  "tier": 6,
+  "baseTemplate": "playwright-ts-full",
+  "modifications": [
+    {
+      "type": "replace",
+      "file": "tests/auth.spec.ts",
+      "find": "test('@auth @smoke @test_type:regression Valid user can login successfully'",
+      "replace": "test('Valid user can login successfully'"
+    },
+    {
+      "type": "replace",
+      "file": "pages/LoginPage.ts",
+      "find": "[data-test=\"username\"]",
+      "replace": "[data-test=\"user-name\"]"
+    }
+  ],
+  "generatedAt": "2026-04-12T17:09:09.713Z"
+}

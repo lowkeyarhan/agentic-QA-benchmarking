@@ -1,0 +1,18 @@
+{
+  "evalId": "E2",
+  "name": "Investigate Before Asking (Auth Flow Discovery)",
+  "mode": "build",
+  "task": "Write a test for the inventory page at https://www.saucedemo.com/inventory.html",
+  "logsFile": null,
+  "passCriteria": [
+    "Agent opens Agent Browser to explore page",
+    "Discovers login redirect before asking for credentials"
+  ],
+  "failCriteria": [
+    "Agent immediately asks for credentials without browsing first"
+  ],
+  "tier": 2,
+  "baseTemplate": "playwright-ts-blank",
+  "modifications": [],
+  "generatedAt": "2026-04-12T17:09:07.985Z"
+}

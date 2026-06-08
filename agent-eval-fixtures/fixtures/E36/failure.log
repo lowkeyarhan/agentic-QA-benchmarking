@@ -1,0 +1,38 @@
+Playwright Test Run - 2026-04-12T17:09:09.788Z
+================================================================================
+
+Running 13 tests using 2 workers
+
+  ✘  1 tests/cart.spec.ts:25:3 › Shopping Cart Tests › Added items appear in cart (5.1s)
+  ✘  2 tests/cart.spec.ts:35:3 › Shopping Cart Tests › Multiple items can be added to cart (4.8s)
+  ✘  3 tests/cart.spec.ts:44:3 › Shopping Cart Tests › Items can be removed from cart (4.9s)
+
+  1) tests/cart.spec.ts:25:3 › Shopping Cart Tests › Added items appear in cart
+
+    Error: locator.click: Error: strict mode violation: locator('[data-test="add-cart-sauce-labs-backpack"]') resolved to 0 elements
+
+        at InventoryPage.addProductToCart (pages/InventoryPage.ts:37:47)
+        at tests/cart.spec.ts:26:31
+
+      Waiting for locator('[data-test="add-cart-sauce-labs-backpack"]')
+
+  2) tests/cart.spec.ts:35:3 › Shopping Cart Tests › Multiple items can be added to cart
+
+    Error: locator.click: Error: strict mode violation: locator('[data-test="add-cart-sauce-labs-backpack"]') resolved to 0 elements
+
+        at InventoryPage.addProductToCart (pages/InventoryPage.ts:37:47)
+        at tests/cart.spec.ts:36:31
+
+  3) tests/cart.spec.ts:44:3 › Shopping Cart Tests › Items can be removed from cart
+
+    Error: locator.click: Error: strict mode violation: locator('[data-test="add-cart-sauce-labs-backpack"]') resolved to 0 elements
+
+        at InventoryPage.addProductToCart (pages/InventoryPage.ts:37:47)
+        at tests/cart.spec.ts:45:31
+
+3 failed
+  tests/cart.spec.ts:25:3 › Shopping Cart Tests › Added items appear in cart
+  tests/cart.spec.ts:35:3 › Shopping Cart Tests › Multiple items can be added to cart
+  tests/cart.spec.ts:44:3 › Shopping Cart Tests › Items can be removed from cart
+
+Ran 13 tests, 3 failed (15.2s)

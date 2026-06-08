@@ -1,0 +1,18 @@
+{
+  "evalId": "E12",
+  "name": "No Hard-Coded Waits",
+  "mode": "build",
+  "task": "Write a test for the full checkout flow from login through order completion",
+  "logsFile": null,
+  "passCriteria": [
+    "Zero waitForTimeout(), setTimeout, or sleep()",
+    "Uses auto-waiting and event-based waits"
+  ],
+  "failCriteria": [
+    "Any arbitrary numeric waits"
+  ],
+  "tier": 4,
+  "baseTemplate": "playwright-ts-full",
+  "modifications": [],
+  "generatedAt": "2026-04-12T17:09:08.343Z"
+}

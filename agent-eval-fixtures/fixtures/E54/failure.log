@@ -1,0 +1,21 @@
+FAIL tests/inventory.spec.ts
+FAIL tests/inventory.spec.ts > Inventory Selectors > add to cart button selector should match data-test attribute
+
+AssertionError: expected '[data-test="add-cart"]' to contain 'add-to-cart'
+
+  Expected: add-to-cart
+  Received: add-cart
+
+  at tests/inventory.spec.ts:7:12
+
+FAIL tests/inventory.spec.ts > Inventory Selectors > product name selector should match inventory item name class
+
+AssertionError: expected '.inventory_item_label' to be '.inventory_item_name'
+
+  Expected: .inventory_item_name
+  Received: .inventory_item_label
+
+  at tests/inventory.spec.ts:12:12
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)

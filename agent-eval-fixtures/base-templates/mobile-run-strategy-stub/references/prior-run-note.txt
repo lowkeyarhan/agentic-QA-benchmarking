@@ -1,0 +1,2 @@
+A prior session ran wdio 40+ times with grep/tail on logs and never reported Spec Files summary.
+The user only wanted pass/fail for: mobile/tests/android/b2c-onboarding-android.spec.ts

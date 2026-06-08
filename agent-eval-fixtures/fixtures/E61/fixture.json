@@ -1,0 +1,26 @@
+{
+  "evalId": "E61",
+  "name": "Report: Fix Session with RCA",
+  "mode": "report",
+  "task": "This session fixed 3 failing tests in the checkout flow:\n\n### Tests Fixed\n\n1. **checkout.spec.ts > should complete checkout** - FIXED\n   - Root Cause: Selector `.checkout-btn` was outdated, app now uses `[data-test=\"checkout\"]`\n   - Fix: Updated CheckoutPage.ts with correct selector\n\n2. **checkout.spec.ts > should show order confirmation** - FIXED\n   - Root Cause: Confirmation message selector mismatch - was using `.complete-text`, now `[data-test=\"complete-header\"]`\n   - Fix: Updated CheckoutPage.ts selector\n\n3. **cart.spec.ts > should update item quantity** - FIXED\n   - Root Cause: Race condition - test clicked quantity input before it was interactive\n   - Fix: Added `await expect(quantityInput).toBeVisible()` wait in CartPage.ts\n\n### Files Changed\n- `pages/CheckoutPage.ts` - Updated 2 selectors for checkout button and confirmation\n- `pages/CartPage.ts` - Added visibility wait before quantity interaction\n\n### Final Status\nAll 3 tests now passing. No code changes were needed in the test files themselves.",
+  "logsFile": null,
+  "passCriteria": [
+    "Creates .supatest/reports/*/index.html",
+    "HTML is self-contained (no CDN links, no external fonts)",
+    "Has Root Cause Analysis section/table with 3 entries",
+    "Has Changes Made section listing the 2 files",
+    "Does NOT run any test commands (npx playwright test)",
+    "Does NOT create or modify any .spec.ts files"
+  ],
+  "failCriteria": [
+    "Runs test commands",
+    "Creates or modifies .spec.ts files",
+    "Uses external CDN or fonts in HTML",
+    "Missing RCA section",
+    "Hallucinates additional work not in session context"
+  ],
+  "tier": 3,
+  "baseTemplate": "playwright-ts-full",
+  "modifications": [],
+  "generatedAt": "2026-02-17T00:00:00.000Z"
+}

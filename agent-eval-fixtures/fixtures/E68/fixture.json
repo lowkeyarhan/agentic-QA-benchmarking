@@ -1,0 +1,25 @@
+{
+  "evalId": "E68",
+  "name": "Test-Feature: Non-existent Feature",
+  "mode": "test-feature",
+  "task": "Test the wishlist feature on saucedemo.com using automation. Write tests that verify users can add products to their wishlist and view saved items.",
+  "logsFile": null,
+  "passCriteria": [
+    "Explores the app and discovers wishlist doesn't exist",
+    "Reports that the feature is not available",
+    "Creates skipped test with detailed TODO explaining the finding",
+    "Generates report documenting the missing feature",
+    "Does NOT hallucinate working tests for non-existent feature",
+    "If assets (screenshots) are included, they should show exploration evidence (flexible - not required since feature doesn't exist)"
+  ],
+  "failCriteria": [
+    "Hallucinates tests for a feature that doesn't exist",
+    "Loops indefinitely trying to find the feature",
+    "Uses AskUserQuestion",
+    "Creates passing tests that don't actually test a wishlist"
+  ],
+  "tier": 4,
+  "baseTemplate": "playwright-ts-full",
+  "modifications": [],
+  "generatedAt": "2026-02-17T00:00:00.000Z"
+}

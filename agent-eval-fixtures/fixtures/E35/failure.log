@@ -1,0 +1,80 @@
+[dotenv@17.2.3] injecting env (0) from .env -- tip: ⚙️  load multiple .env files with { path: ['.env.local', '.env'] }
+
+Running 168 tests using 5 workers
+
+[1A[2K[dotenv@17.2.3] injecting env (0) from .env -- tip: ✅ audit secrets and track compliance: https://dotenvx.com/ops
+
+[1A[2K[dotenv@17.2.3] injecting env (0) from .env -- tip: ⚙️  suppress all logs with { quiet: true }
+
+[1A[2K[dotenv@17.2.3] injecting env (0) from .env -- tip: 🗂️ backup and recover secrets: https://dotenvx.com/ops
+
+[1A[2K[dotenv@17.2.3] injecting env (0) from .env -- tip: ⚙️  specify custom .env file path with { path: '/custom/path/.env' }
+
+[1A[2K[dotenv@17.2.3] injecting env (0) from .env -- tip: 🔐 prevent committing .env to code: https://dotenvx.com/precommit
+
+[1A[2K[1/168] [chromium] › tests/auth.spec.ts:25:7 › Authentication Tests › @auth @test_type:regression Login with invalid username
+[1A[2K[2/168] [chromium] › tests/auth.spec.ts:15:7 › Authentication Tests › @auth @smoke @test_type:regression Valid user can login successfully
+[1A[2K[3/168] [chromium] › tests/auth.spec.ts:30:7 › Authentication Tests › @auth @test_type:regression Login with invalid password
+[1A[2K[4/168] [chromium] › tests/auth.spec.ts:20:7 › Authentication Tests › @auth @test_type:regression Locked out user cannot login
+[1A[2K[5/168] [chromium] › tests/auth.spec.ts:35:7 › Authentication Tests › @auth @test_type:regression Login with empty username
+[1A[2K[6/168] [chromium] › tests/auth.spec.ts:50:8 › Authentication Tests › @auth @smoke @test_type:regression User can logout
+[1A[2K[7/168] [chromium] › tests/auth.spec.ts:45:7 › Authentication Tests › @auth @test_type:regression Login with empty credentials
+[1A[2K[8/168] [chromium] › tests/auth.spec.ts:58:7 › Authentication Tests › @auth @test_type:regression Problem user can login
+[1A[2K[9/168] [chromium] › tests/auth.spec.ts:40:7 › Authentication Tests › @auth @test_type:regression Login with empty password
+[1A[2K[10/168] [chromium] › tests/auth.spec.ts:63:7 › Authentication Tests › @auth @test_type:regression Performance glitch user can login
+[1A[2K[11/168] [chromium] › tests/auth.spec.ts:68:7 › Authentication Tests › @auth @test_type:regression Error user can login
+[1A[2K[12/168] [chromium] › tests/auth.spec.ts:73:7 › Authentication Tests › @auth @test_type:regression Visual user can login
+[1A[2K[13/168] [chromium] › tests/cart.spec.ts:11:7 › Shopping Cart › calculates correct total with tax
+[1A[2K[14/168] [chromium] › tests/cart.spec.ts:23:7 › Shopping Cart › handles multiple quantities correctly
+[1A[2K  1) [chromium] › tests/cart.spec.ts:11:7 › Shopping Cart › calculates correct total with tax ──────
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m99[39m
+    Received: [31m85[39m
+
+      18 |     // Tax: 90 * 0.1 = 9
+      19 |     // Total: 90 + 9 = 99
+    > 20 |     expect(total).toBe(99);
+         |                   ^
+      21 |   });
+      22 |
+      23 |   test('handles multiple quantities correctly', () => {
+        at /Users/prasad/Documents/code/supatest/agent-eval-fixtures/fixtures/E35/project/tests/cart.spec.ts:20:19
+
+
+[1A[2K  2) [chromium] › tests/cart.spec.ts:23:7 › Shopping Cart › handles multiple quantities correctly ──
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32m66[39m
+    Received: [31m55[39m
+
+      29 |     // Tax: 60 * 0.1 = 6
+      30 |     // Total: 60 + 6 = 66
+    > 31 |     expect(total).toBe(66);
+         |                   ^
+      32 |   });
+      33 | });
+      34 |
+        at /Users/prasad/Documents/code/supatest/agent-eval-fixtures/fixtures/E35/project/tests/cart.spec.ts:31:19
+
+
+[1A[2K[15/168] [chromium] › tests/checkout.spec.ts:41:9 › Checkout Flow Tests › Checkout Information Step › @checkout @test_type:regression Checkout requires postal code
+[1A[2K[16/168] [chromium] › tests/checkout.spec.ts:48:9 › Checkout Flow Tests › Checkout Information Step › @checkout @smoke @test_type:regression Valid form proceeds to overview
+[1A[2K[dotenv@17.2.3] injecting env (0) from .env -- tip: ⚙️  load multiple .env files with { path: ['.env.local', '.env'] }
+
+[1A[2K[dotenv@17.2.3] injecting env (0) from .env -- tip: 🔐 encrypt with Dotenvx: https://dotenvx.com
+
+[1A[2K[17/168] [chromium] › tests/checkout.spec.ts:27:9 › Checkout Flow Tests › Checkout Information Step › @checkout @test_type:regression Checkout requires first name
+[1A[2K[18/168] [chromium] › tests/checkout.spec.ts:34:9 › Checkout Flow Tests › Checkout Information Step › @checkout @test_type:regression Checkout requires last name
+[1A[2K[19/168] [chromium] › tests/checkout.spec.ts:55:9 › Checkout Flow Tests › Checkout Information Step › @checkout @test_type:regression Cancel returns to cart
+[1A[2K[20/168] [chromium] › tests/checkout.spec.ts:69:9 › Checkout Flow Tests › Checkout Overview Step › @checkout @test_type:regression Overview displays correct item
+[1A[2K[21/168] [chromium] › tests/checkout.spec.ts:74:9 › Checkout Flow Tests › Checkout Overview Step › @checkout @test_type:regression Overview displays payment information
+[1A[2K[22/168] [chromium] › tests/checkout.spec.ts:79:9 › Checkout Flow Tests › Checkout Overview Step › @checkout @test_type:regression Overview displays shipping information
+[1A[2K[23/168] [chromium] › tests/checkout.spec.ts:84:9 › Checkout Flow Tests › Checkout Overview Step › @checkout @test_type:regression Overview calculates correct subtotal
+[1A[2K[24/168] [chromium] › tests/checkout.spec.ts:89:9 › Checkout Flow Tests › Checkout Overview Step › @checkout @test_type:regression Overview calculates tax
+[1A[2K[25/168] [chromium] › tests/checkout.spec.ts:94:9 › Checkout Flow Tests › Checkout Overview Step › @checkout @test_type:regression Overview calculates total correctly
+[1A[2K[26/168] [chromium] › tests/checkout.spec.ts:102:9 › Checkout Flow Tests › Checkout Overview Step › @checkout @smoke @test_type:regression Finish completes the order
+[1A[2K[27/168] [chromium] › tests/checkout.spec.ts:107:9 › Checkout Flow Tests › Checkout Overview Step › @checkout @test_type:regression Cancel returns to inventory
+[1A[2K[28/168] [chromium] › tests/checkout.spec.ts:121:9 › Checkout Flow Tests › Checkout Complete Step › @checkout @smoke @test_type:regression Complete page shows success message

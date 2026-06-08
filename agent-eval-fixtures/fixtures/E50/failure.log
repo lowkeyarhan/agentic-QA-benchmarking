@@ -1,0 +1,35 @@
+FAIL tests/cart.spec.ts
+FAIL tests/cart.spec.ts > Cart Total Calculation > should calculate correct total for items with tax
+
+AssertionError: expected 50.97 to be close to 60.45
+
+  Expected: 60.45
+  Received: 50.97
+  Difference: 9.48
+
+  at tests/cart.spec.ts:24:12
+  22 |     // But the buggy implementation returns 50.97 (subtotal - 5)
+  23 |     // This assertion is CORRECT - the implementation has a bug
+  24 |     expect(total).toBeCloseTo(60.45, 2);
+       |            ^
+  25 |   });
+  26 |
+
+FAIL tests/cart.spec.ts > Cart Total Calculation > should calculate correct total for single item
+
+AssertionError: expected 44.99 to be close to 53.99
+
+  Expected: 53.99
+  Received: 44.99
+  Difference: 9.00
+
+  at tests/cart.spec.ts:33:12
+  31 |     // Expected: 49.99 + 8% tax (4.00) = 53.99
+  32 |     expect(total).toBeCloseTo(53.99, 2);
+       |            ^
+  33 |   });
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  12:00:00
+   Duration  1.23s

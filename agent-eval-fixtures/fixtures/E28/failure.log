@@ -1,0 +1,22 @@
+Playwright Test Run - 2026-04-12T17:09:09.665Z
+================================================================================
+
+Running tests...
+
+  1 failed
+
+  1) [chromium] > tests/auth.spec.ts:15:3 > Authentication Tests > Valid user can login successfully
+
+Error: expect(locator).toHaveText(expected)
+
+Locator: locator('[data-test="complete-header"]')
+Expected string: "Order Confirmed!"
+Received string: "Thank you for your order!"
+
+    at tests/checkout.spec.ts:122:45
+
+
+  Slow test file: tests/auth.spec.ts (10.2s)
+
+  1 failed
+  Finished in 10.5s

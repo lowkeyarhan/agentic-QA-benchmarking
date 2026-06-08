@@ -1,0 +1,25 @@
+{
+  "evalId": "E66",
+  "name": "Test-Feature: Manual Only (No Automation)",
+  "mode": "test-feature",
+  "task": "Manually test the checkout flow on saucedemo.com. Do NOT write any automation tests.\n\nUse browser exploration only:\n1. Login as standard_user / secret_sauce\n2. Add items to cart\n3. Go through checkout process\n4. Document what you observe\n\nGenerate a report with your manual testing findings. No .spec.ts files should be created.",
+  "logsFile": null,
+  "passCriteria": [
+    "Opens Agent Browser for manual exploration",
+    "Does NOT create any .spec.ts test files",
+    "Does NOT run npx playwright test",
+    "Generates report with manual observations",
+    "Report documents the checkout flow explored",
+    "If assets (screenshots) are included in report, they should show manual exploration steps (flexible - not required but preferred)"
+  ],
+  "failCriteria": [
+    "Creates any test files (.spec.ts)",
+    "Runs npx playwright test command",
+    "Uses AskUserQuestion",
+    "Ignores the 'manual only' instruction"
+  ],
+  "tier": 3,
+  "baseTemplate": "playwright-ts-full",
+  "modifications": [],
+  "generatedAt": "2026-02-17T00:00:00.000Z"
+}

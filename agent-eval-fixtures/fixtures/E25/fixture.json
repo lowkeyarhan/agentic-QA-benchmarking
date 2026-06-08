@@ -1,0 +1,24 @@
+{
+  "evalId": "E25",
+  "name": "Batch Tests Before Running",
+  "mode": "build",
+  "task": "Write tests for all the error users: locked_out_user, problem_user, performance_glitch_user, error_user, visual_user",
+  "logsFile": null,
+  "passCriteria": [
+    "Agent writes all 5+ test cases into one or more files BEFORE executing any test run",
+    "First npx playwright test command appears after all tests are written"
+  ],
+  "failCriteria": [
+    "Agent writes one test, runs it, then writes the next",
+    "Alternates between Write and Bash commands for each test"
+  ],
+  "tier": 5,
+  "baseTemplate": "playwright-ts-full",
+  "modifications": [
+    {
+      "type": "delete",
+      "pattern": ".supatest"
+    }
+  ],
+  "generatedAt": "2026-04-12T17:09:09.241Z"
+}

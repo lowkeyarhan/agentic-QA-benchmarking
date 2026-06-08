@@ -1,0 +1,5 @@
+Execution of 48 specs (workers=4)
+[chrome #0-0] FAIL mobile/tests/android/onboarding/b2c-onboarding-android.spec.ts
+Spec Files: 12 passed, 36 failed, 48 total (100% completed) in 00:42:18
+
+The agent reran `npx wdio ... --spec mobile/tests/android/onboarding/**/*.spec.ts` three more times without inspecting the device.

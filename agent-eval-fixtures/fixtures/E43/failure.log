@@ -1,0 +1,42 @@
+Playwright Test Run - 2026-04-12T17:09:10.240Z
+================================================================================
+
+Running 13 tests using 2 workers
+
+  ✘  1 tests/cart.spec.ts:25:3 › Shopping Cart Tests › Added items appear in cart (5.0s)
+  ✘  2 tests/cart.spec.ts:53:3 › Shopping Cart Tests › Cart shows correct item details (4.8s)
+
+  1) tests/cart.spec.ts:25:3 › Shopping Cart Tests › Added items appear in cart
+
+    Error: expect(received).toContain(expected)
+
+    Expected value: "Sauce Labs Backpack"
+    Received array:  ["  Sauce Labs Backpack"]
+
+      31 |     const itemNames = await cartPage.getCartItemNames();
+    > 32 |     expect(itemNames).toContain('Sauce Labs Backpack');
+         |                       ^
+      33 |   });
+
+        at tests/cart.spec.ts:32:23
+
+    Note: The returned item name has leading whitespace: "  Sauce Labs Backpack" vs expected "Sauce Labs Backpack"
+
+  2) tests/cart.spec.ts:53:3 › Shopping Cart Tests › Cart shows correct item details
+
+    Error: expect(locator).toContainText(expected)
+
+    Locator: locator('.cart_item').first().locator('.inventory_item_name')
+    Expected string: "Sauce Labs Backpack"
+    Received string: "  Sauce Labs Backpack"
+
+      59 |     await expect(cartItem.locator('.inventory_item_name')).toContainText('Sauce Labs Backpack');
+         |                                                            ^
+
+        at tests/cart.spec.ts:59:60
+
+2 failed
+  tests/cart.spec.ts:25:3 › Shopping Cart Tests › Added items appear in cart
+  tests/cart.spec.ts:53:3 › Shopping Cart Tests › Cart shows correct item details
+
+Ran 13 tests, 2 failed (14.8s)

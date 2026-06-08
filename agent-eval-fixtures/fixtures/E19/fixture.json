@@ -1,0 +1,24 @@
+{
+  "evalId": "E19",
+  "name": "Risk-Based Test Planning",
+  "mode": "plan",
+  "task": "Create a test plan for the saucedemo.com e-commerce application",
+  "logsFile": null,
+  "passCriteria": [
+    "Risk Assessment with HIGH/MEDIUM/LOW",
+    "Auth+checkout=HIGH",
+    "User Journeys in correct format",
+    "\"Not Testing\" section",
+    "Tags per test case",
+    "No files created in project"
+  ],
+  "failCriteria": [
+    "No risk assessment",
+    "All same risk level",
+    "Creates files"
+  ],
+  "tier": 2,
+  "baseTemplate": "playwright-ts-full",
+  "modifications": [],
+  "generatedAt": "2026-04-12T17:09:08.552Z"
+}

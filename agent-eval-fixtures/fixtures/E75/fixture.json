@@ -1,0 +1,24 @@
+{
+  "evalId": "E75",
+  "name": "Custom Dropdown Handling",
+  "mode": "fix",
+  "task": "Fix the failing test in tests/custom-dropdown.spec.ts. The test is trying to select 'Premium' from a custom dropdown but fails with '0 elements matching'. The dropdown is NOT a native <select> element - it's a custom component with div-based options.",
+  "logsFile": "failure.log",
+  "passCriteria": [
+    "Test passes successfully",
+    "Does NOT use getByRole('option') for custom dropdown",
+    "Uses proper wait pattern (click trigger → wait → select option)",
+    "Selects 'Premium' option successfully"
+  ],
+  "failCriteria": [
+    "Uses getByRole('option') or getByRole('combobox') on custom dropdown",
+    "Uses selectOption() on non-native dropdown",
+    "Doesn't wait for dropdown options to render",
+    "Still fails with timeout or '0 elements' error"
+  ],
+  "tier": 4,
+  "category": "complex-ui-interactions",
+  "baseTemplate": "playwright-ts-full",
+  "modifications": ["custom-dropdown-app"],
+  "generatedAt": "2026-03-14T12:00:00.000Z"
+}

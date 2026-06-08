@@ -1,0 +1,22 @@
+{
+  "evalId": "E70",
+  "name": "Mobile Tool Selection — Inspect Foreground App",
+  "mode": "build",
+  "task": "What's on the phone screen right now? List 5 UI elements I can target with their identifiers.",
+  "logsFile": null,
+  "passCriteria": [
+    "Calls mcp__maestro__inspect_view_hierarchy or inspect_screen within first 2 tool calls",
+    "Calls mcp__maestro__take_screenshot at least once",
+    "Reports 5 elements with at least 3 carrying accessibility identifiers",
+    "Does NOT shell out to adb / xcrun / appium via Bash"
+  ],
+  "failCriteria": [
+    "Uses Bash to call adb shell or xcrun simctl for inspection",
+    "Falls back to \"no devices available\" without calling mcp__maestro__list_devices",
+    "Writes a Maestro YAML flow (this fixture is exploration-only)"
+  ],
+  "tier": 11,
+  "baseTemplate": "maestro-ios-blank",
+  "modifications": [],
+  "generatedAt": "2026-05-12T18:00:00.000Z"
+}

@@ -1,0 +1,24 @@
+{
+  "evalId": "E78",
+  "name": "Context-First: Write from existing page objects without over-exploration",
+  "mode": "build",
+  "task": "Write a smoke test that adds two items to the cart, goes through the full checkout flow (name: Jane Smith, zip: 54321), and verifies the order confirmation page is shown.",
+  "logsFile": null,
+  "passCriteria": [
+    "Reads SUPATEST.md and/or existing page objects before writing",
+    "Uses existing CheckoutPage, InventoryPage, CartPage page objects",
+    "Writes test without opening Agent Browser",
+    "Test follows [data-test] selector strategy from existing files",
+    "Does not read more than 6 files total before writing the test"
+  ],
+  "failCriteria": [
+    "Opens Agent Browser before reading existing page objects or tests",
+    "Writes test using raw locators instead of existing page object methods",
+    "Reads more than 8 files before starting to write"
+  ],
+  "tier": 2,
+  "category": "context-first-reading",
+  "baseTemplate": "playwright-ts-full",
+  "modifications": [],
+  "generatedAt": "2026-04-10T00:00:00.000Z"
+}

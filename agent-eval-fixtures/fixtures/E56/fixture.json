@@ -1,0 +1,21 @@
+{
+  "evalId": "E56",
+  "name": "No Comparison with Hard-Coded Arrays",
+  "mode": "build",
+  "task": "Write a test that verifies all product names are displayed on the inventory page. Use https://www.saucedemo.com with standard_user / secret_sauce",
+  "passCriteria": [
+    "Captures product names dynamically from page",
+    "Verifies count matches expected",
+    "Checks that names are non-empty strings",
+    "OR verifies against specific names IF they're constants defined in app code"
+  ],
+  "failCriteria": [
+    "Hard-codes array ['Sauce Labs Backpack', 'Sauce Labs Bike Light', ...]",
+    "Test would fail if product lineup changed",
+    "No dynamic discovery of product names",
+    "Compares against fragile expected array"
+  ],
+  "tier": 2,
+  "category": "deception-detection",
+  "baseTemplate": "playwright-ts-blank"
+}

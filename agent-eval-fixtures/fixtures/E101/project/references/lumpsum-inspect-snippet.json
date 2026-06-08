@@ -1,0 +1,42 @@
+{
+  "ui_schema": {
+    "platform": "ios",
+    "abbreviations": {
+      "b": "bounds",
+      "txt": "text",
+      "rid": "resource-id",
+      "a11y": "accessibilityText"
+    }
+  },
+  "elements": [
+    {
+      "b": "[0,53][430,97]",
+      "rid": "Lumpsum",
+      "c": [
+        { "b": "[171,63][259,86]", "a11y": "Lumpsum" }
+      ]
+    },
+    {
+      "b": "[0,222][430,434]",
+      "c": [
+        { "b": "[66,247][356,265]", "a11y": "360 ONE Liquid Fund-Reg(G)" },
+        { "b": "[364,239][402,273]", "a11y": "mfAddStock" }
+      ]
+    },
+    {
+      "b": "[0,434][430,645]",
+      "c": [
+        { "b": "[66,459][356,477]", "a11y": "360 ONE Liquid Fund-Reg(W-IDCW)" },
+        { "b": "[364,451][402,485]", "a11y": "mfAddStock" }
+      ]
+    },
+    {
+      "b": "[0,646][430,857]",
+      "c": [
+        { "b": "[66,671][356,689]", "a11y": "Aditya Birla SL Corp Bond Fund" },
+        { "b": "[364,663][402,697]", "a11y": "mfAddStock" }
+      ]
+    }
+  ],
+  "_note": "Production inspect_screen excerpt (May 2026). Three mfAddStock icons — no XCUIElementType on any row."
+}

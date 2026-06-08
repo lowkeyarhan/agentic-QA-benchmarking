@@ -1,0 +1,20 @@
+{
+  "evalId": "E5",
+  "name": "Cypress Framework Adaptation",
+  "mode": "build",
+  "task": "Write a test for the cart page - adding and removing items",
+  "logsFile": null,
+  "passCriteria": [
+    "Uses cy.get(), cy.visit(), cy.should()",
+    "File matches *.cy.ts",
+    "Placed in cypress/e2e/"
+  ],
+  "failCriteria": [
+    "Uses async/await (Cypress is chain-based)",
+    "Uses page.locator()"
+  ],
+  "tier": 3,
+  "baseTemplate": "cypress-ts-full",
+  "modifications": [],
+  "generatedAt": "2026-04-12T17:09:12.028Z"
+}

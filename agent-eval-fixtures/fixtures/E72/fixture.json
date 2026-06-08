@@ -1,0 +1,23 @@
+{
+  "evalId": "E72",
+  "name": "Mobile Multi-Element Discovery on Real App Catalog",
+  "mode": "build",
+  "task": "On the connected Android emulator there is a shopping app open on its product catalog screen. I'm writing an Appium test. Give me selectors for: (a) the hamburger / menu icon, (b) the cart icon, (c) the sort icon, (d) the first product card, (e) the first product's title text. For each, return one stable selector.",
+  "logsFile": null,
+  "passCriteria": [
+    "Calls mcp__maestro__inspect_view_hierarchy or inspect_screen at least once",
+    "Returns 5 distinct selectors (one per requested element)",
+    "Selectors include the real resource-ids (menuIV, cartRL or cartIV, sortIV, titleTV) — not fabricated",
+    "No XPath as primary when a resource-id was available in the hierarchy"
+  ],
+  "failCriteria": [
+    "Skips inspection and guesses generic selectors",
+    "Returns fewer than 5 selectors (incomplete coverage)",
+    "Returns 'android.widget.ImageView' or class-name selectors instead of resource-id when resource-ids exist"
+  ],
+  "tier": 11,
+  "baseTemplate": "maestro-ios-blank",
+  "modifications": [],
+  "prereq": "SauceLabs MyDemoApp installed on a booted Android emulator, launched to the product catalog (MainActivity). adb on PATH.",
+  "generatedAt": "2026-05-13T08:00:00.000Z"
+}

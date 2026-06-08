@@ -1,0 +1,11 @@
+{
+  "name": "playwright-ts-blank",
+  "version": "1.0.0",
+  "description": "Blank Playwright project for testing",
+  "scripts": {
+    "test": "npx playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.49.1"
+  }
+}

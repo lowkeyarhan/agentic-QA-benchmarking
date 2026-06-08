@@ -1,0 +1,18 @@
+{
+  "evalId": "E26",
+  "name": "Single Test First for Faster Feedback",
+  "mode": "build",
+  "task": "Write a checkout flow test and a cart removal test",
+  "logsFile": null,
+  "passCriteria": [
+    "After writing tests, first run command targets a single test file or uses --grep to run one test",
+    "Full file/suite run comes after individual test passes"
+  ],
+  "failCriteria": [
+    "First run command executes the entire test suite or multiple test files at once"
+  ],
+  "tier": 5,
+  "baseTemplate": "playwright-ts-full",
+  "modifications": [],
+  "generatedAt": "2026-04-12T17:09:08.784Z"
+}

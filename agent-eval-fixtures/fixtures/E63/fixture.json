@@ -1,0 +1,24 @@
+{
+  "evalId": "E63",
+  "name": "Report: Manual Exploration with Bug Discovery",
+  "mode": "report",
+  "task": "This session manually explored the cart functionality as problem_user on saucedemo.com:\n\n### Exploration Summary\nLogged in as problem_user / secret_sauce and tested the add-to-cart functionality for all products.\n\n### Bugs Discovered\n\n1. **BUG: Sauce Labs Backpack add-to-cart broken for problem_user**\n   - Steps: Login as problem_user, click 'Add to cart' on Backpack\n   - Expected: Item added to cart, button changes to 'Remove'\n   - Actual: Nothing happens, button stays as 'Add to cart'\n   - Severity: High\n\n2. **BUG: Sauce Labs Bolt T-Shirt image incorrect for problem_user**\n   - Steps: Login as problem_user, view Bolt T-Shirt product\n   - Expected: T-shirt product image\n   - Actual: Shows wrong image (dog image)\n   - Severity: Medium\n\n### What Works\n- Login flow works correctly\n- Other products (Bike Light, Fleece Jacket) add to cart successfully\n- Cart page displays items correctly\n- Checkout flow works for items that were successfully added\n\n### No Automation Tests Written\nThis was a manual exploration session only.",
+  "logsFile": null,
+  "passCriteria": [
+    "Creates .supatest/reports/*/index.html",
+    "Has Bugs/Notes section documenting the 2 bugs",
+    "Does NOT have Test Results table (no tests were run)",
+    "Has Overview describing manual exploration",
+    "Does NOT run tests or create test files"
+  ],
+  "failCriteria": [
+    "Forces Test Results section when no tests exist",
+    "Omits the discovered bugs",
+    "Runs test commands",
+    "Creates .spec.ts files"
+  ],
+  "tier": 3,
+  "baseTemplate": "playwright-ts-full",
+  "modifications": [],
+  "generatedAt": "2026-02-17T00:00:00.000Z"
+}

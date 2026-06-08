@@ -1,0 +1,43 @@
+Playwright Test Run - 2026-04-12T17:09:10.100Z
+================================================================================
+
+Running 6 tests using 1 worker
+
+  ✘  1 tests/checkout.spec.ts:84:5 › Checkout Flow Tests › Checkout Overview Step › Overview calculates correct subtotal (5.4s)
+  ✘  2 tests/checkout.spec.ts:94:5 › Checkout Flow Tests › Checkout Overview Step › Overview calculates total correctly (5.2s)
+
+  1) tests/checkout.spec.ts:84:5 › Checkout Flow Tests › Checkout Overview Step › Overview calculates correct subtotal
+
+    Error: expect(received).toBe(expected)
+
+    Expected: 29.99
+    Received: NaN
+
+      85 |       const subtotal = await overviewPage.asyncGetSubtotal();
+    > 86 |       expect(subtotal).toBe(29.99);
+         |                        ^
+      87 |     });
+
+        at tests/checkout.spec.ts:86:24
+
+  2) tests/checkout.spec.ts:94:5 › Checkout Flow Tests › Checkout Overview Step › Overview calculates total correctly
+
+    Error: expect(received).toBeCloseTo(expected)
+
+    Expected: ≈ 32.39 (2 digits)
+    Received:   NaN
+
+      95 |       const subtotal = await overviewPage.asyncGetSubtotal();
+      96 |       const tax = await overviewPage.asyncGetTax();
+      97 |       const total = await overviewPage.asyncGetTotal();
+    > 99 |       expect(total).toBeCloseTo(subtotal + tax, 2);
+         |                     ^
+     100 |     });
+
+        at tests/checkout.spec.ts:99:21
+
+2 failed
+  tests/checkout.spec.ts:84:5 › Overview calculates correct subtotal
+  tests/checkout.spec.ts:94:5 › Overview calculates total correctly
+
+Ran 6 tests, 2 failed (10.6s)

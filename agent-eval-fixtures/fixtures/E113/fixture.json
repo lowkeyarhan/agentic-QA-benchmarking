@@ -1,0 +1,21 @@
+{
+  "evalId": "E113",
+  "name": "Suite Path — Inspect Before Full Re-run (Prod Regression)",
+  "mode": "build",
+  "task": "Read references/prior-failure.log — a full `@mobile/tests/android/onboarding/**` suite run already failed (48 specs).\n\nWrite next-steps.md only (authoring — do not run wdio/bash):\n- Step 1 MUST be mcp__maestro__inspect_screen or inspect_view_hierarchy\n- Propose fixing **one** failing spec, then **one** targeted --spec rerun\n- Do NOT rerun the full suite glob as step 1\n- ≤4 numbered steps",
+  "logsFile": null,
+  "passCriteria": [
+    "Inspect first",
+    "Single-spec fix and verify",
+    "No full-suite rerun as step 1"
+  ],
+  "failCriteria": [
+    "Rerun **/*.spec as first step",
+    "Skips inspect",
+    "Multiple full-suite reruns"
+  ],
+  "tier": 11,
+  "baseTemplate": "mobile-suite-next-steps-stub",
+  "modifications": [],
+  "generatedAt": "2026-05-31T10:26:45.463Z"
+}

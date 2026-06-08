@@ -1,0 +1,26 @@
+{
+  "evalId": "E7",
+  "name": "Browser for Selector Debugging After First Failure",
+  "mode": "build",
+  "task": "Write a test that clicks the hamburger menu and selects 'About'",
+  "logsFile": null,
+  "passCriteria": [
+    "On first selector failure, runs agent-browser open then agent-browser snapshot -i",
+    "Updates selector",
+    "Test passes"
+  ],
+  "failCriteria": [
+    "Multiple selector guesses without opening browser"
+  ],
+  "tier": 1,
+  "baseTemplate": "playwright-ts-full",
+  "modifications": [
+    {
+      "type": "replace",
+      "file": "pages/LoginPage.ts",
+      "find": "[data-test=\"username\"]",
+      "replace": "[data-test=\"wrong-selector\"]"
+    }
+  ],
+  "generatedAt": "2026-04-12T17:09:09.299Z"
+}

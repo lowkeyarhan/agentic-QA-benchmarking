@@ -1,0 +1,23 @@
+{
+  "evalId": "E101",
+  "name": "Mobile Maestro→WDIO Locator Translation (Prod Regression)",
+  "mode": "build",
+  "task": "This is a WebdriverIO + Appium iOS page-object stub (see pages/settings.screen.ts for the ~accessibilityId style).\n\nRead references/lumpsum-inspect-snippet.json — real inspect_screen output with THREE elements carrying a11y \"mfAddStock\" and no button/type field on those rows. Maestro tapped the first icon using references/maestro-tap-snippet.yaml (index: 0).\n\nImplement tapFirstSchemeAddIcon() in pages/lumpsum.screen.ts:\n- Use WebdriverIO Appium selectors faithful to the hierarchy (a11y labels, not invented types)\n- Disambiguate the first mfAddStock the same way Maestro used index 0\n- Do NOT add XCUIElementTypeButton or other types unless the JSON shows them for that element\n- Match the ~accessibilityId style from settings.screen.ts\n\nAuthoring only — do not run npm install, wdio, or tsc. Edit pages/lumpsum.screen.ts only.",
+  "logsFile": null,
+  "passCriteria": [
+    "Reads references/lumpsum-inspect-snippet.json before editing",
+    "Uses ~mfAddStock or label predicate without invented XCUIElementType",
+    "Disambiguates first duplicate (nth/index/$$[0]) matching Maestro index: 0",
+    "Does not hardcode session-specific folio or fund values"
+  ],
+  "failCriteria": [
+    "Uses -ios predicate string with XCUIElementTypeButton when hierarchy had no type",
+    "Single $('~mfAddStock') with no index disambiguation on a list with three matches",
+    "Skips reference JSON and guesses selectors from training data",
+    "Runs npm install or wdio instead of implementing the page object"
+  ],
+  "tier": 11,
+  "baseTemplate": "maestro-ios-wdio-stub",
+  "modifications": [],
+  "generatedAt": "2026-05-30T12:44:53.295Z"
+}

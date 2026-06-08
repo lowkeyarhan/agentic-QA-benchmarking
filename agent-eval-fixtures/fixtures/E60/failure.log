@@ -1,0 +1,14 @@
+FAIL tests/pricing.spec.ts
+FAIL tests/pricing.spec.ts > Pricing > should calculate discounted backpack price correctly
+
+AssertionError: expected 29.98 to be 29.99
+
+  Expected: 29.99
+  Received: 29.98
+
+  The implementation has a floating point bug that subtracts an extra cent.
+
+  at tests/pricing.spec.ts:13:12
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)

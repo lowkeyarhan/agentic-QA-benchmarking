@@ -1,0 +1,4 @@
+Error: element ("~Tap to add product to cart") still not displayed after 10000ms
+  at ProductsListPage.addFirstToCart (test/pages/products.page.ts:42)
+
+Spec Files: 0 passed, 1 failed, 1 total (100% completed) in 00:00:14

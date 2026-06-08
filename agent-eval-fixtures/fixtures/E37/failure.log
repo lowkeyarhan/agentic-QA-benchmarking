@@ -1,0 +1,48 @@
+Playwright Test Run - 2026-04-12T17:09:09.866Z
+================================================================================
+
+Running 7 tests using 1 worker
+
+  ✘  1 tests/inventory.spec.ts:47:3 › Inventory/Product Tests › Product names match expected values (4.8s)
+  ✘  2 tests/cart.spec.ts:25:3 › Shopping Cart Tests › Added items appear in cart (5.1s)
+
+  1) tests/inventory.spec.ts:47:3 › Inventory/Product Tests › Product names match expected values
+
+    Error: expect(received).toEqual(expected)
+
+    Expected: [
+      "Sauce Labs Backpack",
+      "Sauce Labs Bike Light",
+      "Sauce Labs Bolt T-Shirt",
+      "Sauce Labs Fleece Jacket",
+      "Sauce Labs Onesie",
+      "Test.allTheThings() T-Shirt (Red)"
+    ]
+    Received: []
+
+      57 |     const productNames = await inventoryPage.getProductNames();
+    > 58 |     expect(productNames).toEqual(expectedProducts);
+         |                          ^
+      59 |   });
+
+        at tests/inventory.spec.ts:58:26
+
+  2) tests/cart.spec.ts:25:3 › Shopping Cart Tests › Added items appear in cart
+
+    Error: expect(received).toContain(expected)
+
+    Expected value: "Sauce Labs Backpack"
+    Received array:  []
+
+      31 |     const itemNames = await cartPage.getCartItemNames();
+    > 32 |     expect(itemNames).toContain('Sauce Labs Backpack');
+         |                       ^
+      33 |   });
+
+        at tests/cart.spec.ts:32:23
+
+2 failed
+  tests/inventory.spec.ts:47:3 › Inventory/Product Tests › Product names match expected values
+  tests/cart.spec.ts:25:3 › Shopping Cart Tests › Added items appear in cart
+
+Ran 7 tests, 2 failed (9.9s)

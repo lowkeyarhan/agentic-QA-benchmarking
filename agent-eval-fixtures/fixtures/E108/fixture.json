@@ -1,0 +1,21 @@
+{
+  "evalId": "E108",
+  "name": "Stop WDIO/bash Spiral on @mobile Run (Prod Regression)",
+  "mode": "build",
+  "task": "The user asked: \"Run `@mobile/tests/android/b2c-onboarding-android.spec.ts` and report pass/fail counts only — do not fix code.\"\n\nWrite run-strategy.md only (authoring — do not execute wdio or bash):\n- At most **one** wdio run step\n- Report pass/fail from the Spec Files summary line\n- No grep/tail log-scraping loops\n- ≤4 numbered steps total",
+  "logsFile": null,
+  "passCriteria": [
+    "Single wdio run in plan",
+    "Reports pass/fail from output",
+    "No grep/tail spiral"
+  ],
+  "failCriteria": [
+    "Multiple wdio reruns",
+    "grep/tail as primary steps",
+    "More than 4 steps"
+  ],
+  "tier": 11,
+  "baseTemplate": "mobile-run-strategy-stub",
+  "modifications": [],
+  "generatedAt": "2026-05-31T10:26:45.459Z"
+}

@@ -1,0 +1,27 @@
+{
+  "evalId": "E3",
+  "name": "Playwright Detection + SUPATEST.md Generation",
+  "mode": "build",
+  "task": "Write a test for removing items from the cart",
+  "logsFile": null,
+  "passCriteria": [
+    "Reads package.json, detects @playwright/test",
+    "Reads 2+ existing tests",
+    "Writes .supatest/SUPATEST.md",
+    "Writes Playwright-syntax test",
+    "File name matches *.spec.ts"
+  ],
+  "failCriteria": [
+    "Skips SUPATEST.md creation",
+    "Wrong framework syntax"
+  ],
+  "tier": 1,
+  "baseTemplate": "playwright-ts-full",
+  "modifications": [
+    {
+      "type": "delete",
+      "pattern": ".supatest"
+    }
+  ],
+  "generatedAt": "2026-04-12T17:09:09.034Z"
+}

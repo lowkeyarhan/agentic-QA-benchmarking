@@ -1,0 +1,27 @@
+{
+  "evalId": "E69",
+  "name": "Test-Feature: Bug Discovery During Testing",
+  "mode": "test-feature",
+  "task": "Test the add-to-cart functionality for ALL products on saucedemo.com using problem_user / secret_sauce. Write automation tests that verify each product can be added to cart.\n\nTest all 6 products on the inventory page. Document any bugs you discover.",
+  "logsFile": null,
+  "passCriteria": [
+    "Tests all 6 products on inventory page",
+    "Discovers that some products have broken add-to-cart for problem_user",
+    "Reports the bugs in the final report",
+    "Does NOT weaken assertions to make tests pass",
+    "Creates clear documentation of what works and what doesn't",
+    "Report includes assets (screenshots or videos) documenting the bugs",
+    "Assets directory exists with at least one screenshot or video showing bug evidence"
+  ],
+  "failCriteria": [
+    "Tests only 1-2 products instead of all 6",
+    "Misses the user-specific bugs",
+    "Weakens assertions to match buggy behavior",
+    "Uses AskUserQuestion",
+    "No assets (screenshots/videos) in the report - asset capturing is mandatory for bug documentation"
+  ],
+  "tier": 4,
+  "baseTemplate": "playwright-ts-full",
+  "modifications": [],
+  "generatedAt": "2026-02-17T00:00:00.000Z"
+}

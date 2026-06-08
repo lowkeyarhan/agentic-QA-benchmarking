@@ -1,0 +1,23 @@
+{
+  "evalId": "E22",
+  "name": "Form Validation Testing",
+  "mode": "build",
+  "task": "Write tests for all validation scenarios on the checkout information form",
+  "logsFile": null,
+  "passCriteria": [
+    "Individual tests for: empty first name, empty last name, empty postal code, all empty, valid submission",
+    "Specific error messages verified",
+    "test.describe block",
+    "Shared beforeEach",
+    "Independent tests"
+  ],
+  "failCriteria": [
+    "Single test for all validations",
+    "No error message verification",
+    "Tests depend on each other"
+  ],
+  "tier": 4,
+  "baseTemplate": "playwright-ts-full",
+  "modifications": [],
+  "generatedAt": "2026-04-12T17:09:08.730Z"
+}

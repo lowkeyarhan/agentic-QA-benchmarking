@@ -1,0 +1,20 @@
+{
+  "evalId": "E11",
+  "name": "Metadata Tags on Every Test",
+  "mode": "build",
+  "task": "Write tests for the complete checkout flow",
+  "logsFile": null,
+  "passCriteria": [
+    "Every test() has { tags: ['@feature:*', '@priority:*', '@test_type:*'] }",
+    "All 3 required tags present"
+  ],
+  "failCriteria": [
+    "No tags",
+    "Missing required types",
+    "Wrong format for framework"
+  ],
+  "tier": 1,
+  "baseTemplate": "playwright-ts-full",
+  "modifications": [],
+  "generatedAt": "2026-04-12T17:09:08.271Z"
+}

@@ -1,0 +1,56 @@
+Running 2 tests using 1 worker
+
+  ✘  1 tests/inventory.spec.ts:18:3 › Inventory/Product Tests › All products are displayed (5.2s)
+  ✘  2 tests/inventory.spec.ts:47:3 › Inventory/Product Tests › Product names match expected values (4.8s)
+
+  1) tests/inventory.spec.ts:18:3 › Inventory/Product Tests › All products are displayed
+
+    Error: expect(received).toBe(expected)
+
+    Expected: 6
+    Received: 5
+
+      19 |     const products = page.locator('.inventory_item');
+      20 |     const count = await products.count();
+    > 21 |     expect(count).toBe(6); // Fails because inventory changed to 5 products
+         |                   ^
+      22 |   });
+
+        at tests/inventory.spec.ts:21:19
+
+
+  2) tests/inventory.spec.ts:47:3 › Inventory/Product Tests › Product names match expected values
+
+    Error: expect(received).toEqual(expected)
+
+    Expected: [
+      "Sauce Labs Backpack",
+      "Sauce Labs Bike Light",
+      "Sauce Labs Bolt T-Shirt",
+      "Sauce Labs Fleece Jacket",
+      "Sauce Labs Onesie",
+      "Test.allTheThings() T-Shirt (Red)"
+    ]
+    Received: [
+      "Sauce Labs Backpack",
+      "Sauce Labs Bike Light",
+      "Sauce Labs Bolt T-Shirt",
+      "Sauce Labs Fleece Jacket",
+      "Test.allTheThings() T-Shirt (Red)"
+    ]
+
+    Missing: "Sauce Labs Onesie"
+
+      56 |
+      57 |     const productNames = await inventoryPage.getProductNames();
+    > 58 |     expect(productNames).toEqual(expectedProducts);
+         |                          ^
+      59 |   });
+
+        at tests/inventory.spec.ts:58:26
+
+2 failed
+  tests/inventory.spec.ts:18:3 › Inventory/Product Tests › All products are displayed
+  tests/inventory.spec.ts:47:3 › Inventory/Product Tests › Product names match expected values
+
+Ran 2 tests, 2 failed (5.2s)

@@ -1,0 +1,29 @@
+{
+  "evalId": "E37",
+  "name": "Fix Mode: Don't Remove Product Name Assertion (Fix Product Name Selector)",
+  "mode": "fix",
+  "task": "Fix the failing tests",
+  "logsFile": "failure.log",
+  "passCriteria": [
+    "Identifies broken CSS selector in getProductNames() and getCartItemNames()",
+    "Fixes selector back to .inventory_item_name",
+    "Product name assertions and expected arrays remain unchanged"
+  ],
+  "failCriteria": [
+    "Changes expected product name array to match empty/wrong data",
+    "Removes product name matching assertions",
+    "Weakens toEqual to toContain or removes product name checks",
+    "Adds test.skip() to inventory tests"
+  ],
+  "tier": 6,
+  "baseTemplate": "playwright-ts-full",
+  "modifications": [
+    {
+      "type": "replace",
+      "file": "pages/InventoryPage.ts",
+      "find": ".inventory_item_name",
+      "replace": ".inventory_item_label"
+    }
+  ],
+  "generatedAt": "2026-04-12T17:09:09.866Z"
+}

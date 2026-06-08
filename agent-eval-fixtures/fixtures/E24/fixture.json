@@ -1,0 +1,25 @@
+{
+  "evalId": "E24",
+  "name": "Discovery Documents Selector Strategies",
+  "mode": "build",
+  "task": "Write a test for the inventory page filters",
+  "logsFile": null,
+  "passCriteria": [
+    "SUPATEST.md explicitly mentions [data-test] as the project's selector strategy",
+    "Documents the page object pattern",
+    "New test uses [data-test] attributes matching project convention"
+  ],
+  "failCriteria": [
+    "SUPATEST.md omits selector strategy",
+    "Agent uses getByRole when the existing codebase uses [data-test] exclusively"
+  ],
+  "tier": 5,
+  "baseTemplate": "playwright-ts-full",
+  "modifications": [
+    {
+      "type": "delete",
+      "pattern": ".supatest"
+    }
+  ],
+  "generatedAt": "2026-04-12T17:09:09.169Z"
+}

@@ -1,0 +1,23 @@
+{
+  "evalId": "E74",
+  "name": "Mobile Real Test Authoring with Discovered Selectors",
+  "mode": "build",
+  "task": "Write a WebdriverIO + Appium test in TypeScript for the SauceLabs MyDemoApp running on the booted Android emulator. The test should: log in as bob@example.com / 10203040, navigate back to the catalog, tap the first product, tap 'Add to cart', open the cart, and assert that the cart contains 1 item. Use real selectors taken from the live app's view hierarchy — do not fabricate any selector.",
+  "logsFile": null,
+  "passCriteria": [
+    "Calls mcp__maestro__inspect_view_hierarchy or inspect_screen on multiple screens during selector discovery",
+    "Produced test file contains real resource-ids from the live app (e.g. com.saucelabs.mydemoapp.android:id/menuIV, cartRL, titleTV)",
+    "Uses WebdriverIO accessibility-id / resource-id selector syntax, not Maestro YAML",
+    "Test flow logically matches the requested steps"
+  ],
+  "failCriteria": [
+    "Test contains fabricated/guessed selectors (e.g. //div[@id=...] or unrelated package names)",
+    "Generates a Maestro YAML flow instead of a WDIO test",
+    "Skips inspection and writes the test entirely from training-data assumptions about MyDemoApp"
+  ],
+  "tier": 11,
+  "baseTemplate": "maestro-ios-blank",
+  "modifications": [],
+  "prereq": "SauceLabs MyDemoApp on Android emulator. Agent will navigate the app while discovering selectors.",
+  "generatedAt": "2026-05-13T08:00:00.000Z"
+}

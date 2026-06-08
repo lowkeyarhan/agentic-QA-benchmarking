@@ -1,0 +1,22 @@
+FAIL tests/utils.spec.ts
+FAIL tests/utils.spec.ts > Utility Functions > should format price with dollar sign
+
+AssertionError: expected '29.99' to be '$29.99'
+
+  Expected: $29.99
+  Received: 29.99
+
+  at tests/utils.spec.ts:7:12
+
+FAIL tests/utils.spec.ts > Utility Functions > should calculate 8% tax
+
+AssertionError: expected 15 to be close to 8.00
+
+  Expected: 8.00
+  Received: 15
+  Difference: 7
+
+  at tests/utils.spec.ts:12:12
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)

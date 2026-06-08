@@ -1,0 +1,20 @@
+{
+  "evalId": "E6",
+  "name": "Reuse Existing SUPATEST.md (Skip Rediscovery)",
+  "mode": "build",
+  "task": "Write a sorting test for the inventory page",
+  "logsFile": null,
+  "passCriteria": [
+    "Reads SUPATEST.md early",
+    "Does NOT re-read package.json for discovery",
+    "Fewer tool calls than E3"
+  ],
+  "failCriteria": [
+    "Ignores SUPATEST.md",
+    "Re-runs full discovery"
+  ],
+  "tier": 3,
+  "baseTemplate": "playwright-ts-full",
+  "modifications": [],
+  "generatedAt": "2026-04-12T17:09:08.100Z"
+}

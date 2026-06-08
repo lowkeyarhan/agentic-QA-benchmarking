@@ -1,0 +1,25 @@
+Running 1 test using 1 worker
+
+  ✘  1 tests/calendar-date.spec.ts:3:1 › select 1st day of current month from calendar (5s)
+
+
+  1) tests/calendar-date.spec.ts:3:1 › select 1st day of current month from calendar
+
+    Error: locator.fill: Error: input field is read-only
+
+       6 |
+       7 |   // This test is failing - can't fill date directly
+       8 |   await page.getByLabel('Investment Date').fill('2026-03-01');
+         |   ^
+       9 |
+
+    Retry #1 ─────────────────────────────────────────────────────────────────────────────────────
+
+    Error: locator.fill: Error: input field is read-only
+
+    Retry #2 ─────────────────────────────────────────────────────────────────────────────────────
+
+    Error: locator.fill: Error: input field is read-only
+
+  1 failed
+    tests/calendar-date.spec.ts:3:1 › select 1st day of current month from calendar ─────────────

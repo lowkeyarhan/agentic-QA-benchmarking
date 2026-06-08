@@ -1,0 +1,25 @@
+{
+  "evalId": "E76",
+  "name": "Calendar Date Selection",
+  "mode": "fix",
+  "task": "Fix the failing test in tests/calendar-date.spec.ts. The test needs to select the 1st day of the current month from a calendar widget. Currently it's trying to fill the date input directly which doesn't work. The calendar requires clicking the calendar icon, navigating to the current month, and selecting day 1.",
+  "logsFile": "failure.log",
+  "passCriteria": [
+    "Test passes successfully",
+    "Opens calendar widget by clicking icon/button",
+    "Selects 1st day of current month",
+    "Does NOT use keyboard input or fill() on date field",
+    "Handles dynamic month/year correctly"
+  ],
+  "failCriteria": [
+    "Uses fill() or type() on calendar input",
+    "Uses keyboard shortcuts to enter date",
+    "Hardcodes specific month/year (should be dynamic)",
+    "Doesn't handle calendar widget interaction"
+  ],
+  "tier": 4,
+  "category": "complex-ui-interactions",
+  "baseTemplate": "playwright-ts-full",
+  "modifications": ["calendar-widget-app"],
+  "generatedAt": "2026-03-14T12:00:00.000Z"
+}

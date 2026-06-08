@@ -1,0 +1,12 @@
+{
+  "name": "eval-e50-cart",
+  "version": "1.0.0",
+  "description": "E50: Implementation Required When Tests Fail",
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.40.0"
+  }
+}

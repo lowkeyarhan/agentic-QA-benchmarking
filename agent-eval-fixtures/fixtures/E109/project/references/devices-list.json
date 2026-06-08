@@ -1,0 +1,7 @@
+{
+  "devices": [
+    { "id": "emulator-5554", "platform": "android", "status": "connected", "port": 5554 },
+    { "id": "emulator-5556", "platform": "android", "status": "connected", "port": 5556 }
+  ],
+  "note": "User request targets emulator-5554. Do not act on emulator-5556 unless explicitly asked."
+}

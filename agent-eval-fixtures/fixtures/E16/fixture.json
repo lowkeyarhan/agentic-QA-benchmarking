@@ -1,0 +1,32 @@
+{
+  "evalId": "E16",
+  "name": "Full Suite Regression After Individual Fixes",
+  "mode": "fix",
+  "task": "Fix the failing tests",
+  "logsFile": "failure.log",
+  "passCriteria": [
+    "Fixes one at a time",
+    "After all fixed, runs full suite",
+    "Reports \"X/Y passing\""
+  ],
+  "failCriteria": [
+    "Never runs full suite after fixes"
+  ],
+  "tier": 4,
+  "baseTemplate": "playwright-ts-full",
+  "modifications": [
+    {
+      "type": "replace",
+      "file": "pages/LoginPage.ts",
+      "find": "[data-test=\"username\"]",
+      "replace": "[data-test=\"wrong-selector\"]"
+    },
+    {
+      "type": "replace",
+      "file": "pages/CartPage.ts",
+      "find": "[data-test=\"checkout\"]",
+      "replace": "[data-test=\"wrong-checkout\"]"
+    }
+  ],
+  "generatedAt": "2026-04-12T17:09:09.478Z"
+}

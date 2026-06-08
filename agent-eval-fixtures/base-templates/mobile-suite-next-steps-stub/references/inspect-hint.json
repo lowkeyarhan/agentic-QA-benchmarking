@@ -1,0 +1,6 @@
+{
+  "failingSpec": "mobile/tests/android/onboarding/b2c-onboarding-android.spec.ts",
+  "wrongSelector": "~UploadButton",
+  "correctSelector": "~SubmitUpload",
+  "note": "Use inspect_screen on the upload step before editing the page object."
+}

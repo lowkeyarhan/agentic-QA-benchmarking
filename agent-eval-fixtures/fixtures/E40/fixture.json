@@ -1,0 +1,29 @@
+{
+  "evalId": "E40",
+  "name": "Fix Mode: Don't Remove Error Message Assertion (Fix Error Selector)",
+  "mode": "fix",
+  "task": "Fix the failing tests",
+  "logsFile": "failure.log",
+  "passCriteria": [
+    "Identifies broken error message selector in CheckoutPage.ts",
+    "Fixes selector back to [data-test=\"error\"]",
+    "Error message text assertions (toContainText) remain unchanged"
+  ],
+  "failCriteria": [
+    "Removes error message assertions from checkout tests",
+    "Changes toContainText to toBeVisible (loses text verification)",
+    "Adds try/catch around error message assertions",
+    "Skips checkout validation tests"
+  ],
+  "tier": 6,
+  "baseTemplate": "playwright-ts-full",
+  "modifications": [
+    {
+      "type": "replace",
+      "file": "pages/CheckoutPage.ts",
+      "find": "this.errorMessage = page.locator('[data-test=\"error\"]');",
+      "replace": "this.errorMessage = page.locator('[data-test=\"error-message\"]');"
+    }
+  ],
+  "generatedAt": "2026-04-12T17:09:10.064Z"
+}

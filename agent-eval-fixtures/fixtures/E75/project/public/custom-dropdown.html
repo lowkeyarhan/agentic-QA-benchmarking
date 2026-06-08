@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Custom Dropdown Test</title>
+  <style>
+    .dropdown-container { position: relative; width: 200px; }
+    .dropdown-trigger { 
+      padding: 10px; 
+      border: 1px solid #ccc; 
+      cursor: pointer;
+      background: white;
+    }
+    .dropdown-options { 
+      display: none;
+      position: absolute;
+      width: 100%;
+      border: 1px solid #ccc;
+      background: white;
+      z-index: 100;
+    }
+    .dropdown-options.open { display: block; }
+    .option { 
+      padding: 10px; 
+      cursor: pointer; 
+      cursor: pointer;
+    }
+    .option:hover { background: #f0f0f0; }
+    #result { margin-top: 20px; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <h1>Custom Dropdown Component</h1>
+  
+  <div class="dropdown-container">
+    <div class="dropdown-trigger" onclick="toggleDropdown()">Select an option</div>
+    <div class="dropdown-options" id="dropdownOptions">
+      <div class="option" onclick="selectOption('Basic')">Basic</div>
+      <div class="option" onclick="selectOption('Standard')">Standard</div>
+      <div class="option" onclick="selectOption('Premium')">Premium</div>
+      <div class="option" onclick="selectOption('Enterprise')">Enterprise</div>
+    </div>
+  </div>
+  
+  <div id="result"></div>
+  
+  <script>
+    function toggleDropdown() {
+      const options = document.getElementById('dropdownOptions');
+      options.classList.toggle('open');
+    }
+    
+    function selectOption(value) {
+      document.querySelector('.dropdown-trigger').textContent = value;
+      document.getElementById('dropdownOptions').classList.remove('open');
+      document.getElementById('result').textContent = 'Selected: ' + value;
+    }
+  </script>
+</body>
+</html>

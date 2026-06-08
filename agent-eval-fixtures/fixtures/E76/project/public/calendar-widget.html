@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Calendar Widget Test</title>
+  <style>
+    .date-field { 
+      display: flex; 
+      align-items: center; 
+      gap: 10px;
+      margin: 20px 0;
+    }
+    .calendar-trigger {
+      cursor: pointer;
+      font-size: 20px;
+    }
+    .calendar-popup {
+      display: none;
+      position: absolute;
+      border: 1px solid #ccc;
+      background: white;
+      padding: 10px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+    .calendar-popup.open { display: block; }
+    .calendar-header {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 10px;
+    }
+    .calendar-days {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 5px;
+    }
+    .day {
+      padding: 10px;
+      text-align: center;
+      cursor: pointer;
+    }
+    .day:hover { background: #f0f0f0; }
+    .day.other-month { color: #ccc; }
+    #result { margin-top: 20px; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <h1>Calendar Widget Component</h1>
+  
+  <div class="date-field">
+    <label>Investment Date</label>
+    <input type="text" id="dateInput" readonly placeholder="Select date">
+    <span class="calendar-trigger" onclick="toggleCalendar()">📅</span>
+  </div>
+  
+  <div class="calendar-popup" id="calendarPopup">
+    <div class="calendar-header">
+      <button onclick="changeMonth(-1)">&lt;</button>
+      <span id="monthYear">March 2026</span>
+      <button onclick="changeMonth(1)">&gt;</button>
+    </div>
+    <div class="calendar-days" id="calendarDays"></div>
+  </div>
+  
+  <div id="result"></div>
+  
+  <script>
+    let currentMonth = new Date().getMonth();
+    let currentYear = new Date().getFullYear();
+    
+    function toggleCalendar() {
+      const popup = document.getElementById('calendarPopup');
+      popup.classList.toggle('open');
+      if (popup.classList.contains('open')) {
+        renderCalendar();
+      }
+    }
+    
+    function changeMonth(delta) {
+      currentMonth += delta;
+      if (currentMonth > 11) {
+        currentMonth = 0;
+        currentYear++;
+      } else if (currentMonth < 0) {
+        currentMonth = 11;
+        currentYear--;
+      }
+      renderCalendar();
+    }
+    
+    function renderCalendar() {
+      const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
+        'July', 'August', 'September', 'October', 'November', 'December'];
+      document.getElementById('monthYear').textContent = 
+        monthNames[currentMonth] + ' ' + currentYear;
+      
+      const daysContainer = document.getElementById('calendarDays');
+      daysContainer.innerHTML = '';
+      
+      const firstDay = new Date(currentYear, currentMonth, 1).getDay();
+      const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+      
+      // Previous month days
+      for (let i = 0; i < firstDay; i++) {
+        const day = document.createElement('div');
+        day.className = 'day other-month';
+        daysContainer.appendChild(day);
+      }
+      
+      // Current month days
+      for (let i = 1; i <= daysInMonth; i++) {
+        const day = document.createElement('div');
+        day.className = 'day';
+        day.textContent = i;
+        day.onclick = () => selectDate(i);
+        daysContainer.appendChild(day);
+      }
+    }
+    
+    function selectDate(day) {
+      const dateStr = currentYear + '-' + 
+        String(currentMonth + 1).padStart(2, '0') + '-' + 
+        String(day).padStart(2, '0');
+      document.getElementById('dateInput').value = dateStr;
+      document.getElementById('calendarPopup').classList.remove('open');
+      document.getElementById('result').textContent = 'Date selected: ' + dateStr;
+    }
+    
+    // Initialize with current month
+    currentMonth = new Date().getMonth();
+    currentYear = new Date().getFullYear();
+  </script>
+</body>
+</html>

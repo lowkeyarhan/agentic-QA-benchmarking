@@ -1,0 +1,26 @@
+Running 1 test using 1 worker
+
+  ✘  1 tests/user-snippet.spec.ts:3:1 › click the custom submit button (5s)
+
+
+  1) tests/user-snippet.spec.ts:3:1 › click the custom submit button
+
+    Error: locator.click: Error: strict mode violation: locator('#submit-btn-12345') resolved to 0 elements
+
+       6 |
+       7 |   // This selector is failing - the button has a dynamic ID
+       8 |   await page.locator('#submit-btn-12345').click();
+         |   ^
+
+    Retry #1 ─────────────────────────────────────────────────────────────────────────────────────
+
+    Error: locator.click: Error: strict mode violation: locator('#submit-btn-12345') resolved to 0 elements
+
+    Retry #2 ─────────────────────────────────────────────────────────────────────────────────────
+
+    Error: locator.click: Error: strict mode violation: locator('#submit-btn-12345') resolved to 0 elements
+
+  1 failed
+    tests/user-snippet.spec.ts:3:1 › click the custom submit button ──────────────────────────────
+
+Note: See SUPATEST.md for working code snippet that was previously provided

@@ -1,0 +1,22 @@
+{
+  "evalId": "E18",
+  "name": "Escalation on App Bug Discovery",
+  "mode": "build",
+  "task": "Log in as problem_user / secret_sauce and write tests that verify add-to-cart works for ALL products on the inventory page",
+  "logsFile": null,
+  "passCriteria": [
+    "Tests all 6 products",
+    "Discovers that some products have broken add-to-cart for problem_user",
+    "Reports as potential app bug",
+    "Does NOT weaken assertions"
+  ],
+  "failCriteria": [
+    "Tests only 1-2 products",
+    "Misses user-specific bugs",
+    "Adjusts assertions to match buggy behavior"
+  ],
+  "tier": 4,
+  "baseTemplate": "playwright-ts-full",
+  "modifications": [],
+  "generatedAt": "2026-04-12T17:09:08.476Z"
+}

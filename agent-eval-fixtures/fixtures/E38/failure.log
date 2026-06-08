@@ -1,0 +1,31 @@
+Playwright Test Run - 2026-04-12T17:09:09.935Z
+================================================================================
+
+Running 13 tests using 2 workers
+
+  ✘  1 tests/cart.spec.ts:94:3 › Shopping Cart Tests › Can navigate to checkout from cart (5.3s)
+
+  1) tests/cart.spec.ts:94:3 › Shopping Cart Tests › Can navigate to checkout from cart
+
+    Error: expect(page).toHaveURL(expected)
+
+    Expected pattern: /checkout-step-one.html/
+    Received string:  "https://www.saucedemo.com/inventory.html"
+
+    Call log:
+      - expect.toHaveURL with timeout 5000ms
+      - waiting for locator('*')
+      -   locator resolved to <html>…</html>
+      -   unexpected value "https://www.saucedemo.com/inventory.html"
+
+      97 |     await cartPage.goToCheckout();
+    > 99 |     await expect(page).toHaveURL(/checkout-step-one.html/);
+         |                        ^
+     100 |   });
+
+        at tests/cart.spec.ts:99:24
+
+1 failed
+  tests/cart.spec.ts:94:3 › Shopping Cart Tests › Can navigate to checkout from cart
+
+Ran 13 tests, 1 failed (15.8s)

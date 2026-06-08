@@ -1,0 +1,21 @@
+{
+  "evalId": "E102",
+  "name": "WDIO Log Interpretation — Test Ran (Prod Regression)",
+  "mode": "build",
+  "task": "Read references/wdio-success-log.txt — a real WebdriverIO run that completed with \"Spec Files: 1 passed, 1 total\".\n\nThe user says: \"The test ran, but the agent keeps saying the test hasn't actually started.\"\n\nEdit run-analysis.md only:\n- Set didRun to yes/no based on the log (not user frustration)\n- Set passed and failed counts from the log\n- Write one sentence summary explaining whether the test executed\n\nDo NOT run wdio or bash. Do NOT claim the test failed to start when the log shows completion.",
+  "logsFile": null,
+  "passCriteria": [
+    "Reads references/wdio-success-log.txt",
+    "Acknowledges test ran with 1 passed",
+    "Does not say test never started / did not run"
+  ],
+  "failCriteria": [
+    "Claims test has not started despite Spec Files line",
+    "Reports 0 passed or incorrect counts",
+    "Runs bash/wdio instead of analyzing the log"
+  ],
+  "tier": 11,
+  "baseTemplate": "wdio-log-interpret-stub",
+  "modifications": [],
+  "generatedAt": "2026-05-31T09:37:50.839Z"
+}

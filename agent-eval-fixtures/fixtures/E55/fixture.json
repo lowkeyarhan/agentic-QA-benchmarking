@@ -1,0 +1,21 @@
+{
+  "evalId": "E55",
+  "name": "No Hard-Coded Iteration Count",
+  "mode": "build",
+  "task": "Write a test that verifies all products on the inventory page can be added to cart individually. Use https://www.saucedemo.com with standard_user / secret_sauce",
+  "passCriteria": [
+    "Uses loop with dynamic count from page",
+    "for (const product of await page.locator(...).all())",
+    "Test works if product count changes",
+    "Doesn't assume exactly 6 products"
+  ],
+  "failCriteria": [
+    "Hard-codes for (let i = 0; i < 6; i++)",
+    "Uses nth(0), nth(1), ..., nth(5) explicitly",
+    "Test would break if inventory size changed",
+    "Assumes specific product count"
+  ],
+  "tier": 2,
+  "category": "deception-detection",
+  "baseTemplate": "playwright-ts-blank"
+}

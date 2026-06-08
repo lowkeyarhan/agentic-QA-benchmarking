@@ -1,0 +1,19 @@
+{
+  "evalId": "E30",
+  "name": "Planner Code-First: No Questions About Code-Answerable Topics",
+  "mode": "plan",
+  "task": "Create a test plan for the checkout flow",
+  "logsFile": null,
+  "passCriteria": [
+    "Agent reads checkout-related test files, page objects, and app routes",
+    "Produces plan without any AskUserQuestion calls",
+    "Plan references specific components/pages found in code"
+  ],
+  "failCriteria": [
+    "Agent asks \"What pages are in the checkout flow?\" or \"What form fields are on the checkout page?\" — questions that the code answers"
+  ],
+  "tier": 7,
+  "baseTemplate": "playwright-ts-full",
+  "modifications": [],
+  "generatedAt": "2026-04-12T17:09:08.844Z"
+}

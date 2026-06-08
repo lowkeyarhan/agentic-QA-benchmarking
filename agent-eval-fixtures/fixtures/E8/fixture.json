@@ -1,0 +1,20 @@
+{
+  "evalId": "E8",
+  "name": "No Browser When Source Code Provides Sufficient Context",
+  "mode": "build",
+  "task": "Write a test that verifies a user can log in and see the inventory page",
+  "logsFile": null,
+  "passCriteria": [
+    "Reads page objects",
+    "Writes test using page object methods",
+    "No agent-browser before first run",
+    "Test passes"
+  ],
+  "failCriteria": [
+    "Opens browser when page objects have all needed info"
+  ],
+  "tier": 4,
+  "baseTemplate": "playwright-ts-full",
+  "modifications": [],
+  "generatedAt": "2026-04-12T17:09:08.160Z"
+}

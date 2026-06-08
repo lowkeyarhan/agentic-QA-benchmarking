@@ -1,0 +1,21 @@
+{
+  "evalId": "E107",
+  "name": "Non-Destructive Fix — Keep Working Methods (Prod Regression)",
+  "mode": "build",
+  "task": "pages/document-upload.screen.ts has working fillShipping(), submitOrder(), and verifyConfirmation().\n\nOnly completeDocumentUpload() is broken — it uses ~UploadButton but references/inspect-upload-screen.json shows a11y SubmitUpload.\n\nFix completeDocumentUpload() ONLY:\n- Use ~SubmitUpload from the inspect JSON\n- Keep fillShipping, submitOrder, verifyConfirmation unchanged\n\nEdit pages/document-upload.screen.ts only. Authoring only.",
+  "logsFile": null,
+  "passCriteria": [
+    "All four methods still present",
+    "completeDocumentUpload uses ~SubmitUpload",
+    "No ~UploadButton left"
+  ],
+  "failCriteria": [
+    "Removed working methods while fixing upload",
+    "Still uses ~UploadButton",
+    "Rewrote entire file / deleted unrelated code"
+  ],
+  "tier": 11,
+  "baseTemplate": "mobile-nondestructive-fix-stub",
+  "modifications": [],
+  "generatedAt": "2026-05-31T09:56:01.853Z"
+}

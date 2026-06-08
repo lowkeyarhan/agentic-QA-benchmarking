@@ -1,0 +1,10 @@
+{
+  "name": "eval-e44-hardcoded-values",
+  "version": "1.0.0",
+  "scripts": {
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.40.0"
+  }
+}

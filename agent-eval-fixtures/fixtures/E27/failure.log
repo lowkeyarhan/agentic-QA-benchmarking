@@ -1,0 +1,18 @@
+Playwright Test Run - 2026-04-12T17:09:09.602Z
+================================================================================
+
+Running tests...
+
+  1 failed
+
+  1) [chromium] > tests/auth.spec.ts:15:3 > Authentication Tests > Valid user can login successfully
+
+Error: Test failed with unexpected error
+
+    at tests/example.spec.ts:10:5
+
+
+  Slow test file: tests/auth.spec.ts (10.2s)
+
+  1 failed
+  Finished in 10.5s

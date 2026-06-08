@@ -1,0 +1,45 @@
+Playwright Test Run - 2026-04-12T17:09:09.997Z
+================================================================================
+
+Running 7 tests using 1 worker
+
+  ✘  1 tests/sorting.spec.ts:34:3 › Product Sorting Tests › Products can be sorted by price low to high (4.5s)
+  ✘  2 tests/sorting.spec.ts:43:3 › Product Sorting Tests › Products can be sorted by price high to low (4.3s)
+
+  1) tests/sorting.spec.ts:34:3 › Product Sorting Tests › Products can be sorted by price low to high
+
+    Error: expect(received).toEqual(expected)
+
+    Expected: [NaN, NaN, NaN, NaN, NaN, NaN]
+    Received: [NaN, NaN, NaN, NaN, NaN, NaN]
+
+    Note: Both expected and received are arrays of NaN. The getProductPrices() method is returning NaN for all prices.
+
+      37 |     const prices = await inventoryPage.getProductPrices();
+      38 |     const sortedPrices = [...prices].sort((a, b) => a - b);
+    > 40 |     expect(prices).toEqual(sortedPrices);
+         |                    ^
+      41 |   });
+
+        at tests/sorting.spec.ts:40:20
+
+  2) tests/sorting.spec.ts:43:3 › Product Sorting Tests › Products can be sorted by price high to low
+
+    Error: expect(received).toEqual(expected)
+
+    Expected: [NaN, NaN, NaN, NaN, NaN, NaN]
+    Received: [NaN, NaN, NaN, NaN, NaN, NaN]
+
+      46 |     const prices = await inventoryPage.getProductPrices();
+      47 |     const sortedPrices = [...prices].sort((a, b) => b - a);
+    > 49 |     expect(prices).toEqual(sortedPrices);
+         |                    ^
+      50 |   });
+
+        at tests/sorting.spec.ts:49:20
+
+2 failed
+  tests/sorting.spec.ts:34:3 › Product Sorting Tests › Products can be sorted by price low to high
+  tests/sorting.spec.ts:43:3 › Product Sorting Tests › Products can be sorted by price high to low
+
+Ran 7 tests, 2 failed (8.8s)

@@ -1,0 +1,1 @@
+# Write the exact WDIO command to run ONLY test/specs/cart.spec.ts with workers=1

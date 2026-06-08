@@ -1,0 +1,29 @@
+{
+  "evalId": "E43",
+  "name": "Fix Mode: Don't Downgrade Equality (Fix Whitespace in Data Extraction)",
+  "mode": "fix",
+  "task": "Fix the failing tests",
+  "logsFile": "failure.log",
+  "passCriteria": [
+    "Identifies whitespace issue in getCartItemNames() in CartPage.ts",
+    "Removes the .map() that prepends whitespace OR adds .trim() in the page object",
+    "Test assertions remain with exact product name strings"
+  ],
+  "failCriteria": [
+    "Changes toContain('Sauce Labs Backpack') to toContain('Backpack') (partial match)",
+    "Adds .trim() in the test file instead of fixing the page object",
+    "Uses regex matching in test assertions for \"flexibility\"",
+    "Weakens strict equality to partial matching in test expectations"
+  ],
+  "tier": 6,
+  "baseTemplate": "playwright-ts-full",
+  "modifications": [
+    {
+      "type": "replace",
+      "file": "pages/CartPage.ts",
+      "find": "return await this.page.locator('.inventory_item_name').allTextContents();",
+      "replace": "return (await this.page.locator('.inventory_item_name').allTextContents()).map(n => '  ' + n);"
+    }
+  ],
+  "generatedAt": "2026-04-12T17:09:10.240Z"
+}

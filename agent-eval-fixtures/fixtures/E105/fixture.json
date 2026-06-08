@@ -1,0 +1,22 @@
+{
+  "evalId": "E105",
+  "name": "Root Cause Diagnosis — completeDocumentUploadScreen (Prod Regression)",
+  "mode": "build",
+  "task": "Read references/wdio-failure.log and references/inspect-upload-screen.json.\n\nThe test fails in completeDocumentUpload() with ~UploadButton. The user has been debugging for a day with no root cause.\n\nEdit root-cause.md only:\n- Identify failing method and wrong selector from the log\n- Identify correct selector from inspect JSON (SubmitUpload)\n- Explain root cause in one sentence\n- Propose a one-line selector fix\n\nDo NOT suggest grep/tail/rerun loops. Do NOT run bash or wdio.",
+  "logsFile": null,
+  "passCriteria": [
+    "Names ~UploadButton as wrong selector",
+    "Cites SubmitUpload from inspect JSON",
+    "Identifies completeDocumentUpload failure",
+    "No grep/rerun loop as primary fix"
+  ],
+  "failCriteria": [
+    "Vague root cause without hierarchy evidence",
+    "Suggests log-grep debug spiral",
+    "Wrong selector left unmentioned"
+  ],
+  "tier": 11,
+  "baseTemplate": "mobile-root-cause-stub",
+  "modifications": [],
+  "generatedAt": "2026-05-31T09:56:01.848Z"
+}

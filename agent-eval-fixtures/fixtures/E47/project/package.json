@@ -1,0 +1,10 @@
+{
+  "name": "eval-e47-assertion-strength",
+  "version": "1.0.0",
+  "scripts": {
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.40.0"
+  }
+}

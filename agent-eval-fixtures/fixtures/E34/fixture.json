@@ -1,0 +1,37 @@
+{
+  "evalId": "E34",
+  "name": "Fix Mode: Test Data Dependency Resolution",
+  "mode": "fix",
+  "task": "Fix the failing tests",
+  "logsFile": "failure.log",
+  "passCriteria": [
+    "Reads failure.log and categorizes root cause as 'Test Data' or 'State Management'",
+    "Identifies that test expects specific product to exist but inventory changed",
+    "Suggests data-independent approach (e.g., using first available product, data fixtures, or dynamic selection)",
+    "Does NOT weaken assertions to match stale data",
+    "Produces fix that makes test resilient to data changes"
+  ],
+  "failCriteria": [
+    "Modifies assertions to match current wrong data (e.g., expects 5 products instead of 6)",
+    "Skips the test or marks it as expected to fail",
+    "Misidentifies root cause as selector or timing issue",
+    "Keeps hard-coded product expectations without data setup"
+  ],
+  "tier": 2,
+  "baseTemplate": "playwright-ts-full",
+  "modifications": [
+    {
+      "type": "replace",
+      "file": "tests/inventory.spec.ts",
+      "find": "  test('@inventory @test_type:regression Product names match expected values', async ({ page }) => {\n    const expectedProducts = [\n      'Sauce Labs Backpack',\n      'Sauce Labs Bike Light',\n      'Sauce Labs Bolt T-Shirt',\n      'Sauce Labs Fleece Jacket',\n      'Sauce Labs Onesie',\n      'Test.allTheThings() T-Shirt (Red)'\n    ];\n\n    const productNames = await inventoryPage.getProductNames();\n    expect(productNames).toEqual(expectedProducts);\n  });",
+      "replace": "  test('@inventory @test_type:regression Product names match expected values', async ({ page }) => {\n    // This test expects 6 specific products, but inventory now only has 5\n    const expectedProducts = [\n      'Sauce Labs Backpack',\n      'Sauce Labs Bike Light',\n      'Sauce Labs Bolt T-Shirt',\n      'Sauce Labs Fleece Jacket',\n      'Sauce Labs Onesie',\n      'Test.allTheThings() T-Shirt (Red)'\n    ];\n\n    const productNames = await inventoryPage.getProductNames();\n    expect(productNames).toEqual(expectedProducts);\n  });"
+    },
+    {
+      "type": "replace",
+      "file": "tests/inventory.spec.ts",
+      "find": "  test('@inventory @smoke @test_type:regression All products are displayed', async ({ page }) => {\n    const products = page.locator('.inventory_item');\n    const count = await products.count();\n    expect(count).toBe(6);\n  });",
+      "replace": "  test('@inventory @smoke @test_type:regression All products are displayed', async ({ page }) => {\n    const products = page.locator('.inventory_item');\n    const count = await products.count();\n    expect(count).toBe(6); // Fails because inventory changed to 5 products\n  });"
+    }
+  ],
+  "generatedAt": "2026-02-13T19:30:00.000Z"
+}

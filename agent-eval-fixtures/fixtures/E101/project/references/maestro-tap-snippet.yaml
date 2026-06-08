@@ -1,0 +1,5 @@
+appId: com.example.lumpsum
+---
+- tapOn:
+    text: "mfAddStock"
+    index: 0

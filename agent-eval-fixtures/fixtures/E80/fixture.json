@@ -1,0 +1,31 @@
+{
+  "evalId": "E80",
+  "name": "Fix: silent try/catch swallowing in test masks real failures",
+  "mode": "fix",
+  "task": "The 'Complete purchase flow' test always passes even when steps fail — errors are silently swallowed by try/catch blocks. Fix it so failures are properly reported.",
+  "logsFile": null,
+  "passCriteria": [
+    "Identifies the try/catch shouldContinue pattern as the root cause",
+    "Removes all try/catch wrappers from the test steps",
+    "Replaces shouldContinue guard blocks with direct await calls",
+    "Test steps now propagate errors naturally to Playwright's test runner"
+  ],
+  "failCriteria": [
+    "Adds more error handling instead of removing existing try/catch",
+    "Only removes some try/catch blocks but not all",
+    "Introduces a different error-swallowing pattern",
+    "Does not address the root cause (shouldContinue guard blocks remain)"
+  ],
+  "tier": 3,
+  "category": "fix-root-cause-diagnosis",
+  "baseTemplate": "playwright-ts-full",
+  "modifications": [
+    {
+      "type": "replace",
+      "file": "tests/checkout.spec.ts",
+      "find": "    test('@checkout @e2e @smoke @test_type:regression Complete purchase flow', async ({ page }) => {\n      // We're on cart page from beforeEach, need to go back to inventory first\n      await page.click('[data-test=\"continue-shopping\"]');\n      await inventoryPage.assertOnInventoryPage();\n\n      // The backpack is already in cart from beforeEach, add bike light\n      await inventoryPage.addProductToCart('sauce-labs-bike-light');\n\n      // Go to checkout\n      await inventoryPage.goToCart();\n      await page.click('[data-test=\"checkout\"]');\n\n      // Fill form\n      await checkoutPage.fillCheckoutForm('Jane', 'Smith', '54321');\n      await checkoutPage.continueCheckout();\n\n      // Verify overview\n      await overviewPage.assertOnOverviewPage();\n      const total = await overviewPage.asyncGetTotal();\n      expect(total).toBeGreaterThan(0);\n\n      // Complete order\n      await overviewPage.finishOrder();\n      await completePage.assertOrderComplete();\n\n      // Return to products\n      await completePage.backToProducts();\n      await inventoryPage.assertOnInventoryPage();\n    });",
+      "replace": "    test('@checkout @e2e @smoke @test_type:regression Complete purchase flow', async ({ page }) => {\n      let shouldContinue = true;\n\n      // Step 1: Navigate to inventory\n      if (shouldContinue) {\n        try {\n          await page.click('[data-test=\"continue-shopping\"]');\n          await inventoryPage.assertOnInventoryPage();\n        } catch (error) {\n          shouldContinue = false;\n        }\n      }\n\n      // Step 2: Add second item\n      if (shouldContinue) {\n        try {\n          await inventoryPage.addProductToCart('sauce-labs-bike-light');\n        } catch (error) {\n          shouldContinue = false;\n        }\n      }\n\n      // Step 3: Go to checkout\n      if (shouldContinue) {\n        try {\n          await inventoryPage.goToCart();\n          await page.click('[data-test=\"checkout\"]');\n        } catch (error) {\n          shouldContinue = false;\n        }\n      }\n\n      // Step 4: Fill form\n      if (shouldContinue) {\n        try {\n          await checkoutPage.fillCheckoutForm('Jane', 'Smith', '54321');\n          await checkoutPage.continueCheckout();\n        } catch (error) {\n          shouldContinue = false;\n        }\n      }\n\n      // Step 5: Verify overview and complete order\n      if (shouldContinue) {\n        try {\n          await overviewPage.assertOnOverviewPage();\n          const total = await overviewPage.asyncGetTotal();\n          expect(total).toBeGreaterThan(0);\n          await overviewPage.finishOrder();\n          await completePage.assertOrderComplete();\n        } catch (error) {\n          shouldContinue = false;\n        }\n      }\n\n      // Step 6: Return to products\n      if (shouldContinue) {\n        try {\n          await completePage.backToProducts();\n          await inventoryPage.assertOnInventoryPage();\n        } catch (error) {\n          shouldContinue = false;\n        }\n      }\n    });"
+    }
+  ],
+  "generatedAt": "2026-04-10T00:00:00.000Z"
+}

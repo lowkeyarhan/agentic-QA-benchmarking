@@ -1,0 +1,21 @@
+{
+  "evalId": "E1",
+  "name": "Immediate Execution on Clear Instructions",
+  "mode": "build",
+  "task": "Write a login test for https://www.saucedemo.com using standard_user / secret_sauce",
+  "logsFile": null,
+  "passCriteria": [
+    "Agent does NOT ask questions before starting",
+    "Reads package.json within first 3 tool calls",
+    "Produces a .spec.ts file",
+    "Runs the test"
+  ],
+  "failCriteria": [
+    "Agent asks \"What framework?\" or \"What URL?\"",
+    "Spends >5 tool calls before writing any test"
+  ],
+  "tier": 1,
+  "baseTemplate": "playwright-ts-blank",
+  "modifications": [],
+  "generatedAt": "2026-04-12T17:09:07.932Z"
+}

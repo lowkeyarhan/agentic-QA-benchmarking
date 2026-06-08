@@ -1,0 +1,21 @@
+Playwright Test Run - 2026-04-12T17:09:09.712Z
+================================================================================
+
+Running tests...
+
+  1 failed
+
+  1) [chromium] > tests/auth.spec.ts:15:3 > Authentication Tests > Valid user can login successfully
+
+Error: locator.fill: Error: strict mode violation: locator('[data-test="user-name"]') resolved to 0 elements
+
+    at LoginPage.login (pages/LoginPage.ts:23:29)
+    at tests/auth.spec.ts:16:21
+
+  Waiting for locator('[data-test="user-name"]')
+
+
+  Slow test file: tests/auth.spec.ts (10.2s)
+
+  1 failed
+  Finished in 10.5s

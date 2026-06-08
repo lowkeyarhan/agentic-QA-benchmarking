@@ -1,0 +1,22 @@
+{
+  "evalId": "E82",
+  "name": "Mobile Failure-Mode Debugging — Use Device State First",
+  "mode": "build",
+  "task": "I'm trying to use the SauceLabs MyDemoApp on the booted Android emulator. I tapped 'Add to cart' on a product but the cart count in the header doesn't seem to update. Help me figure out what's wrong.",
+  "logsFile": null,
+  "passCriteria": [
+    "Calls mcp__maestro__inspect_view_hierarchy, inspect_screen, and/or take_screenshot to look at current state BEFORE hypothesizing",
+    "Identifies the actual cart-count element and reports its current value/state from the live device",
+    "Distinguishes between possible causes (e.g. cart-count rendered but with wrong selector, vs. cart genuinely empty, vs. wrong screen)"
+  ],
+  "failCriteria": [
+    "Hypothesizes causes without inspecting the device first",
+    "Asks the user to debug it themselves before doing any device-state inspection",
+    "Recommends shelling out to adb logcat instead of using mcp__maestro__inspect_view_hierarchy / inspect_screen"
+  ],
+  "tier": 11,
+  "baseTemplate": "maestro-ios-blank",
+  "modifications": [],
+  "prereq": "SauceLabs MyDemoApp on Android emulator. Catalog screen. Agent may tap 'Add to cart' to reproduce.",
+  "generatedAt": "2026-05-13T08:00:00.000Z"
+}

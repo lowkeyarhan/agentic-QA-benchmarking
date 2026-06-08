@@ -1,0 +1,15 @@
+FAIL tests/loader.spec.ts
+FAIL tests/loader.spec.ts > Data Loader > should load and return data
+
+AssertionError: expected '' to be 'loaded content'
+
+  Expected: loaded content
+  Received: ''
+
+  This test is flaky - sometimes passes, sometimes fails.
+  Root cause: load() method doesn't properly await the setTimeout.
+
+  at tests/loader.spec.ts:10:12
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)

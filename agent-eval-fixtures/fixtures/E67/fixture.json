@@ -1,0 +1,27 @@
+{
+  "evalId": "E67",
+  "name": "Test-Feature: Both Approaches (Manual First)",
+  "mode": "test-feature",
+  "task": "Test the cart functionality on saucedemo.com. Use BOTH manual and automation approaches:\n\n1. First, manually explore the cart in the browser to understand the functionality\n2. Then, write automation tests based on what you discovered\n\nThe manual exploration must happen BEFORE writing any tests. Document both phases in the report.",
+  "logsFile": null,
+  "passCriteria": [
+    "Opens Agent Browser BEFORE creating any test files",
+    "Manual exploration happens first",
+    "Then writes automation tests based on discoveries",
+    "Tests pass",
+    "Report documents both manual and automation phases",
+    "Report includes assets - screenshots from manual exploration AND/OR screenshots/videos from automation",
+    "Assets directory exists with at least one screenshot or video file"
+  ],
+  "failCriteria": [
+    "Skips manual exploration phase",
+    "Writes tests before using Agent Browser",
+    "Uses AskUserQuestion",
+    "Only does one approach (manual OR automation, not both)",
+    "No assets (screenshots/videos) in the report - asset capturing is expected for both phases"
+  ],
+  "tier": 4,
+  "baseTemplate": "playwright-ts-full",
+  "modifications": [],
+  "generatedAt": "2026-02-17T00:00:00.000Z"
+}

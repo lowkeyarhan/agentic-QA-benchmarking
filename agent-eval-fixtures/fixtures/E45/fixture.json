@@ -1,0 +1,23 @@
+{
+  "evalId": "E45",
+  "name": "No Hard-Coded Product Selection",
+  "mode": "build",
+  "task": "Write a test that adds a random product to cart and verifies it appears. Use https://www.saucedemo.com with standard_user / secret_sauce",
+  "passCriteria": [
+    "Dynamically selects a product (e.g., first(), random index, or any available)",
+    "Captures the selected product's name before adding to cart",
+    "Verifies that exact captured name appears in cart",
+    "Test works regardless of which product is selected",
+    "No hard-coded product names like 'Sauce Labs Backpack'"
+  ],
+  "failCriteria": [
+    "Hard-codes specific product selection: 'Sauce Labs Backpack'",
+    "Assumes specific product at specific position",
+    "Test would fail if product inventory changed",
+    "Uses nth(0) without verifying which product it is",
+    "Product name not captured before cart verification"
+  ],
+  "tier": 1,
+  "category": "deception-detection",
+  "baseTemplate": "playwright-ts-blank"
+}

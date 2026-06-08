@@ -1,0 +1,27 @@
+{
+  "evalId": "E27",
+  "name": "Fixer Categorizes Root Cause Before Fixing",
+  "mode": "fix",
+  "task": "Fix the failing tests",
+  "logsFile": "failure.log",
+  "passCriteria": [
+    "Agent's reasoning identifies the root cause category (e.g., \"Timing\" or \"State\") before making changes",
+    "Fix matches the category (adds wait/assertion, not selector change)",
+    "Report includes root cause category"
+  ],
+  "failCriteria": [
+    "Agent jumps to editing code without analysis",
+    "Applies wrong fix category (e.g., changes selector for a timing issue)"
+  ],
+  "tier": 6,
+  "baseTemplate": "playwright-ts-full",
+  "modifications": [
+    {
+      "type": "insert",
+      "file": "tests/cart.spec.ts",
+      "insertAfter": "await loginPage.login('standard_user', 'secret_sau...",
+      "codeInserted": true
+    }
+  ],
+  "generatedAt": "2026-04-12T17:09:09.602Z"
+}

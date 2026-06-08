@@ -1,0 +1,26 @@
+{
+  "evalId": "E77",
+  "name": "Integrating User Code Snippets",
+  "mode": "fix",
+  "task": "Fix the failing test in tests/user-snippet.spec.ts. The test has a failing selector. The user has provided a working code snippet in SUPATEST.md that shows the correct way to select the element. Integrate this snippet properly - don't just paste it inline, but refactor it into a reusable pattern.",
+  "logsFile": "failure.log",
+  "passCriteria": [
+    "Test passes successfully",
+    "Reads and understands the working code snippet from SUPATEST.md",
+    "Integrates the snippet correctly into the test",
+    "Creates a reusable helper function from the pattern",
+    "Doesn't leave the failing code commented out"
+  ],
+  "failCriteria": [
+    "Ignores the provided code snippet",
+    "Just pastes code inline without understanding",
+    "Leaves old failing code in place",
+    "Doesn't create reusable helper",
+    "Test still fails with same error"
+  ],
+  "tier": 5,
+  "category": "complex-ui-interactions",
+  "baseTemplate": "playwright-ts-full",
+  "modifications": ["user-snippet-app"],
+  "generatedAt": "2026-03-14T12:00:00.000Z"
+}

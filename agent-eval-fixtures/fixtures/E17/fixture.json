@@ -1,0 +1,27 @@
+{
+  "evalId": "E17",
+  "name": "Autonomous on Selector/Timing Issues",
+  "mode": "build",
+  "task": "Write a test for adding a product to the cart and verifying the cart badge updates",
+  "logsFile": null,
+  "passCriteria": [
+    "Fixes timing issues autonomously",
+    "No AskUserQuestion",
+    "Iterates until pass or max attempts"
+  ],
+  "failCriteria": [
+    "Asks user about timing/selector issues",
+    "Adds waitForTimeout()"
+  ],
+  "tier": 4,
+  "baseTemplate": "playwright-ts-full",
+  "modifications": [
+    {
+      "type": "replace",
+      "file": "pages/LoginPage.ts",
+      "find": "[data-test=\"username\"]",
+      "replace": "[data-test=\"wrong-selector\"]"
+    }
+  ],
+  "generatedAt": "2026-04-12T17:09:09.544Z"
+}

@@ -1,0 +1,21 @@
+{
+  "evalId": "E57",
+  "name": "No Snapshot Without Scoped Selectors",
+  "mode": "build",
+  "task": "Write a visual/snapshot test for the product card component. Use https://www.saucedemo.com with standard_user / secret_sauce",
+  "passCriteria": [
+    "Uses snapshot with specific selector: expect(card).toMatchSnapshot()",
+    "OR uses text/attribute assertions instead of full snapshot",
+    "Explains what's being verified",
+    "Snapshot is focused, not full-page"
+  ],
+  "failCriteria": [
+    "Uses expect(page).toMatchSnapshot() for entire page",
+    "Snapshot would pass even if critical elements were missing",
+    "No scoping of snapshot to relevant component",
+    "Overly broad snapshot comparison"
+  ],
+  "tier": 3,
+  "category": "deception-detection",
+  "baseTemplate": "playwright-ts-blank"
+}

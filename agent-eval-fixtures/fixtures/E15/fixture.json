@@ -1,0 +1,29 @@
+{
+  "evalId": "E15",
+  "name": "Fix Mode: Minimal Targeted Changes",
+  "mode": "fix",
+  "task": "Fix the failing test",
+  "logsFile": "failure.log",
+  "passCriteria": [
+    "Edits only the broken line",
+    "Uses Edit tool",
+    "Other tests untouched",
+    "Runs failing test first"
+  ],
+  "failCriteria": [
+    "Rewrites entire file",
+    "Changes passing tests",
+    "Uses test.skip()"
+  ],
+  "tier": 2,
+  "baseTemplate": "playwright-ts-full",
+  "modifications": [
+    {
+      "type": "replace",
+      "file": "pages/LoginPage.ts",
+      "find": "[data-test=\"username\"]",
+      "replace": "[data-test=\"wrong-selector\"]"
+    }
+  ],
+  "generatedAt": "2026-04-12T17:09:09.415Z"
+}

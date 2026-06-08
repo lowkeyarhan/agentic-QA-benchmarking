@@ -1,0 +1,24 @@
+{
+  "evalId": "E21",
+  "name": "Multi-Page Flow: Complete E2E Journey",
+  "mode": "build",
+  "task": "Write a complete end-to-end test: log in, add a product, go to cart, checkout with form details, and verify order completion",
+  "logsFile": null,
+  "passCriteria": [
+    "Navigates all 5 pages",
+    "Assertions at each transition",
+    "Fills checkout form",
+    "Verifies order confirmation",
+    "Test passes",
+    "Proper tags"
+  ],
+  "failCriteria": [
+    "Skips pages",
+    "No navigation assertions",
+    "Race conditions"
+  ],
+  "tier": 4,
+  "baseTemplate": "playwright-ts-full",
+  "modifications": [],
+  "generatedAt": "2026-04-12T17:09:08.668Z"
+}

@@ -1,0 +1,59 @@
+Playwright Test Run - 2026-04-12T17:09:10.064Z
+================================================================================
+
+Running 5 tests using 1 worker
+
+  ✘  1 tests/checkout.spec.ts:27:5 › Checkout Flow Tests › Checkout Information Step › Checkout requires first name (5.2s)
+  ✘  2 tests/checkout.spec.ts:34:5 › Checkout Flow Tests › Checkout Information Step › Checkout requires last name (5.1s)
+  ✘  3 tests/checkout.spec.ts:41:5 › Checkout Flow Tests › Checkout Information Step › Checkout requires postal code (5.0s)
+
+  1) tests/checkout.spec.ts:27:5 › Checkout Flow Tests › Checkout Information Step › Checkout requires first name
+
+    Error: expect(locator).toContainText(expected)
+
+    Locator: locator('[data-test="error-message"]')
+    Expected string: "First Name is required"
+    Received: <element not found>
+
+    Call log:
+      - expect.toContainText with timeout 5000ms
+      - waiting for locator('[data-test="error-message"]')
+      -   locator resolved to 0 elements
+
+      29 |       await checkoutPage.fillCheckoutForm('', 'Doe', '12345');
+      30 |       await checkoutPage.continueCheckout();
+    > 31 |       await checkoutPage.assertErrorMessage('First Name is required');
+         |                          ^
+      32 |     });
+
+        at CheckoutPage.assertErrorMessage (pages/CheckoutPage.ts:41:38)
+        at tests/checkout.spec.ts:31:30
+
+  2) tests/checkout.spec.ts:34:5 › Checkout Flow Tests › Checkout Information Step › Checkout requires last name
+
+    Error: expect(locator).toContainText(expected)
+
+    Locator: locator('[data-test="error-message"]')
+    Expected string: "Last Name is required"
+    Received: <element not found>
+
+        at CheckoutPage.assertErrorMessage (pages/CheckoutPage.ts:41:38)
+        at tests/checkout.spec.ts:38:30
+
+  3) tests/checkout.spec.ts:41:5 › Checkout Flow Tests › Checkout Information Step › Checkout requires postal code
+
+    Error: expect(locator).toContainText(expected)
+
+    Locator: locator('[data-test="error-message"]')
+    Expected string: "Postal Code is required"
+    Received: <element not found>
+
+        at CheckoutPage.assertErrorMessage (pages/CheckoutPage.ts:41:38)
+        at tests/checkout.spec.ts:45:30
+
+3 failed
+  tests/checkout.spec.ts:27:5 › Checkout requires first name
+  tests/checkout.spec.ts:34:5 › Checkout requires last name
+  tests/checkout.spec.ts:41:5 › Checkout requires postal code
+
+Ran 5 tests, 3 failed (15.3s)

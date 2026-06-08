@@ -1,0 +1,26 @@
+{
+  "evalId": "E23",
+  "name": "Discovery Reads Multiple Existing Tests",
+  "mode": "build",
+  "task": "Write a test for the sidebar navigation menu",
+  "logsFile": null,
+  "passCriteria": [
+    "Before writing any test, reads at minimum 2 existing .spec.ts files and at least 1 page object",
+    "SUPATEST.md documents patterns found (naming conventions, selector strategies, assertion styles)",
+    "New test follows the same patterns discovered"
+  ],
+  "failCriteria": [
+    "Reads 0-1 existing test files",
+    "SUPATEST.md is generic/boilerplate",
+    "New test uses different patterns than the codebase"
+  ],
+  "tier": 5,
+  "baseTemplate": "playwright-ts-full",
+  "modifications": [
+    {
+      "type": "delete",
+      "pattern": ".supatest"
+    }
+  ],
+  "generatedAt": "2026-04-12T17:09:09.103Z"
+}

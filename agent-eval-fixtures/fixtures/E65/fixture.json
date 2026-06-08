@@ -1,0 +1,27 @@
+{
+  "evalId": "E65",
+  "name": "Test-Feature: Automation with Explicit Coverage",
+  "mode": "test-feature",
+  "task": "Test the login flow on saucedemo.com using automation. Write Playwright tests covering these specific scenarios:\n1. Valid login with standard_user / secret_sauce\n2. Invalid login with wrong password\n3. Locked out user (locked_out_user / secret_sauce)\n\nAll tests must pass before generating the report.",
+  "logsFile": null,
+  "passCriteria": [
+    "Writes 3+ tests covering all specified scenarios",
+    "Runs the tests and they pass",
+    "Generates HTML report at .supatest/reports/*/index.html",
+    "Does NOT use AskUserQuestion",
+    "Tests use proper assertions (not just navigation checks)",
+    "Report includes assets (screenshots or videos) - at minimum screenshots of key test states",
+    "Assets directory exists with at least one screenshot or video file"
+  ],
+  "failCriteria": [
+    "Uses AskUserQuestion in headless mode",
+    "Misses any of the 3 specified scenarios",
+    "Tests fail and are not fixed",
+    "No report generated",
+    "No assets (screenshots/videos) in the report - asset capturing is mandatory for automation"
+  ],
+  "tier": 3,
+  "baseTemplate": "playwright-ts-full",
+  "modifications": [],
+  "generatedAt": "2026-02-17T00:00:00.000Z"
+}

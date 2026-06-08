@@ -1,0 +1,25 @@
+Running 1 test using 1 worker
+
+  ✘  1 tests/custom-dropdown.spec.ts:3:1 › select Premium from custom dropdown (5s)
+
+
+  1) tests/custom-dropdown.spec.ts:3:1 › select Premium from custom dropdown
+
+    Error: locator.selectOption: Error: Element is not a <select> element
+
+       6 |
+       7 |   // This test is failing - the dropdown is NOT a native <select>
+       8 |   await page.getByRole('combobox').selectOption('Premium');
+         |   ^
+       9 |
+
+    Retry #1 ─────────────────────────────────────────────────────────────────────────────────────
+
+    Error: locator.selectOption: Error: Element is not a <select> element
+
+    Retry #2 ─────────────────────────────────────────────────────────────────────────────────────
+
+    Error: locator.selectOption: Error: Element is not a <select> element
+
+  1 failed
+    tests/custom-dropdown.spec.ts:3:1 › select Premium from custom dropdown ──────────────────────

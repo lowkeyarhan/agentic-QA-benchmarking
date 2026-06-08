@@ -1,0 +1,6 @@
+[0-0] Error in test/specs/document-upload.spec.ts
+Error: element ("~UploadButton") still not displayed after 10000ms
+    at DocumentUploadScreen.completeDocumentUpload (pages/document-upload.screen.ts:28:11)
+    at Context.<anonymous> (test/specs/document-upload.spec.ts:14:5)
+
+Spec Files: 0 passed, 1 failed, 1 total

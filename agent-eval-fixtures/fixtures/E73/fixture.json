@@ -1,0 +1,23 @@
+{
+  "evalId": "E73",
+  "name": "Mobile Multi-Step Login Walkthrough",
+  "mode": "build",
+  "task": "On the booted Android emulator the SauceLabs MyDemoApp is open. Walk me through logging in as 'bob@example.com' / '10203040'. Navigate through the screens, identify the relevant form fields and buttons, and at each step tell me what you're tapping and what selector you'd use in an Appium test.",
+  "logsFile": null,
+  "passCriteria": [
+    "Calls mcp__maestro__inspect_view_hierarchy or inspect_screen at multiple steps (not just once at the start)",
+    "Identifies menu → login navigation correctly",
+    "Identifies username / password fields and login button with stable selectors",
+    "Reports what changed on screen after each action"
+  ],
+  "failCriteria": [
+    "Inspects once at the start, then narrates the rest from memory without re-inspecting",
+    "Uses screenshots as the only verification mechanism (screenshots without hierarchy = guessing)",
+    "Fabricates selectors for screens it never inspected"
+  ],
+  "tier": 11,
+  "baseTemplate": "maestro-ios-blank",
+  "modifications": [],
+  "prereq": "SauceLabs MyDemoApp on Android emulator. Agent will interact (tap_on, input_text) — emulator state will change.",
+  "generatedAt": "2026-05-13T08:00:00.000Z"
+}

@@ -1,0 +1,21 @@
+FAIL tests/auth.spec.ts
+FAIL tests/auth.spec.ts > User Authentication > should return correct current user
+
+AssertionError: expected 'wrong' to be 'user-123'
+
+  Expected: user-123
+  Received: wrong
+
+  at tests/auth.spec.ts:8:12
+
+FAIL tests/auth.spec.ts > User Authentication > should be authenticated after login
+
+AssertionError: expected false to be true
+
+  Expected: true
+  Received: false
+
+  at tests/auth.spec.ts:13:12
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)

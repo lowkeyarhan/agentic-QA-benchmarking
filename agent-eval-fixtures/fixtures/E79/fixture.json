@@ -1,0 +1,32 @@
+{
+  "evalId": "E79",
+  "name": "Fix: spurious page.close() in afterEach causes locator.fill Target closed",
+  "mode": "fix",
+  "task": "Fix the failing checkout test — Error: locator.fill: Target closed.\n\nTest output:\n  ✕ Valid form proceeds to overview (2341ms)\n    Error: locator.fill: Target closed\n      at CheckoutPage.fillCheckoutForm (pages/CheckoutPage.ts:28:38)",
+  "logsFile": "failure.log",
+  "passCriteria": [
+    "Identifies the test.afterEach page.close() call as root cause",
+    "Removes the afterEach hook",
+    "Does NOT add waitForTimeout or arbitrary delays",
+    "Does NOT wrap steps in try/catch",
+    "Does NOT modify selectors or assertions"
+  ],
+  "failCriteria": [
+    "Adds waitForTimeout or sleep to work around the error",
+    "Wraps fill() call in try/catch instead of removing root cause",
+    "Modifies page object selectors",
+    "Removes or weakens assertions"
+  ],
+  "tier": 2,
+  "category": "fix-root-cause-diagnosis",
+  "baseTemplate": "playwright-ts-full",
+  "modifications": [
+    {
+      "type": "replace",
+      "file": "tests/checkout.spec.ts",
+      "find": "  test.beforeEach(async ({ page }) => {\n    loginPage = new LoginPage(page);",
+      "replace": "  test.afterEach(async ({ page }) => {\n    // Cleanup\n    await page.close();\n  });\n\n  test.beforeEach(async ({ page }) => {\n    loginPage = new LoginPage(page);"
+    }
+  ],
+  "generatedAt": "2026-04-10T00:00:00.000Z"
+}

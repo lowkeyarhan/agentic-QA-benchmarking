@@ -1,0 +1,21 @@
+{
+  "evalId": "E4",
+  "name": "WebDriverIO Framework Adaptation",
+  "mode": "build",
+  "task": "Write a test that verifies sorting products by price low to high",
+  "logsFile": null,
+  "passCriteria": [
+    "Detects WDIO from package.json and wdio.conf.ts",
+    "Uses describe/it syntax",
+    "Uses $() / $$() selectors",
+    "Tags in title string"
+  ],
+  "failCriteria": [
+    "Generates Playwright code in a WDIO project",
+    "Uses { tags } format"
+  ],
+  "tier": 3,
+  "baseTemplate": "wdio-ts-full",
+  "modifications": [],
+  "generatedAt": "2026-04-12T17:09:11.484Z"
+}

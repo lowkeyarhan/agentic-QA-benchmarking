@@ -1,0 +1,20 @@
+{
+  "evalId": "E32",
+  "name": "Planner Journey-First Over Element-First",
+  "mode": "plan",
+  "task": "Plan tests for user authentication on saucedemo.com",
+  "logsFile": null,
+  "passCriteria": [
+    "Plan proposes journey tests like \"User can log in and access inventory\"",
+    "Total test count is compact (not one test per UI element)"
+  ],
+  "failCriteria": [
+    "Plan has individual tests for each form element",
+    "More than 10 tests proposed for a single auth page",
+    "Tests are named after UI elements rather than user goals"
+  ],
+  "tier": 7,
+  "baseTemplate": "playwright-ts-full",
+  "modifications": [],
+  "generatedAt": "2026-04-12T17:09:08.992Z"
+}
