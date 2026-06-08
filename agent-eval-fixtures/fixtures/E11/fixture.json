@@ -2,10 +2,10 @@
   "evalId": "E11",
   "name": "Metadata Tags on Every Test",
   "mode": "build",
-  "task": "Write tests for the complete checkout flow",
+  "task": "Write tests for the complete checkout flow. In every checkout-flow Playwright test(), use the metadata object form with tag: ['@feature:checkout', '@priority:<level>', '@test_type:<type>']. Do not put metadata only in the test title.",
   "logsFile": null,
   "passCriteria": [
-    "Every test() has { tags: ['@feature:*', '@priority:*', '@test_type:*'] }",
+    "Every test() has a Playwright metadata object with tag: ['@feature:*', '@priority:*', '@test_type:*']",
     "All 3 required tags present"
   ],
   "failCriteria": [

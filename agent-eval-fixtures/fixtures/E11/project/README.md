@@ -116,15 +116,22 @@ npm run test:report
 
 ## Test Tags
 
-Tests are tagged for easy filtering:
-- `@auth` - Authentication tests
-- `@inventory` - Inventory/product tests
-- `@sorting` - Product sorting tests
-- `@cart` - Shopping cart tests
-- `@checkout` - Checkout tests
-- `@smoke` - Critical smoke tests
-- `@e2e` - End-to-end tests
-- `@test_type:regression` - Regression tests
+Checkout-flow tests must use Playwright metadata tags, not title-only tags:
+
+```ts
+test('Valid form proceeds to overview', {
+  tag: ['@feature:checkout', '@priority:critical', '@test_type:smoke'],
+}, async ({ page }) => {
+  // ...
+});
+```
+
+Every checkout-flow `test()` must include:
+- `@feature:checkout`
+- one `@priority:*` tag
+- one `@test_type:*` tag
+
+Older specs may still contain title-prefixed tags such as `@checkout @test_type:regression`; keep those as legacy context only. New or updated checkout tests should use the metadata object form above.
 
 ## Known Issues
 

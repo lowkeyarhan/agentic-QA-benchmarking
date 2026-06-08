@@ -13,7 +13,7 @@
 ## Naming Conventions
 - Test files: `*.spec.ts`
 - Page objects: PascalCase (e.g., `LoginPage.ts`, `InventoryPage.ts`)
-- Test descriptions: Descriptive sentences with tag prefixes
+- Test descriptions: Descriptive sentences without metadata prefixes
 
 ## Selector Strategy
 - **Primary**: `[data-test="selector-name"]` attributes (e.g., `[data-test="username"]`, `[data-test="add-to-cart-sauce-labs-backpack"]`)
@@ -25,7 +25,10 @@
 - Page objects instantiated in `beforeEach` hook
 - Login performed in `beforeEach` for most tests
 - Assertions use `expect()` from Playwright
-- Tagging: Tests use title-based tags like `@auth @smoke @test_type:regression`
+- Tagging for checkout-flow work: every `test()` must use Playwright metadata object syntax with a `tag` array, for example:
+  `test('Valid form proceeds to overview', { tag: ['@feature:checkout', '@priority:critical', '@test_type:smoke'] }, async ({ page }) => { ... })`
+- Do not satisfy metadata requirements by putting tags only in the test title. Legacy title-prefixed tags in existing files are historical examples, not the convention for new or updated checkout tests.
+- Required tag families for every checkout-flow test: `@feature:checkout`, one `@priority:*`, and one `@test_type:*`.
 
 ## Available Page Objects
 - `LoginPage` - Authentication

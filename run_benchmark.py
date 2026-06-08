@@ -53,7 +53,7 @@ from scoring import make_metric, make_test_case, result_label  # noqa: E402
 
 
 # Edit these defaults directly, or override with benchmark/.env.
-DEFAULT_EVAL_IDS = ["E1", "E3", "E7", "E10", "E11"]
+DEFAULT_EVAL_IDS = ["E1", "E3", "E7", "E11", "E15"]
 DEFAULT_AGENTS = ["supatest", "cursor", "codex"]
 DEFAULT_PARALLELISM = 3
 DEFAULT_AGENT_TIMEOUT_SECONDS = 450

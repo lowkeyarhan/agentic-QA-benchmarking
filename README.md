@@ -81,11 +81,22 @@ Dry run:
 The default run executes:
 
 ```text
-Evals: E1, E3, E7, E10, E11
+Evals: E1, E3, E7, E11, E15
 Agents: supatest, cursor, codex
 Parallelism: 3
-Timeout: 300s per agent run
+Timeout: 450s per agent run
 ```
+
+This five-task core suite is meant to stay lightweight while covering enough
+variety to compare the three agents:
+
+| Eval | Coverage |
+| --- | --- |
+| E1 | Light: clear build task, starts immediately, writes and runs a login test |
+| E3 | Light/medium: framework detection, existing-test discovery, `SUPATEST.md` generation |
+| E7 | Medium: selector failure handling with browser-assisted debugging |
+| E11 | Medium: complete checkout coverage with required Playwright metadata tags |
+| E15 | Medium fix-mode: minimal targeted repair without rewriting passing tests |
 
 Edit `.env` or the defaults at the top of `run_benchmark.py` to change that.
 
