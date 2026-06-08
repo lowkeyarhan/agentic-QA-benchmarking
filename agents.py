@@ -49,7 +49,9 @@ def selected_agents() -> list[str]:
     return [item.strip() for item in raw.split(",") if item.strip()]
 
 
-def run_agent(agent: str, fixture: EvalFixture, project_dir: Path, output_dir: Path) -> AgentRunResult:
+def run_agent(
+    agent: str, fixture: EvalFixture, project_dir: Path, output_dir: Path
+) -> AgentRunResult:
     before = snapshot_files(project_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     transcript_path = output_dir / "transcript.log"
@@ -107,11 +109,17 @@ def run_agent(agent: str, fixture: EvalFixture, project_dir: Path, output_dir: P
     )
 
 
-def build_command(agent: str, fixture: EvalFixture, project_dir: Path) -> tuple[list[str] | str, Path, bool]:
+def build_command(
+    agent: str, fixture: EvalFixture, project_dir: Path
+) -> tuple[list[str] | str, Path, bool]:
     if agent == "supatest":
         custom_template = os.getenv("BENCHMARK_SUPATEST_CMD")
         if custom_template:
-            return render_command_template(custom_template, fixture, project_dir), project_dir, True
+            return (
+                render_command_template(custom_template, fixture, project_dir),
+                project_dir,
+                True,
+            )
 
         max_iterations = os.getenv("BENCHMARK_MAX_ITERATIONS", "75")
         binary = os.getenv("BENCHMARK_SUPATEST_BINARY") or "supatest"
@@ -134,7 +142,9 @@ def build_command(agent: str, fixture: EvalFixture, project_dir: Path) -> tuple[
             os.getenv("BENCHMARK_SUPATEST_API_KEY")
             or os.getenv("SUPATEST_API_KEY")
             or load_supatest_cli_token()
-            or os.getenv("BENCHMARK_SUPATEST_API_KEY_PLACEHOLDER", "sk_test_benchmark_dummy")
+            or os.getenv(
+                "BENCHMARK_SUPATEST_API_KEY_PLACEHOLDER", "sk_test_benchmark_dummy"
+            )
         )
         if api_key:
             args.extend(["--supatest-api-key", api_key])
@@ -157,7 +167,9 @@ def build_command(agent: str, fixture: EvalFixture, project_dir: Path) -> tuple[
     return render_command_template(template, fixture, project_dir), project_dir, True
 
 
-def render_command_template(template: str, fixture: EvalFixture, project_dir: Path) -> str:
+def render_command_template(
+    template: str, fixture: EvalFixture, project_dir: Path
+) -> str:
     prompt = build_prompt(fixture)
     project_id = resolve_supatest_project_id() or ""
     return template.format(
@@ -171,7 +183,9 @@ def render_command_template(template: str, fixture: EvalFixture, project_dir: Pa
 
 
 def resolve_supatest_project_id() -> str | None:
-    explicit = os.getenv("BENCHMARK_SUPATEST_PROJECT_ID") or os.getenv("SUPATEST_PROJECT_ID")
+    explicit = os.getenv("BENCHMARK_SUPATEST_PROJECT_ID") or os.getenv(
+        "SUPATEST_PROJECT_ID"
+    )
     if explicit:
         return explicit
 
@@ -255,7 +269,9 @@ def snapshot_files(root: Path) -> dict[str, str]:
 
 def diff_snapshots(before: dict[str, str], after: dict[str, str]) -> list[str]:
     changed = set(before.keys()) ^ set(after.keys())
-    changed.update(path for path in before.keys() & after.keys() if before[path] != after[path])
+    changed.update(
+        path for path in before.keys() & after.keys() if before[path] != after[path]
+    )
     return sorted(changed)
 
 
@@ -264,7 +280,9 @@ def should_skip(path: Path, root: Path) -> bool:
     return any(part in SKIP_DIRS for part in relative_parts)
 
 
-def changed_file_excerpt(project_dir: Path, changed_files: list[str], max_chars: int = 12000) -> str:
+def changed_file_excerpt(
+    project_dir: Path, changed_files: list[str], max_chars: int = 12000
+) -> str:
     chunks: list[str] = []
     remaining = max_chars
     for relative in changed_files[:20]:

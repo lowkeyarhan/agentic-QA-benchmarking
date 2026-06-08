@@ -81,35 +81,40 @@ Dry run:
 The default run executes:
 
 ```text
-Evals: E1, E3, E7, E11, E15
+Evals: E18, E25, E29, E31, E43, E77, E101
 Agents: supatest, cursor, codex
 Parallelism: 3
-Timeout: 450s per agent run
+Timeout: 600s per agent run
 ```
 
-This five-task core suite is meant to stay lightweight while covering enough
-variety to compare the three agents:
+This seven-task hard suite is meant to stress complex behavior without requiring
+a live mobile device:
 
-| Eval | Coverage |
-| --- | --- |
-| E1 | Light: clear build task, starts immediately, writes and runs a login test |
-| E3 | Light/medium: framework detection, existing-test discovery, `SUPATEST.md` generation |
-| E7 | Medium: selector failure handling with browser-assisted debugging |
-| E11 | Medium: complete checkout coverage with required Playwright metadata tags |
-| E15 | Medium fix-mode: minimal targeted repair without rewriting passing tests |
+| Eval | Coverage                                                                      |
+| ---- | ----------------------------------------------------------------------------- |
+| E18  | Build: all-product `problem_user` testing with app-bug escalation             |
+| E25  | Build: batch multiple user-type tests before running                          |
+| E29  | Fix: repair failing tests and add required metadata tags                      |
+| E31  | Plan: comprehensive application test plan with explicit non-goals             |
+| E43  | Fix: preserve strict equality while correcting whitespace extraction          |
+| E77  | Fix: integrate a user-provided selector snippet into a reusable pattern       |
+| E101 | Prod regression: translate Maestro/iOS hierarchy evidence into WDIO selectors |
 
 Edit `.env` or the defaults at the top of `run_benchmark.py` to change that.
 
 ## Output
 
 ```text
-results/<run-id>/run.json
 results/<run-id>/scores.md
 results/<run-id>/summary.json
-results/<run-id>/<eval-id>/<agent>.json
+results/<run-id>/run.json
 runs/<run-id>/<eval-id>/<agent>/transcript.log
 ```
 
-`run.json` is the combined machine-readable artifact for a run. It includes
-run metadata, aggregate summary stats, the eval-by-agent matrix, and all
-individual case results in one file.
+Each `results/<run-id>/` folder contains only three files:
+
+- `scores.md` - human-readable score table
+- `summary.json` - run metadata plus aggregate summary stats
+- `run.json` - full individual case results grouped by eval and agent
+
+Detailed transcripts and copied projects stay under `runs/<run-id>/...`.

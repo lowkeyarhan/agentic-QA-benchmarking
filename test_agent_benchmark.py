@@ -8,16 +8,29 @@ from pathlib import Path
 import pytest
 
 from agents import run_agent, selected_agents
-from fixtures import BENCHMARK_ROOT, benchmark_path, copy_project, load_fixture, selected_eval_ids
+from fixtures import (
+    BENCHMARK_ROOT,
+    benchmark_path,
+    copy_project,
+    load_fixture,
+    selected_eval_ids,
+)
 from scoring import make_metric, make_test_case, result_label
 
 
 RUN_ID = os.getenv("BENCHMARK_RUN_ID", time.strftime("%Y%m%d-%H%M%S"))
-RUNS_DIR = benchmark_path(os.getenv("BENCHMARK_RUNS_DIR"), BENCHMARK_ROOT / "runs") / RUN_ID
-RESULTS_DIR = benchmark_path(os.getenv("BENCHMARK_RESULTS_DIR"), BENCHMARK_ROOT / "results") / RUN_ID
+RUNS_DIR = (
+    benchmark_path(os.getenv("BENCHMARK_RUNS_DIR"), BENCHMARK_ROOT / "runs") / RUN_ID
+)
+RESULTS_DIR = (
+    benchmark_path(os.getenv("BENCHMARK_RESULTS_DIR"), BENCHMARK_ROOT / "results")
+    / RUN_ID
+)
 
 
-CASES = [(eval_id, agent) for eval_id in selected_eval_ids() for agent in selected_agents()]
+CASES = [
+    (eval_id, agent) for eval_id in selected_eval_ids() for agent in selected_agents()
+]
 
 
 @pytest.mark.parametrize(("eval_id", "agent"), CASES)

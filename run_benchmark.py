@@ -31,18 +31,25 @@ if not VENV_PYTHON.exists() and os.getenv("BENCHMARK_SKIP_BOOTSTRAP") != "1":
     print("Creating benchmark virtualenv...")
     subprocess.run([sys.executable, "-m", "venv", str(VENV_DIR)], check=True)
     print("Installing benchmark Python dependencies...")
-    subprocess.run([str(VENV_PYTHON), "-m", "pip", "install", "-r", str(REQUIREMENTS)], check=True)
+    subprocess.run(
+        [str(VENV_PYTHON), "-m", "pip", "install", "-r", str(REQUIREMENTS)], check=True
+    )
     VENV_MARKER.write_text(str(BENCHMARK_ROOT))
 
 if VENV_PYTHON.exists() and Path(sys.prefix).resolve() != VENV_DIR.resolve():
-    os.execv(str(VENV_PYTHON), [str(VENV_PYTHON), str(Path(__file__).resolve()), *sys.argv[1:]])
+    os.execv(
+        str(VENV_PYTHON),
+        [str(VENV_PYTHON), str(Path(__file__).resolve()), *sys.argv[1:]],
+    )
 
 sys.path.insert(0, str(BENCHMARK_ROOT))
 
 try:
     from dotenv import load_dotenv
 except ImportError:
-    print("Missing Python dependencies. If you moved this folder, run: rm -rf .venv && ./run_benchmark.py --dry-run")
+    print(
+        "Missing Python dependencies. If you moved this folder, run: rm -rf .venv && ./run_benchmark.py --dry-run"
+    )
     raise
 
 load_dotenv(BENCHMARK_ROOT / ".env")
@@ -53,10 +60,10 @@ from scoring import make_metric, make_test_case, result_label  # noqa: E402
 
 
 # Edit these defaults directly, or override with benchmark/.env.
-DEFAULT_EVAL_IDS = ["E1", "E3", "E7", "E11", "E15"]
+DEFAULT_EVAL_IDS = ["E18", "E25", "E29", "E31", "E43", "E77", "E101"]
 DEFAULT_AGENTS = ["supatest", "cursor", "codex"]
 DEFAULT_PARALLELISM = 3
-DEFAULT_AGENT_TIMEOUT_SECONDS = 450
+DEFAULT_AGENT_TIMEOUT_SECONDS = 600
 
 
 def main() -> int:
@@ -64,11 +71,23 @@ def main() -> int:
     eval_ids = csv_env("BENCHMARK_EVAL_IDS", DEFAULT_EVAL_IDS)
     agents = csv_env("BENCHMARK_AGENTS", DEFAULT_AGENTS)
     parallelism = int(os.getenv("BENCHMARK_PARALLELISM", str(DEFAULT_PARALLELISM)))
-    os.environ.setdefault("BENCHMARK_TIMEOUT_SECONDS", str(DEFAULT_AGENT_TIMEOUT_SECONDS))
+    os.environ.setdefault(
+        "BENCHMARK_TIMEOUT_SECONDS", str(DEFAULT_AGENT_TIMEOUT_SECONDS)
+    )
 
-    runs_dir = benchmark_path(os.getenv("BENCHMARK_RUNS_DIR"), BENCHMARK_ROOT / "runs") / run_id
-    results_dir = benchmark_path(os.getenv("BENCHMARK_RESULTS_DIR"), BENCHMARK_ROOT / "results") / run_id
-    results_dir.mkdir(parents=True, exist_ok=True)
+    runs_dir = (
+        benchmark_path(os.getenv("BENCHMARK_RUNS_DIR"), BENCHMARK_ROOT / "runs")
+        / run_id
+    )
+    results_dir = (
+        benchmark_path(os.getenv("BENCHMARK_RESULTS_DIR"), BENCHMARK_ROOT / "results")
+        / run_id
+    )
+    is_dry_run = "--dry-run" in sys.argv
+    if not is_dry_run:
+        if results_dir.exists():
+            shutil.rmtree(results_dir)
+        results_dir.mkdir(parents=True, exist_ok=True)
 
     print(f"Run ID: {run_id}")
     print(f"Evals: {', '.join(eval_ids)}")
@@ -78,7 +97,7 @@ def main() -> int:
     print()
 
     jobs = [(eval_id, agent) for eval_id in eval_ids for agent in agents]
-    if "--dry-run" in sys.argv:
+    if is_dry_run:
         print("Cases:")
         for eval_id, agent in jobs:
             print(f"  {eval_id} / {agent}")
@@ -91,7 +110,10 @@ def main() -> int:
 
     with ThreadPoolExecutor(max_workers=parallelism) as executor:
         futures = {
-            executor.submit(run_one_case, run_id, runs_dir, results_dir, eval_id, agent): (eval_id, agent)
+            executor.submit(run_one_case, run_id, runs_dir, eval_id, agent): (
+                eval_id,
+                agent,
+            )
             for eval_id, agent in jobs
         }
         for future in as_completed(futures):
@@ -99,12 +121,16 @@ def main() -> int:
             try:
                 result = future.result()
             except Exception as error:
-                result = write_error_result(results_dir, run_id, eval_id, agent, error)
+                result = write_error_result(run_id, eval_id, agent, error)
             results.append(result)
-            print(f"{eval_id:>4} {agent:<9} {result['scorePercent']:>3} {result['result']:<7} {result['durationMs']}ms")
+            print(
+                f"{eval_id:>4} {agent:<9} {result['scorePercent']:>3} {result['result']:<7} {result['durationMs']}ms"
+            )
 
     timeout_seconds = int(os.environ["BENCHMARK_TIMEOUT_SECONDS"])
-    write_summary(results_dir, run_id, eval_ids, agents, parallelism, timeout_seconds, results)
+    write_summary(
+        results_dir, run_id, eval_ids, agents, parallelism, timeout_seconds, results
+    )
     print()
     print(f"Results: {results_dir}")
     print(f"Summary: {results_dir / 'scores.md'}")
@@ -112,10 +138,9 @@ def main() -> int:
     return 0
 
 
-def run_one_case(run_id: str, runs_dir: Path, results_dir: Path, eval_id: str, agent: str) -> dict:
+def run_one_case(run_id: str, runs_dir: Path, eval_id: str, agent: str) -> dict:
     fixture = load_fixture(eval_id)
     case_run_dir = runs_dir / eval_id / agent
-    case_result_dir = results_dir / eval_id
     project_dir = copy_project(fixture, case_run_dir)
 
     run = run_agent(agent, fixture, project_dir, case_run_dir)
@@ -146,13 +171,11 @@ def run_one_case(run_id: str, runs_dir: Path, results_dir: Path, eval_id: str, a
         "failCriteria": fixture.fail_criteria,
     }
 
-    case_result_dir.mkdir(parents=True, exist_ok=True)
-    (case_result_dir / f"{agent}.json").write_text(json.dumps(result, indent=2))
     return result
 
 
-def write_error_result(results_dir: Path, run_id: str, eval_id: str, agent: str, error: Exception) -> dict:
-    result = {
+def write_error_result(run_id: str, eval_id: str, agent: str, error: Exception) -> dict:
+    return {
         "runId": run_id,
         "evalId": eval_id,
         "agent": agent,
@@ -165,10 +188,6 @@ def write_error_result(results_dir: Path, run_id: str, eval_id: str, agent: str,
         "durationMs": 0,
         "traceback": traceback.format_exc(),
     }
-    case_result_dir = results_dir / eval_id
-    case_result_dir.mkdir(parents=True, exist_ok=True)
-    (case_result_dir / f"{agent}.json").write_text(json.dumps(result, indent=2))
-    return result
 
 
 def write_summary(
@@ -181,7 +200,10 @@ def write_summary(
     results: list[dict],
 ) -> None:
     by_key = {(item["evalId"], item["agent"]): item for item in results}
-    lines = ["| Eval | " + " | ".join(agents) + " |", "| --- | " + " | ".join(["---"] * len(agents)) + " |"]
+    lines = [
+        "| Eval | " + " | ".join(agents) + " |",
+        "| --- | " + " | ".join(["---"] * len(agents)) + " |",
+    ]
 
     for eval_id in eval_ids:
         cells = [eval_id]
@@ -196,35 +218,54 @@ def write_summary(
     for agent in agents:
         agent_results = [item for item in results if item["agent"] == agent]
         if agent_results:
-            average = round(sum(item["scorePercent"] for item in agent_results) / len(agent_results), 1)
+            average = round(
+                sum(item["scorePercent"] for item in agent_results)
+                / len(agent_results),
+                1,
+            )
         else:
             average = 0
         pass_count = sum(1 for item in agent_results if item["result"] == "pass")
         partial_count = sum(1 for item in agent_results if item["result"] == "partial")
         fail_count = sum(1 for item in agent_results if item["result"] == "fail")
-        lines.append(f"| {agent} | {average} | {pass_count} | {partial_count} | {fail_count} |")
+        lines.append(
+            f"| {agent} | {average} | {pass_count} | {partial_count} | {fail_count} |"
+        )
 
     (results_dir / "scores.md").write_text("\n".join(lines) + "\n")
     ordered_results = order_results(eval_ids, agents, results)
-    (results_dir / "summary.json").write_text(json.dumps(ordered_results, indent=2))
+    generated_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    metadata = {
+        "runId": run_id,
+        "generatedAt": generated_at,
+        "evalIds": eval_ids,
+        "agents": agents,
+        "parallelism": parallelism,
+        "timeoutSeconds": timeout_seconds,
+    }
+    (results_dir / "summary.json").write_text(
+        json.dumps(
+            {
+                **metadata,
+                "summary": build_run_summary(eval_ids, agents, ordered_results),
+            },
+            indent=2,
+        )
+    )
     (results_dir / "run.json").write_text(
         json.dumps(
             {
-                "runId": run_id,
-                "generatedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-                "evalIds": eval_ids,
-                "agents": agents,
-                "parallelism": parallelism,
-                "timeoutSeconds": timeout_seconds,
-                "summary": build_run_summary(eval_ids, agents, ordered_results),
-                "results": ordered_results,
+                **metadata,
+                "runsByEval": build_runs_by_eval(eval_ids, agents, ordered_results),
             },
             indent=2,
         )
     )
 
 
-def order_results(eval_ids: list[str], agents: list[str], results: list[dict]) -> list[dict]:
+def order_results(
+    eval_ids: list[str], agents: list[str], results: list[dict]
+) -> list[dict]:
     eval_order = {eval_id: index for index, eval_id in enumerate(eval_ids)}
     agent_order = {agent: index for index, agent in enumerate(agents)}
     return sorted(
@@ -238,12 +279,13 @@ def order_results(eval_ids: list[str], agents: list[str], results: list[dict]) -
     )
 
 
-def build_run_summary(eval_ids: list[str], agents: list[str], results: list[dict]) -> dict:
+def build_run_summary(
+    eval_ids: list[str], agents: list[str], results: list[dict]
+) -> dict:
     by_key = {(item["evalId"], item["agent"]): item for item in results}
     by_eval = {
         eval_id: {
-            agent: summarize_result(by_key.get((eval_id, agent)))
-            for agent in agents
+            agent: summarize_result(by_key.get((eval_id, agent))) for agent in agents
         }
         for eval_id in eval_ids
     }
@@ -260,9 +302,23 @@ def build_run_summary(eval_ids: list[str], agents: list[str], results: list[dict
     }
 
 
+def build_runs_by_eval(
+    eval_ids: list[str], agents: list[str], results: list[dict]
+) -> dict:
+    by_key = {(item["evalId"], item["agent"]): item for item in results}
+    return {
+        eval_id: {agent: by_key.get((eval_id, agent)) for agent in agents}
+        for eval_id in eval_ids
+    }
+
+
 def summarize_group(results: list[dict]) -> dict:
     total = len(results)
-    average = round(sum(item.get("scorePercent", 0) for item in results) / total, 1) if total else 0
+    average = (
+        round(sum(item.get("scorePercent", 0) for item in results) / total, 1)
+        if total
+        else 0
+    )
     return {
         "total": total,
         "averageScorePercent": average,
