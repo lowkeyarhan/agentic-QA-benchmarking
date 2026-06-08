@@ -9,6 +9,7 @@ import sys
 import time
 import traceback
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import replace
 from pathlib import Path
 
 BENCHMARK_ROOT = Path(__file__).resolve().parent
@@ -55,12 +56,16 @@ except ImportError:
 load_dotenv(BENCHMARK_ROOT / ".env")
 
 from agents import run_agent  # noqa: E402
-from fixtures import copy_project, load_fixture  # noqa: E402
-from scoring import make_metric, make_test_case, result_label  # noqa: E402
+from fixtures import copy_project, load_fixture, resolve_eval_ids  # noqa: E402
+from scoring import (
+    make_metric,
+    make_test_case,
+    result_label,
+)  # noqa: E402
 
 
 # Edit these defaults directly, or override with benchmark/.env.
-DEFAULT_EVAL_IDS = ["E18", "E25", "E29", "E31", "E43", "E77", "E101"]
+DEFAULT_EVAL_IDS = "all"
 DEFAULT_AGENTS = ["supatest", "cursor", "codex"]
 DEFAULT_PARALLELISM = 3
 DEFAULT_AGENT_TIMEOUT_SECONDS = 600
@@ -68,7 +73,7 @@ DEFAULT_AGENT_TIMEOUT_SECONDS = 600
 
 def main() -> int:
     run_id = os.getenv("BENCHMARK_RUN_ID", time.strftime("%Y%m%d-%H%M%S"))
-    eval_ids = csv_env("BENCHMARK_EVAL_IDS", DEFAULT_EVAL_IDS)
+    eval_ids = resolve_eval_ids(os.getenv("BENCHMARK_EVAL_IDS", DEFAULT_EVAL_IDS))
     agents = csv_env("BENCHMARK_AGENTS", DEFAULT_AGENTS)
     parallelism = int(os.getenv("BENCHMARK_PARALLELISM", str(DEFAULT_PARALLELISM)))
     os.environ.setdefault(
@@ -96,11 +101,16 @@ def main() -> int:
     print(f"Timeout: {os.environ['BENCHMARK_TIMEOUT_SECONDS']}s per agent run")
     print()
 
-    jobs = [(eval_id, agent) for eval_id in eval_ids for agent in agents]
+    case_ids = {
+        eval_id: f"case-{index + 1:03d}" for index, eval_id in enumerate(eval_ids)
+    }
+    jobs = [
+        (eval_id, agent, case_ids[eval_id]) for eval_id in eval_ids for agent in agents
+    ]
     if is_dry_run:
         print("Cases:")
-        for eval_id, agent in jobs:
-            print(f"  {eval_id} / {agent}")
+        for eval_id, agent, case_id in jobs:
+            print(f"  {case_id} / {agent} ({eval_id})")
         print()
         print(f"Runs dir: {runs_dir}")
         print(f"Results dir: {results_dir}")
@@ -110,18 +120,19 @@ def main() -> int:
 
     with ThreadPoolExecutor(max_workers=parallelism) as executor:
         futures = {
-            executor.submit(run_one_case, run_id, runs_dir, eval_id, agent): (
+            executor.submit(run_one_case, run_id, runs_dir, eval_id, agent, case_id): (
                 eval_id,
                 agent,
+                case_id,
             )
-            for eval_id, agent in jobs
+            for eval_id, agent, case_id in jobs
         }
         for future in as_completed(futures):
-            eval_id, agent = futures[future]
+            eval_id, agent, case_id = futures[future]
             try:
                 result = future.result()
             except Exception as error:
-                result = write_error_result(run_id, eval_id, agent, error)
+                result = write_error_result(run_id, eval_id, agent, case_id, error)
             results.append(result)
             print(
                 f"{eval_id:>4} {agent:<9} {result['scorePercent']:>3} {result['result']:<7} {result['durationMs']}ms"
@@ -138,21 +149,35 @@ def main() -> int:
     return 0
 
 
-def run_one_case(run_id: str, runs_dir: Path, eval_id: str, agent: str) -> dict:
+def run_one_case(
+    run_id: str, runs_dir: Path, eval_id: str, agent: str, case_id: str
+) -> dict:
     fixture = load_fixture(eval_id)
-    case_run_dir = runs_dir / eval_id / agent
+    case_run_dir = runs_dir / case_id / agent
+    case_run_dir.mkdir(parents=True, exist_ok=True)
+    if fixture.logs_file:
+        neutral_logs_file = case_run_dir / "failure.log"
+        shutil.copyfile(fixture.logs_file, neutral_logs_file)
+        fixture = replace(fixture, logs_file=neutral_logs_file)
     project_dir = copy_project(fixture, case_run_dir)
 
     run = run_agent(agent, fixture, project_dir, case_run_dir)
-    test_case = make_test_case(fixture, run)
-    metric = make_metric(fixture)
-    metric.measure(test_case)
-
-    score = 0.0 if run.timed_out else float(metric.score or 0.0)
+    if run.timed_out:
+        score = 0.0
+        reason = "Timed out before the agent completed the task."
+        score_source = "timeout"
+    else:
+        test_case = make_test_case(fixture, run)
+        metric = make_metric(fixture)
+        metric.measure(test_case)
+        score = float(metric.score or 0.0)
+        reason = metric.reason
+        score_source = "judge"
     label = result_label(score, run.timed_out)
 
     result = {
         "runId": run_id,
+        "caseId": case_id,
         "evalId": fixture.eval_id,
         "evalName": fixture.name,
         "agent": agent,
@@ -160,7 +185,8 @@ def run_one_case(run_id: str, runs_dir: Path, eval_id: str, agent: str) -> dict:
         "score": score,
         "scorePercent": round(score * 100),
         "result": label,
-        "reason": metric.reason,
+        "reason": reason,
+        "scoreSource": score_source,
         "exitCode": run.exit_code,
         "timedOut": run.timed_out,
         "durationMs": run.duration_ms,
@@ -174,9 +200,12 @@ def run_one_case(run_id: str, runs_dir: Path, eval_id: str, agent: str) -> dict:
     return result
 
 
-def write_error_result(run_id: str, eval_id: str, agent: str, error: Exception) -> dict:
+def write_error_result(
+    run_id: str, eval_id: str, agent: str, case_id: str, error: Exception
+) -> dict:
     return {
         "runId": run_id,
+        "caseId": case_id,
         "evalId": eval_id,
         "agent": agent,
         "score": 0.0,

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
@@ -37,9 +38,42 @@ class EvalFixture:
     logs_file: Path | None
 
 
+def available_eval_ids(fixtures_root: Path = FIXTURES_ROOT) -> list[str]:
+    eval_ids = []
+    fixture_dirs = fixtures_root.iterdir() if fixtures_root.exists() else []
+    for path in fixture_dirs:
+        if (path / "fixture.json").exists():
+            eval_ids.append(path.name)
+    return sorted(eval_ids, key=eval_id_sort_key)
+
+
 def selected_eval_ids() -> list[str]:
-    raw = os.getenv("BENCHMARK_EVAL_IDS", "E1")
-    return [item.strip() for item in raw.split(",") if item.strip()]
+    return resolve_eval_ids(os.getenv("BENCHMARK_EVAL_IDS", "all"))
+
+
+def resolve_eval_ids(raw: str | list[str]) -> list[str]:
+    values = raw if isinstance(raw, list) else [item.strip() for item in raw.split(",")]
+    requested = [item for item in values if item]
+    if not requested or any(item.lower() == "all" for item in requested):
+        return available_eval_ids()
+
+    available = set(available_eval_ids())
+    missing = [eval_id for eval_id in requested if eval_id not in available]
+    if missing:
+        raise ValueError(
+            "Unknown eval id(s): "
+            + ", ".join(missing)
+            + ". Use BENCHMARK_EVAL_IDS=all to run every available fixture."
+        )
+    return requested
+
+
+def eval_id_sort_key(eval_id: str) -> tuple[str, int, str]:
+    match = re.fullmatch(r"([A-Za-z]+)(\d+)", eval_id)
+    if not match:
+        return (eval_id, -1, eval_id)
+    prefix, number = match.groups()
+    return (prefix, int(number), eval_id)
 
 
 def load_fixture(eval_id: str) -> EvalFixture:

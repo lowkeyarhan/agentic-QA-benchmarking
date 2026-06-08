@@ -35,7 +35,7 @@ agent-eval-fixtures/fixtures/<eval-id>/project
 into:
 
 ```text
-runs/<run-id>/<eval-id>/<agent>/project
+runs/<run-id>/case-###/<agent>/project
 ```
 
 ## Setup
@@ -78,17 +78,18 @@ Dry run:
 ./run_benchmark.py --dry-run
 ```
 
-The default run executes:
+The default run executes every fixture present under `agent-eval-fixtures/fixtures`:
 
 ```text
-Evals: E18, E25, E29, E31, E43, E77, E101
+Evals: all
 Agents: supatest, cursor, codex
 Parallelism: 3
 Timeout: 600s per agent run
 ```
 
-This seven-task hard suite is meant to stress complex behavior without requiring
-a live mobile device:
+Use a comma-separated `BENCHMARK_EVAL_IDS` value for a smaller smoke or hard
+suite. This seven-task subset is useful when you want a quick complex pass
+without running the full fixture set:
 
 | Eval | Coverage                                                                      |
 | ---- | ----------------------------------------------------------------------------- |
@@ -101,6 +102,7 @@ a live mobile device:
 | E101 | Prod regression: translate Maestro/iOS hierarchy evidence into WDIO selectors |
 
 Edit `.env` or the defaults at the top of `run_benchmark.py` to change that.
+Use `BENCHMARK_EVAL_IDS=all` to include every available fixture.
 
 ## Output
 
@@ -108,7 +110,7 @@ Edit `.env` or the defaults at the top of `run_benchmark.py` to change that.
 results/<run-id>/scores.md
 results/<run-id>/summary.json
 results/<run-id>/run.json
-runs/<run-id>/<eval-id>/<agent>/transcript.log
+runs/<run-id>/case-###/<agent>/transcript.log
 ```
 
 Each `results/<run-id>/` folder contains only three files:
@@ -117,4 +119,15 @@ Each `results/<run-id>/` folder contains only three files:
 - `summary.json` - run metadata plus aggregate summary stats
 - `run.json` - full individual case results grouped by eval and agent
 
-Detailed transcripts and copied projects stay under `runs/<run-id>/...`.
+Detailed transcripts and copied projects stay under `runs/<run-id>/case-###/...`.
+The `case-###` folder names avoid exposing eval IDs to the agents while the
+result JSON maps each case back to its eval ID.
+
+## Scoring
+
+Non-timeout runs are scored through the same DeepEval judge path for every
+agent. Before judging, the harness removes agent names, local absolute paths,
+benchmark credentials, spinner noise, and repeated terminal status redraws from
+the evidence. The judge prompt instructs the model to score only against the
+task and fixture pass/fail criteria, not against a specific CLI, product, model,
+company, cost profile, or agent type.

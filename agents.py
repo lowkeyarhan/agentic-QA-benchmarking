@@ -4,6 +4,7 @@ import getpass
 import hashlib
 import json
 import os
+import re
 import socket
 import signal
 import shlex
@@ -68,7 +69,7 @@ def run_agent(
         text=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
-        env={**os.environ, "NODE_ENV": "development"},
+        env=agent_environment(),
         start_new_session=True,
     )
 
@@ -159,12 +160,28 @@ def build_command(
             args.extend(["--logs", str(fixture.logs_file)])
         return args, cwd, False
 
-    template_name = f"BENCHMARK_{agent.upper()}_CMD"
+    template_name = f"BENCHMARK_{agent_command_env_name(agent)}_CMD"
     template = os.getenv(template_name)
     if not template:
         raise RuntimeError(f"{template_name} is required to run agent '{agent}'")
 
     return render_command_template(template, fixture, project_dir), project_dir, True
+
+
+def agent_command_env_name(agent: str) -> str:
+    return re.sub(r"[^A-Za-z0-9]+", "_", agent).strip("_").upper()
+
+
+def agent_environment() -> dict[str, str]:
+    env = {
+        key: value
+        for key, value in os.environ.items()
+        if not key.startswith("BENCHMARK_")
+        and not key.startswith("DEEPEVAL_")
+        and key != "GOOGLE_API_KEY"
+    }
+    env["NODE_ENV"] = "development"
+    return env
 
 
 def render_command_template(
@@ -281,11 +298,13 @@ def should_skip(path: Path, root: Path) -> bool:
 
 
 def changed_file_excerpt(
-    project_dir: Path, changed_files: list[str], max_chars: int = 12000
+    project_dir: Path, changed_files: list[str], max_chars: int = 24000
 ) -> str:
     chunks: list[str] = []
     remaining = max_chars
-    for relative in changed_files[:20]:
+    for relative in sorted(changed_files, key=changed_file_priority):
+        if is_noisy_changed_file(relative):
+            continue
         path = project_dir / relative
         if not path.exists() or not path.is_file():
             chunks.append(f"\n--- {relative} deleted or unavailable ---\n")
@@ -297,3 +316,25 @@ def changed_file_excerpt(
         if remaining <= 0:
             break
     return "".join(chunks)[:max_chars]
+
+
+def changed_file_priority(relative: str) -> tuple[int, str]:
+    if relative.startswith("tests/") or "/tests/" in relative:
+        return (0, relative)
+    if relative.startswith(("pages/", "src/", "lib/", "app/")):
+        return (1, relative)
+    if relative.endswith((".ts", ".tsx", ".js", ".jsx", ".py", ".md")):
+        return (2, relative)
+    if relative.startswith(".supatest/"):
+        return (3, relative)
+    return (4, relative)
+
+
+def is_noisy_changed_file(relative: str) -> bool:
+    name = Path(relative).name
+    return (
+        name == "cli.log"
+        or name.endswith(".log")
+        or name in {"package-lock.json", "yarn.lock", "pnpm-lock.yaml"}
+        or relative.startswith(("playwright-report/", "test-results/"))
+    )
