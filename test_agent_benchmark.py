@@ -1,9 +1,15 @@
 from __future__ import annotations
 
 import json
+import os
 from types import SimpleNamespace
 
-from agents import agent_command_env_name, agent_environment, changed_file_excerpt
+from agents import (
+    agent_command_env_name,
+    agent_environment,
+    changed_file_excerpt,
+    with_local_tool_paths,
+)
 from fixtures import available_eval_ids, load_fixture, resolve_eval_ids
 from run_benchmark import write_summary
 from scoring import cleaned_transcript, make_test_case
@@ -24,6 +30,17 @@ def test_agent_environment_hides_benchmark_and_judge_vars(monkeypatch) -> None:
     assert env["NODE_ENV"] == "development"
 
 
+def test_local_mobile_tool_paths_are_added_when_present(tmp_path, monkeypatch) -> None:
+    home = tmp_path / "home"
+    maestro_bin = home / ".maestro" / "bin"
+    maestro_bin.mkdir(parents=True)
+    monkeypatch.setenv("HOME", str(home))
+
+    path = with_local_tool_paths(os.pathsep.join(["/usr/bin", "/bin"]))
+
+    assert path.split(os.pathsep)[0] == str(maestro_bin)
+
+
 def test_agent_command_env_name_supports_future_agent_names() -> None:
     assert agent_command_env_name("qa-pro") == "QA_PRO"
     assert agent_command_env_name("vendor.agent/v2") == "VENDOR_AGENT_V2"
@@ -42,7 +59,9 @@ def test_changed_file_excerpt_prioritizes_tests_and_skips_noise(tmp_path) -> Non
     (tmp_path / "pages").mkdir()
     (tmp_path / ".supatest").mkdir()
     (tmp_path / "tests" / "error-users.spec.ts").write_text("test('covers users')\n")
-    (tmp_path / "pages" / "InventoryPage.ts").write_text("export class InventoryPage {}\n")
+    (tmp_path / "pages" / "InventoryPage.ts").write_text(
+        "export class InventoryPage {}\n"
+    )
     (tmp_path / ".supatest" / "SUPATEST.md").write_text("local notes\n")
     (tmp_path / "cli.log").write_text("very noisy\n")
     (tmp_path / "package-lock.json").write_text("{}\n")

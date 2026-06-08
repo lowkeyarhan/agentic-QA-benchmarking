@@ -181,7 +181,17 @@ def agent_environment() -> dict[str, str]:
         and key != "GOOGLE_API_KEY"
     }
     env["NODE_ENV"] = "development"
+    env["PATH"] = with_local_tool_paths(env.get("PATH", ""))
     return env
+
+
+def with_local_tool_paths(path_value: str) -> str:
+    entries = [entry for entry in path_value.split(os.pathsep) if entry]
+    for tool_dir in [Path.home() / ".maestro" / "bin"]:
+        tool_entry = str(tool_dir)
+        if tool_dir.exists() and tool_entry not in entries:
+            entries.insert(0, tool_entry)
+    return os.pathsep.join(entries)
 
 
 def render_command_template(
