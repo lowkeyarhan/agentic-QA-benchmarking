@@ -56,7 +56,7 @@ from scoring import make_metric, make_test_case, result_label  # noqa: E402
 DEFAULT_EVAL_IDS = ["E1", "E3", "E7", "E10", "E11"]
 DEFAULT_AGENTS = ["supatest", "cursor", "codex"]
 DEFAULT_PARALLELISM = 3
-DEFAULT_AGENT_TIMEOUT_SECONDS = 300
+DEFAULT_AGENT_TIMEOUT_SECONDS = 450
 
 
 def main() -> int:
