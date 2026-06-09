@@ -113,7 +113,7 @@ The default run executes every fixture present under `agent-eval-fixtures/fixtur
 
 ```text
 Evals: all
-Agents: supatest, cursor, codex, gemini
+Agents: supatest [premium], cursor [auto], codex [default], gemini [gemini-3.1-flash-lite]
 Parallelism: 3
 Timeout: 600s per agent run
 ```
@@ -124,17 +124,17 @@ The checked-in default agent list is:
 BENCHMARK_AGENTS=supatest,cursor,codex,gemini
 ```
 
-Cursor is pinned to Composer 2.5 Fast by default:
+Cursor uses Auto by default:
 
 ```bash
-BENCHMARK_CURSOR_CMD='cursor-agent --print --force --model composer-2.5-fast {prompt}'
+BENCHMARK_CURSOR_CMD='cursor-agent --print --force --model auto {prompt}'
 ```
 
 Gemini CLI uses non-interactive mode with workspace trust skipped and tool
 approval enabled:
 
 ```bash
-BENCHMARK_GEMINI_CMD='gemini --prompt {prompt} --yolo --skip-trust'
+BENCHMARK_GEMINI_CMD='gemini --model gemini-3.1-flash-lite --prompt {prompt} --yolo --skip-trust'
 ```
 
 Use a comma-separated `BENCHMARK_EVAL_IDS` value for a smaller smoke or hard
@@ -155,6 +155,10 @@ Edit `.env` or the defaults at the top of `run_benchmark.py` to change that.
 Use `BENCHMARK_EVAL_IDS=all` to include every available fixture.
 
 ## Output
+
+During execution, each agent line is printed when that process exits. The score
+is marked `pending` until all agent runs finish, then the combined DeepEval
+scoring pass prints the pass/partial/fail table.
 
 ```text
 results/<run-id>/scores.md

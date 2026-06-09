@@ -8,7 +8,9 @@ from deepeval.test_case import LLMTestCase
 
 from agents import (
     agent_command_env_name,
+    agent_display_name,
     agent_environment,
+    agent_model_label,
     build_command,
     build_prompt,
     changed_file_excerpt,
@@ -53,10 +55,27 @@ def test_agent_command_env_name_supports_future_agent_names() -> None:
     assert agent_command_env_name("vendor.agent/v2") == "VENDOR_AGENT_V2"
 
 
+def test_agent_model_labels_use_agent_specific_config(monkeypatch) -> None:
+    monkeypatch.setenv("BENCHMARK_SUPATEST_MODEL", "premium")
+    monkeypatch.setenv(
+        "BENCHMARK_CURSOR_CMD",
+        "cursor-agent --print --force --model auto {prompt}",
+    )
+    monkeypatch.setenv(
+        "BENCHMARK_GEMINI_CMD",
+        "gemini --model gemini-3.1-flash-lite --prompt {prompt} --yolo",
+    )
+
+    assert agent_model_label("supatest") == "premium"
+    assert agent_model_label("cursor") == "auto"
+    assert agent_model_label("gemini") == "gemini-3.1-flash-lite"
+    assert agent_display_name("supatest") == "supatest [premium]"
+
+
 def test_gemini_agent_command_uses_configured_template(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv(
         "BENCHMARK_GEMINI_CMD",
-        "gemini --prompt {prompt} --yolo --skip-trust",
+        "gemini --model gemini-3.1-flash-lite --prompt {prompt} --yolo --skip-trust",
     )
     project_dir = tmp_path / "project"
     project_dir.mkdir()
@@ -65,14 +84,14 @@ def test_gemini_agent_command_uses_configured_template(tmp_path, monkeypatch) ->
 
     assert use_shell is True
     assert cwd == project_dir
-    assert command.startswith("gemini --prompt ")
+    assert command.startswith("gemini --model gemini-3.1-flash-lite --prompt ")
     assert "--yolo --skip-trust" in command
 
 
-def test_cursor_agent_command_can_pin_composer_fast(tmp_path, monkeypatch) -> None:
+def test_cursor_agent_command_uses_auto_model(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv(
         "BENCHMARK_CURSOR_CMD",
-        "cursor-agent --print --force --model composer-2.5-fast {prompt}",
+        "cursor-agent --print --force --model auto {prompt}",
     )
     project_dir = tmp_path / "project"
     project_dir.mkdir()
@@ -81,7 +100,7 @@ def test_cursor_agent_command_can_pin_composer_fast(tmp_path, monkeypatch) -> No
 
     assert use_shell is True
     assert cwd == project_dir
-    assert "--model composer-2.5-fast" in command
+    assert "--model auto" in command
 
 
 def test_supatest_project_id_must_be_explicit(monkeypatch) -> None:
@@ -261,5 +280,8 @@ def test_write_summary_emits_only_three_result_files(tmp_path) -> None:
     ]
     summary = json.loads((tmp_path / "summary.json").read_text())
     run = json.loads((tmp_path / "run.json").read_text())
+    scores = (tmp_path / "scores.md").read_text()
+    assert "supatest [premium]" in scores
+    assert summary["agentModels"]["supatest"] == "premium"
     assert summary["summary"]["byAgent"]["supatest"]["pass"] == 1
     assert run["runsByEval"]["E25"]["supatest"]["caseId"] == "case-001"

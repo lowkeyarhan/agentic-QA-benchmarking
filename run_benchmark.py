@@ -55,7 +55,7 @@ except ImportError:
 
 load_dotenv(BENCHMARK_ROOT / ".env")
 
-from agents import run_agent  # noqa: E402
+from agents import agent_display_name, agent_model_label, run_agent  # noqa: E402
 from deepeval import evaluate  # noqa: E402
 from deepeval.evaluate.configs import (  # noqa: E402
     AsyncConfig,
@@ -110,7 +110,7 @@ def main() -> int:
 
     print(f"Run ID: {run_id}")
     print(f"Evals: {', '.join(eval_ids)}")
-    print(f"Agents: {', '.join(agents)}")
+    print(f"Agents: {', '.join(agent_display_name(agent) for agent in agents)}")
     print(f"Parallelism: {parallelism}")
     print(f"Timeout: {os.environ['BENCHMARK_TIMEOUT_SECONDS']}s per agent run")
     print()
@@ -124,7 +124,7 @@ def main() -> int:
     if is_dry_run:
         print("Cases:")
         for eval_id, agent, case_id in jobs:
-            print(f"  {case_id} / {agent} ({eval_id})")
+            print(f"  {case_id} / {agent_display_name(agent)} ({eval_id})")
         print()
         print(f"Runs dir: {runs_dir}")
         print(f"Results dir: {results_dir}")
@@ -151,15 +151,21 @@ def main() -> int:
                 )
             pending_results.append(pending_result)
             print(
-                f"{eval_id:>4} {agent:<9} finished {pending_result.result['durationMs']}ms"
+                f"{eval_id:>4} {agent_display_name(agent):<32} finished "
+                f"exit={pending_result.result['exitCode']} score=pending "
+                f"{pending_result.result['durationMs']}ms"
             )
 
+    print()
+    print(f"Scoring {len(pending_results)} completed agent runs with DeepEval...")
     results = score_pending_results(run_id, pending_results)
     print()
     print("Scores:")
     for result in order_results(eval_ids, agents, results):
         print(
-            f"{result['evalId']:>4} {result['agent']:<9} {result['scorePercent']:>3} {result['result']:<7} {result['durationMs']}ms"
+            f"{result['evalId']:>4} {agent_display_name(result['agent']):<32} "
+            f"{result['scorePercent']:>3} {result['result']:<7} "
+            f"{result['durationMs']}ms"
         )
 
     timeout_seconds = int(os.environ["BENCHMARK_TIMEOUT_SECONDS"])
@@ -291,6 +297,9 @@ def build_deepeval_hyperparameters(results: list[dict]) -> dict:
         "benchmark_run_id": results[0].get("runId", "") if results else "",
         "eval_ids": ",".join(eval_ids),
         "agents": ",".join(agents),
+        "agent_models": ",".join(
+            f"{agent}:{agent_model_label(agent)}" for agent in agents
+        ),
         "parallelism": int(
             os.getenv("BENCHMARK_PARALLELISM", str(DEFAULT_PARALLELISM))
         ),
@@ -331,7 +340,7 @@ def write_summary(
 ) -> None:
     by_key = {(item["evalId"], item["agent"]): item for item in results}
     lines = [
-        "| Eval | " + " | ".join(agents) + " |",
+        "| Eval | " + " | ".join(agent_display_name(agent) for agent in agents) + " |",
         "| --- | " + " | ".join(["---"] * len(agents)) + " |",
     ]
 
@@ -359,7 +368,7 @@ def write_summary(
         partial_count = sum(1 for item in agent_results if item["result"] == "partial")
         fail_count = sum(1 for item in agent_results if item["result"] == "fail")
         lines.append(
-            f"| {agent} | {average} | {pass_count} | {partial_count} | {fail_count} |"
+            f"| {agent_display_name(agent)} | {average} | {pass_count} | {partial_count} | {fail_count} |"
         )
 
     (results_dir / "scores.md").write_text("\n".join(lines) + "\n")
@@ -370,6 +379,7 @@ def write_summary(
         "generatedAt": generated_at,
         "evalIds": eval_ids,
         "agents": agents,
+        "agentModels": {agent: agent_model_label(agent) for agent in agents},
         "parallelism": parallelism,
         "timeoutSeconds": timeout_seconds,
     }

@@ -185,6 +185,39 @@ def agent_command_env_name(agent: str) -> str:
     return re.sub(r"[^A-Za-z0-9]+", "_", agent).strip("_").upper()
 
 
+def agent_model_label(agent: str) -> str:
+    env_name = agent_command_env_name(agent)
+    explicit = os.getenv(f"BENCHMARK_{env_name}_MODEL_LABEL")
+    if explicit:
+        return explicit
+
+    if agent == "supatest":
+        return os.getenv("BENCHMARK_SUPATEST_MODEL", "premium")
+
+    template = os.getenv(f"BENCHMARK_{env_name}_CMD")
+    return model_from_command_template(template) or "default"
+
+
+def agent_display_name(agent: str) -> str:
+    return f"{agent} [{agent_model_label(agent)}]"
+
+
+def model_from_command_template(template: str | None) -> str | None:
+    if not template:
+        return None
+    try:
+        parts = shlex.split(template)
+    except ValueError:
+        return None
+
+    for index, part in enumerate(parts):
+        if part in {"--model", "-m"} and index + 1 < len(parts):
+            return parts[index + 1]
+        if part.startswith("--model="):
+            return part.split("=", 1)[1]
+    return None
+
+
 def agent_environment() -> dict[str, str]:
     env = {
         key: value
