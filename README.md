@@ -88,7 +88,9 @@ Supatest also needs a project scope for backend sessions. The harness uses
 `benchmark/.supatest/settings.json`. For the cleanest long-term benchmark,
 use a dedicated Supatest project for benchmark sessions.
 
-For Confident AI dashboard uploads, log DeepEval into the benchmark dotenv file:
+Confident AI dashboard upload is optional and separate from local benchmark
+scoring. Local scoring does not require `CONFIDENT_API_KEY`. If you want to use
+DeepEval tools manually, log DeepEval into the benchmark dotenv file:
 
 ```bash
 cd /Users/lowkeyarhan/Desktop/benchmark
@@ -120,10 +122,22 @@ the harness records `blocked` for every agent on that eval instead of scoring it
 as an agent failure. Use `BENCHMARK_DISABLE_PREFLIGHT=1` only when you
 intentionally want to bypass that guard.
 
-The DeepEval judge model is also preflighted before agents run. Keep
+The batch judge model is config-preflighted before agents run. Keep
 `DEEPEVAL_GEMINI_MODEL` on a Gemini model that supports Google GenAI structured
 output; Gemma agent model names do not belong in that setting. If the judge
-model or API key is invalid, the harness exits before launching any agents.
+provider or API key is missing, the harness exits before launching any agents.
+Scoring happens once at the end of all agent runs with one direct judge API
+call, so Google free-tier RPM is not hammered by one request per result.
+If Google quota is exhausted, switch the judge to OpenAI:
+
+```bash
+DEEPEVAL_JUDGE_PROVIDER=openai
+OPENAI_API_KEY=...
+DEEPEVAL_OPENAI_MODEL=gpt-5-nano
+```
+
+OpenAI API access is usage-billed separately from ChatGPT plans; use a key with
+available API credits or billing enabled.
 
 The default run executes every fixture present under `agent-eval-fixtures/fixtures`:
 
@@ -172,9 +186,9 @@ Use `BENCHMARK_EVAL_IDS=all` to include every available fixture.
 
 ## Output
 
-During execution, each agent line is printed once after that process exits and
-the judge score is available. Set `BENCHMARK_PRINT_FINAL_TABLE=1` only if you
-also want the ordered scoreboard repeated in the terminal at the end.
+During execution, each agent line is printed once when that process exits, with
+the score marked `pending`. After all agent runs finish, the harness makes one
+batch judge API call and prints the final ordered score table.
 
 ```text
 results/<run-id>/scores.md
@@ -195,14 +209,12 @@ result JSON maps each case back to its eval ID.
 
 ## Scoring
 
-Runs are scored through DeepEval with the benchmark run ID attached, so
-Confident AI can group the per-agent/per-eval test cases. Timeouts remain hard
-failures. Judge/runtime errors such as quota exhaustion are recorded as
+Runs are scored with one direct batch judge call after every agent run has
+finished. Timeouts remain hard failures. Judge/runtime errors are recorded as
 `unscored` and excluded from averages instead of being counted as agent
 failures. Before judging, the harness removes agent names, local absolute paths,
 benchmark credentials, spinner noise, and repeated terminal status redraws from
-the evidence. The judge prompt instructs the model to score only against the
-task and fixture pass/fail criteria, not against a specific CLI, product, model,
-company, cost profile, or agent type. The judge also uses an explicit 0-10 QA
-rubric for no-attempt, major-failure, partial, mostly-correct, and
-production-quality outcomes before the score is converted to pass/partial/fail.
+the evidence. The judge scores only against the task and fixture pass/fail
+criteria, not against a specific CLI, product, model, company, cost profile, or
+agent type. Score cells show satisfied pass checks and triggered fail checks as
+`<passed>p/<failed>f result`, for example `7p/0f pass`.

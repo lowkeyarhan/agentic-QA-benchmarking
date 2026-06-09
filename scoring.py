@@ -6,7 +6,7 @@ from collections import Counter
 
 from deepeval.metrics import BaseMetric, GEval
 from deepeval.metrics.g_eval import Rubric
-from deepeval.models import GeminiModel
+from deepeval.models import GPTModel, GeminiModel
 from deepeval.test_case import LLMTestCase, SingleTurnParams
 
 from agents import AgentRunResult
@@ -226,6 +226,13 @@ def make_geval_metric() -> GEval:
             "or test output show that the requested work was completed. Penalize timeouts, irrelevant edits, "
             "destructive test weakening, invented selectors, and missing investigation."
         ),
+        evaluation_steps=[
+            "Check the task, changed files, and transcript evidence against every pass criterion.",
+            "Check whether any fail criterion occurred, including stale evidence, fabricated selectors, unrelated edits, destructive rewrites, or forbidden commands.",
+            "For edit tasks, verify the requested file scope and that the actual modified content supports the claimed completion.",
+            "For selector, log, or explanation tasks, verify the answer is grounded in the authoritative fixture evidence and does not just claim success.",
+            "Assign the score using the rubric: reserve 9-10 for complete production-quality work, 7-8 for mostly correct work, 4-6 for partial work, 1-3 for major failures, and 0 for no meaningful completion.",
+        ],
         rubric=[
             Rubric(
                 score_range=(0, 0),
@@ -278,15 +285,38 @@ def make_geval_metric() -> GEval:
 
 
 def make_judge_model():
-    google_api_key = os.getenv("GOOGLE_API_KEY")
-    if not google_api_key:
-        return None
+    provider = os.getenv("DEEPEVAL_JUDGE_PROVIDER", "").strip().lower()
+    if not provider:
+        if os.getenv("GOOGLE_API_KEY"):
+            provider = "google"
+        elif os.getenv("OPENAI_API_KEY"):
+            provider = "openai"
+        else:
+            return None
 
-    return GeminiModel(
-        model=os.getenv("DEEPEVAL_GEMINI_MODEL", "gemini-2.5-pro"),
-        api_key=google_api_key,
-        temperature=0,
-    )
+    if provider in {"google", "gemini"}:
+        google_api_key = os.getenv("GOOGLE_API_KEY")
+        if not google_api_key:
+            return None
+
+        return GeminiModel(
+            model=os.getenv("DEEPEVAL_GEMINI_MODEL", "gemini-3.1-flash-lite"),
+            api_key=google_api_key,
+            temperature=0,
+        )
+
+    if provider == "openai":
+        openai_api_key = os.getenv("OPENAI_API_KEY")
+        if not openai_api_key:
+            return None
+
+        return GPTModel(
+            model=os.getenv("DEEPEVAL_OPENAI_MODEL", "gpt-5-nano"),
+            api_key=openai_api_key,
+            temperature=0,
+        )
+
+    raise ValueError("DEEPEVAL_JUDGE_PROVIDER must be 'google', 'gemini', or 'openai'.")
 
 
 def result_label(score: float, timed_out: bool) -> str:

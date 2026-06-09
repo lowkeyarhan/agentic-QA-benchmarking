@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
-import contextlib
-import io
 import json
 import os
 import shutil
@@ -13,6 +11,7 @@ import traceback
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, replace
 from pathlib import Path
+from typing import Literal
 
 BENCHMARK_ROOT = Path(__file__).resolve().parent
 
@@ -58,19 +57,10 @@ except ImportError:
 load_dotenv(BENCHMARK_ROOT / ".env", override=True)
 
 from agents import agent_display_name, agent_model_label, run_agent  # noqa: E402
-from deepeval import evaluate  # noqa: E402
-from deepeval.evaluate.configs import (  # noqa: E402
-    AsyncConfig,
-    CacheConfig,
-    DisplayConfig,
-    ErrorConfig,
-)
-from deepeval.test_case import LLMTestCase  # noqa: E402
 from fixtures import copy_project, load_fixture, resolve_eval_ids  # noqa: E402
 from pydantic import BaseModel  # noqa: E402
 from scoring import (
     make_judge_model,
-    make_metric,
     make_test_case,
     result_label,
 )  # noqa: E402
@@ -86,7 +76,7 @@ DEFAULT_AGENT_TIMEOUT_SECONDS = 600
 @dataclass(frozen=True)
 class PendingResult:
     result: dict
-    test_case: LLMTestCase | None = None
+    test_case: object | None = None
 
 
 @dataclass(frozen=True)
@@ -96,8 +86,17 @@ class PreflightIssue:
     reason: str
 
 
-class JudgePreflightResponse(BaseModel):
-    ok: bool
+class BatchJudgeCaseScore(BaseModel):
+    resultId: str
+    score: float
+    result: Literal["pass", "partial", "fail"]
+    passedChecks: int
+    failedChecks: int
+    reason: str
+
+
+class BatchJudgeResponse(BaseModel):
+    results: list[BatchJudgeCaseScore]
 
 
 def main() -> int:
@@ -145,7 +144,7 @@ def main() -> int:
         if judge_issue:
             print(f"Judge preflight failed: {judge_issue}")
             print(
-                "Fix GOOGLE_API_KEY / DEEPEVAL_GEMINI_MODEL, or set "
+                "Fix DEEPEVAL_JUDGE_PROVIDER and the matching judge API key, or set "
                 "BENCHMARK_DISABLE_JUDGE_PREFLIGHT=1 to bypass this guard."
             )
             return 2
@@ -183,6 +182,7 @@ def main() -> int:
             results.append(result)
             print(format_score_line(result))
 
+    pending_results: list[PendingResult] = []
     with ThreadPoolExecutor(max_workers=parallelism) as executor:
         futures = {
             executor.submit(run_one_case, run_id, runs_dir, eval_id, agent, case_id): (
@@ -201,15 +201,28 @@ def main() -> int:
                     write_error_result(run_id, eval_id, agent, case_id, error)
                 )
 
-            result = score_pending_results(
+            pending_results.append(pending_result)
+            if pending_result.result.get("scoreSource"):
+                print(format_score_line(pending_result.result))
+            else:
+                print(format_pending_line(pending_result.result))
+
+    if pending_results:
+        print()
+        print(f"Scoring {len(pending_results)} completed runs with one judge call...")
+        results.extend(
+            score_pending_results(
                 run_id,
-                [pending_result],
+                pending_results,
                 run_eval_ids=eval_ids,
                 run_agents=agents,
-            )[0]
-            results.append(result)
+            )
+        )
+        print()
+        print("Scores:")
+        for result in order_results(eval_ids, agents, results):
             print(format_score_line(result))
-    if os.getenv("BENCHMARK_PRINT_FINAL_TABLE") == "1":
+    elif os.getenv("BENCHMARK_PRINT_FINAL_TABLE") == "1":
         print()
         print("Scores:")
         for result in order_results(eval_ids, agents, results):
@@ -239,20 +252,16 @@ def preflight_fixture(
 
 
 def preflight_judge_model() -> str | None:
-    judge_model = make_judge_model()
-    if judge_model is None:
-        return None
-
     try:
-        response, _ = judge_model.generate(
-            'Return JSON with exactly {"ok": true}.',
-            schema=JudgePreflightResponse,
-        )
+        judge_model = make_judge_model()
     except Exception as error:
         return redact_configured_secrets(f"{type(error).__name__}: {error}")
 
-    if not getattr(response, "ok", False):
-        return "Judge model returned an unexpected preflight response."
+    if judge_model is None:
+        return (
+            "No judge model is configured. Set DEEPEVAL_JUDGE_PROVIDER and the "
+            "matching GOOGLE_API_KEY or OPENAI_API_KEY."
+        )
     return None
 
 
@@ -410,97 +419,227 @@ def score_pending_results(
     run_agents: list[str] | None = None,
 ) -> list[dict]:
     results = [dict(item.result) for item in pending_results]
-    scoring_jobs = [
-        (index, item.test_case)
-        for index, item in enumerate(pending_results)
-        if item.test_case is not None
-    ]
+    scoring_jobs = []
+    for index, item in enumerate(pending_results):
+        result = results[index]
+        if result.get("scoreSource"):
+            continue
+        if item.test_case is None:
+            mark_unscored(
+                result, "No judge evidence was produced for this case.", "harness"
+            )
+            continue
+        if result.get("timedOut"):
+            apply_score(
+                result,
+                0.0,
+                "Timed out before the agent completed the task.",
+                "timeout",
+                passed_checks=0,
+                failed_checks=max(1, len(result.get("passCriteria") or [])),
+            )
+            continue
+        scoring_jobs.append((index, item.test_case))
+
     if not scoring_jobs:
         return results
 
-    test_cases = [test_case for _, test_case in scoring_jobs if test_case is not None]
     try:
-        evaluation = evaluate_quietly(
-            test_cases=test_cases,
-            metrics=[make_metric()],
-            identifier=run_id,
-            hyperparameters=build_deepeval_hyperparameters(
-                results,
-                run_eval_ids=run_eval_ids,
-                run_agents=run_agents,
-            ),
-            async_config=AsyncConfig(run_async=False),
-            display_config=DisplayConfig(
-                show_indicator=False,
-                print_results=False,
-                inspect_after_run=False,
-                truncate_passing_cases=False,
-            ),
-            cache_config=CacheConfig(write_cache=False, use_cache=False),
-            error_config=ErrorConfig(ignore_errors=False),
+        judge_response = batch_judge_results(
+            run_id,
+            results,
+            scoring_jobs,
+            run_eval_ids=run_eval_ids,
+            run_agents=run_agents,
         )
     except Exception as error:
-        reason = f"{type(error).__name__}: {error}"
+        reason = redact_configured_secrets(f"{type(error).__name__}: {error}")
         for result_index, _ in scoring_jobs:
             mark_unscored(results[result_index], reason, "judge-error")
+        for result in results:
+            result.pop("_judgeResultId", None)
         return results
 
-    scored_result_indexes: set[int] = set()
-    for test_result in evaluation.test_results:
-        if test_result.index is None or test_result.index >= len(scoring_jobs):
-            continue
-        result_index = scoring_jobs[test_result.index][0]
-        scored_result_indexes.add(result_index)
-        metric_data = test_result.metrics_data[0] if test_result.metrics_data else None
-        if metric_data is None:
-            mark_unscored(
-                results[result_index],
-                "DeepEval returned no metric data for this case.",
-                "judge-error",
-            )
-            continue
-
-        metric_error = getattr(metric_data, "error", None)
-        if metric_error:
-            mark_unscored(
-                results[result_index],
-                f"DeepEval metric error: {metric_error}",
-                "judge-error",
-            )
-            continue
-
-        score = float(metric_data.score or 0.0)
-        reason = metric_data.reason or metric_data.error or ""
-        source = "timeout" if results[result_index].get("timedOut") else "judge"
-        apply_score(results[result_index], score, reason, source)
-
-    for result_index, _ in scoring_jobs:
-        if result_index not in scored_result_indexes:
-            mark_unscored(
-                results[result_index],
-                "DeepEval did not return a score for this case.",
-                "judge-error",
-            )
-
+    apply_batch_judgement(results, scoring_jobs, judge_response)
     return results
 
 
-def evaluate_quietly(**kwargs):
-    if os.getenv("BENCHMARK_DEEPEVAL_VERBOSE") == "1":
-        return evaluate(**kwargs)
+def batch_judge_results(
+    run_id: str,
+    results: list[dict],
+    scoring_jobs: list[tuple[int, object]],
+    run_eval_ids: list[str] | None = None,
+    run_agents: list[str] | None = None,
+) -> BatchJudgeResponse:
+    judge_model = make_judge_model()
+    if judge_model is None:
+        raise RuntimeError(
+            "No judge model is configured. Set DEEPEVAL_JUDGE_PROVIDER and the "
+            "matching GOOGLE_API_KEY or OPENAI_API_KEY."
+        )
 
-    stdout = io.StringIO()
-    stderr = io.StringIO()
-    with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
-        return evaluate(**kwargs)
+    prompt = build_batch_judge_prompt(
+        run_id,
+        results,
+        scoring_jobs,
+        run_eval_ids=run_eval_ids,
+        run_agents=run_agents,
+    )
+    response, _ = judge_model.generate(prompt, schema=BatchJudgeResponse)
+    if isinstance(response, BatchJudgeResponse):
+        return response
+    if isinstance(response, dict):
+        return BatchJudgeResponse.model_validate(response)
+    return BatchJudgeResponse.model_validate_json(str(response))
 
 
-def apply_score(result: dict, score: float, reason: str, score_source: str) -> None:
+def build_batch_judge_prompt(
+    run_id: str,
+    results: list[dict],
+    scoring_jobs: list[tuple[int, object]],
+    run_eval_ids: list[str] | None = None,
+    run_agents: list[str] | None = None,
+) -> str:
+    cases = []
+    char_budget = batch_case_char_budget(len(scoring_jobs))
+    for ordinal, (result_index, test_case) in enumerate(scoring_jobs, start=1):
+        result = results[result_index]
+        result_id = f"r{ordinal:03d}"
+        result["_judgeResultId"] = result_id
+        cases.append(batch_case_payload(result_id, result, test_case, char_budget))
+
+    payload = {
+        "runId": run_id,
+        "evalIds": run_eval_ids or [],
+        "agentCount": len(run_agents or []),
+        "scoringPolicy": {
+            "scoreRange": "0.0 to 1.0",
+            "pass": "score >= 0.70",
+            "partial": "0.40 <= score < 0.70",
+            "fail": "score < 0.40",
+            "passedChecks": "Number of pass criteria materially satisfied.",
+            "failedChecks": "Number of fail criteria triggered. Use 0 when no fail criterion was triggered.",
+        },
+        "cases": cases,
+    }
+
+    return (
+        "You are an impartial QA benchmark judge. Score every case in the JSON payload. "
+        "Use only the task, criteria, changed files, excerpts, and transcript evidence. "
+        "Do not reward or penalize any agent name, vendor, model, speed, or cost. "
+        "A non-zero wrapper exit code is not automatic failure if evidence proves completion. "
+        "Penalize missing evidence, fabricated selectors, stale evidence, forbidden commands, "
+        "irrelevant edits, destructive rewrites, and unsupported claims. "
+        "Return exactly one result for every case resultId and no extra resultIds. "
+        "Use result labels consistent with the score thresholds. "
+        "Keep reasons short and evidence-based.\n\n" + json.dumps(payload, indent=2)
+    )
+
+
+def batch_case_payload(
+    result_id: str, result: dict, test_case: object, char_budget: int
+) -> dict:
+    task_budget = max(300, char_budget // 4)
+    criteria_budget = max(300, char_budget // 4)
+    evidence_budget = max(400, char_budget - task_budget - criteria_budget)
+    return {
+        "resultId": result_id,
+        "evalId": result.get("evalId"),
+        "caseId": result.get("caseId"),
+        "mode": result.get("mode"),
+        "exitCode": result.get("exitCode"),
+        "timedOut": result.get("timedOut"),
+        "changedFiles": result.get("changedFiles") or [],
+        "task": truncate_text(str(getattr(test_case, "input", "")), task_budget),
+        "criteria": truncate_text(
+            str(getattr(test_case, "expected_output", "")), criteria_budget
+        ),
+        "evidence": truncate_text(
+            str(getattr(test_case, "actual_output", "")), evidence_budget
+        ),
+    }
+
+
+def batch_case_char_budget(case_count: int) -> int:
+    total_budget = int(os.getenv("BENCHMARK_BATCH_TOTAL_CASE_CHARS", "180000"))
+    per_case_default = int(os.getenv("BENCHMARK_BATCH_CASE_CHARS", "5000"))
+    if case_count <= 0:
+        return per_case_default
+    return max(450, min(per_case_default, total_budget // case_count))
+
+
+def truncate_text(text: str, max_chars: int) -> str:
+    if len(text) <= max_chars:
+        return text
+    head = max_chars // 2
+    tail = max_chars - head - 80
+    return (
+        text[:head]
+        + f"\n...[truncated {len(text) - max_chars} chars]...\n"
+        + text[-max(0, tail) :]
+    )
+
+
+def apply_batch_judgement(
+    results: list[dict],
+    scoring_jobs: list[tuple[int, object]],
+    judge_response: BatchJudgeResponse,
+) -> None:
+    expected_ids = {
+        results[result_index].get("_judgeResultId"): result_index
+        for result_index, _ in scoring_jobs
+    }
+    seen_ids: set[str] = set()
+    for scored in judge_response.results:
+        result_id = scored.resultId
+        if result_id in seen_ids or result_id not in expected_ids:
+            continue
+        seen_ids.add(result_id)
+        result = results[expected_ids[result_id]]
+        score = max(0.0, min(1.0, float(scored.score)))
+        normalized_result = result_label(score, False)
+        apply_score(
+            result,
+            score,
+            scored.reason.strip() or "Batch judge returned no reason.",
+            "batch-judge",
+            passed_checks=max(0, int(scored.passedChecks)),
+            failed_checks=max(0, int(scored.failedChecks)),
+            result_override=normalized_result,
+        )
+
+    for result_id, result_index in expected_ids.items():
+        if result_id not in seen_ids:
+            mark_unscored(
+                results[result_index],
+                f"Batch judge did not return a result for {result_id}.",
+                "judge-error",
+            )
+
+    for result in results:
+        result.pop("_judgeResultId", None)
+
+
+def apply_score(
+    result: dict,
+    score: float,
+    reason: str,
+    score_source: str,
+    passed_checks: int | None = None,
+    failed_checks: int | None = None,
+    result_override: str | None = None,
+) -> None:
     result["score"] = score
     result["scorePercent"] = round(score * 100)
-    result["result"] = result_label(score, bool(result.get("timedOut")))
+    result["result"] = result_override or result_label(
+        score, bool(result.get("timedOut"))
+    )
     result["reason"] = reason
     result["scoreSource"] = score_source
+    if passed_checks is not None:
+        result["passedChecks"] = passed_checks
+    if failed_checks is not None:
+        result["failedChecks"] = failed_checks
 
 
 def mark_unscored(result: dict, reason: str, score_source: str) -> None:
@@ -509,33 +648,8 @@ def mark_unscored(result: dict, reason: str, score_source: str) -> None:
     result["result"] = "unscored"
     result["reason"] = reason
     result["scoreSource"] = score_source
-
-
-def build_deepeval_hyperparameters(
-    results: list[dict],
-    run_eval_ids: list[str] | None = None,
-    run_agents: list[str] | None = None,
-) -> dict:
-    eval_ids = run_eval_ids or sorted(
-        {str(item.get("evalId")) for item in results if item.get("evalId")}
-    )
-    agents = run_agents or sorted(
-        {str(item.get("agent")) for item in results if item.get("agent")}
-    )
-    return {
-        "benchmark_run_id": results[0].get("runId", "") if results else "",
-        "eval_ids": ",".join(eval_ids),
-        "agents": ",".join(agents),
-        "agent_models": ",".join(
-            f"{agent}:{agent_model_label(agent)}" for agent in agents
-        ),
-        "parallelism": int(
-            os.getenv("BENCHMARK_PARALLELISM", str(DEFAULT_PARALLELISM))
-        ),
-        "timeout_seconds": int(
-            os.getenv("BENCHMARK_TIMEOUT_SECONDS", str(DEFAULT_AGENT_TIMEOUT_SECONDS))
-        ),
-    }
+    result["passedChecks"] = None
+    result["failedChecks"] = None
 
 
 def write_error_result(
@@ -551,6 +665,8 @@ def write_error_result(
         "result": "fail",
         "reason": f"{type(error).__name__}: {error}",
         "scoreSource": "harness-error",
+        "passedChecks": 0,
+        "failedChecks": 1,
         "exitCode": 1,
         "timedOut": False,
         "durationMs": 0,
@@ -577,6 +693,8 @@ def write_blocked_result(
         "result": "blocked",
         "reason": issue.reason,
         "scoreSource": "preflight",
+        "passedChecks": None,
+        "failedChecks": None,
         "preflight": {
             "kind": issue.kind,
             "platform": issue.platform,
@@ -617,9 +735,11 @@ def write_summary(
 
     lines.append("")
     lines.append(
-        "| Agent | Average | Scored | Pass | Partial | Fail | Blocked | Unscored |"
+        "| Agent | Average | Scored | Pass | Partial | Fail | Blocked | Unscored | Checks Pass | Checks Fail |"
     )
-    lines.append("| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |")
+    lines.append(
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |"
+    )
     for agent in agents:
         agent_results = [item for item in results if item["agent"] == agent]
         scored_results = scored_only(agent_results)
@@ -638,10 +758,16 @@ def write_summary(
         unscored_count = sum(
             1 for item in agent_results if item["result"] == "unscored"
         )
+        passed_checks = sum(
+            int(item.get("passedChecks") or 0) for item in agent_results
+        )
+        failed_checks = sum(
+            int(item.get("failedChecks") or 0) for item in agent_results
+        )
         lines.append(
             f"| {agent_display_name(agent)} | {average} | {len(scored_results)} | "
             f"{pass_count} | {partial_count} | {fail_count} | {blocked_count} | "
-            f"{unscored_count} |"
+            f"{unscored_count} | {passed_checks} | {failed_checks} |"
         )
 
     (results_dir / "scores.md").write_text("\n".join(lines) + "\n")
@@ -746,6 +872,8 @@ def summarize_group(results: list[dict]) -> dict:
         "fail": sum(1 for item in results if item.get("result") == "fail"),
         "blocked": sum(1 for item in results if item.get("result") == "blocked"),
         "unscored": sum(1 for item in results if item.get("result") == "unscored"),
+        "passedChecks": sum(int(item.get("passedChecks") or 0) for item in results),
+        "failedChecks": sum(int(item.get("failedChecks") or 0) for item in results),
         "timedOut": sum(1 for item in results if item.get("timedOut")),
         "durationMs": sum(item.get("durationMs", 0) for item in results),
     }
@@ -761,6 +889,8 @@ def summarize_result(result: dict | None) -> dict | None:
         "timedOut": result.get("timedOut"),
         "exitCode": result.get("exitCode"),
         "scoreSource": result.get("scoreSource"),
+        "passedChecks": result.get("passedChecks"),
+        "failedChecks": result.get("failedChecks"),
     }
 
 
@@ -773,17 +903,30 @@ def format_cell(result: dict | None) -> str:
         return "unscored"
     if result.get("scorePercent") is None:
         return f"n/a {result['result']}"
-    return f"{result['scorePercent']} {result['result']}"
+    return f"{check_score_text(result)} {result['result']}"
 
 
 def format_score_line(result: dict) -> str:
-    score = result.get("scorePercent")
-    score_text = "n/a" if score is None else f"{score:>3}"
+    score_text = check_score_text(result)
     return (
         f"{result['evalId']:>4} {agent_display_name(result['agent']):<32} "
-        f"{score_text:>3} {result['result']:<7} "
+        f"{score_text:>8} {result['result']:<8} "
         f"{result['durationMs']}ms"
     )
+
+
+def format_pending_line(result: dict) -> str:
+    pending = {**result, "scorePercent": None, "result": "pending"}
+    return format_score_line(pending)
+
+
+def check_score_text(result: dict) -> str:
+    if result.get("passedChecks") is not None or result.get("failedChecks") is not None:
+        passed = int(result.get("passedChecks") or 0)
+        failed = int(result.get("failedChecks") or 0)
+        return f"{passed}p/{failed}f"
+    score = result.get("scorePercent")
+    return "n/a" if score is None else f"{score}"
 
 
 def scored_only(results: list[dict]) -> list[dict]:

@@ -20,8 +20,9 @@ from agents import (
 from fixtures import available_eval_ids, load_fixture, resolve_eval_ids
 import run_benchmark
 from run_benchmark import (
+    BatchJudgeCaseScore,
+    BatchJudgeResponse,
     PreflightIssue,
-    evaluate_quietly,
     format_score_line,
     maestro_output_has_devices,
     preflight_judge_model,
@@ -30,12 +31,14 @@ from run_benchmark import (
     write_summary,
 )
 from scoring import cleaned_transcript, make_metric, make_test_case
+import scoring
 
 
 def test_agent_environment_hides_benchmark_and_judge_vars(monkeypatch) -> None:
     monkeypatch.setenv("BENCHMARK_EVAL_IDS", "E25")
     monkeypatch.setenv("DEEPEVAL_GEMINI_MODEL", "gemini-2.5-pro")
     monkeypatch.setenv("GOOGLE_API_KEY", "secret")
+    monkeypatch.setenv("OPENAI_API_KEY", "openai-secret")
     monkeypatch.setenv("SUPATEST_API_KEY", "supatest-secret")
     monkeypatch.setenv("SUPATEST_PROJECT_ID", "aiden")
 
@@ -44,6 +47,7 @@ def test_agent_environment_hides_benchmark_and_judge_vars(monkeypatch) -> None:
     assert "BENCHMARK_EVAL_IDS" not in env
     assert "DEEPEVAL_GEMINI_MODEL" not in env
     assert "GOOGLE_API_KEY" not in env
+    assert "OPENAI_API_KEY" not in env
     assert "SUPATEST_API_KEY" not in env
     assert "SUPATEST_PROJECT_ID" not in env
     assert env["NODE_ENV"] == "development"
@@ -274,6 +278,28 @@ def test_metric_uses_granular_qa_rubric() -> None:
         (9, 10),
     ]
     assert "Production-quality completion" in rubric[-1].expected_outcome
+    assert metric._judge.evaluation_steps
+    assert "Check the task" in metric._judge.evaluation_steps[0]
+
+
+def test_judge_model_can_use_openai_provider(monkeypatch) -> None:
+    created = {}
+
+    class FakeGPTModel:
+        def __init__(self, **kwargs):
+            created.update(kwargs)
+
+    monkeypatch.setenv("DEEPEVAL_JUDGE_PROVIDER", "openai")
+    monkeypatch.setenv("OPENAI_API_KEY", "openai-secret")
+    monkeypatch.setenv("DEEPEVAL_OPENAI_MODEL", "gpt-5-nano")
+    monkeypatch.setattr(scoring, "GPTModel", FakeGPTModel)
+
+    judge = scoring.make_judge_model()
+
+    assert isinstance(judge, FakeGPTModel)
+    assert created["model"] == "gpt-5-nano"
+    assert created["api_key"] == "openai-secret"
+    assert created["temperature"] == 0
 
 
 def test_write_summary_emits_only_three_result_files(tmp_path) -> None:
@@ -331,7 +357,7 @@ def test_score_line_matches_terminal_scoreboard_shape(monkeypatch) -> None:
         }
     )
 
-    assert line == "  E1 cursor [auto]                    100 pass    35790ms"
+    assert line == "  E1 cursor [auto]                         100 pass     35790ms"
     assert "finished" not in line
     assert "exit=" not in line
     assert "pending" not in line
@@ -359,19 +385,18 @@ def test_blocked_score_line_uses_na_score(monkeypatch) -> None:
     assert result["scoreSource"] == "preflight"
 
 
-def test_judge_preflight_skips_when_no_google_judge(monkeypatch) -> None:
+def test_judge_preflight_requires_configured_judge(monkeypatch) -> None:
     monkeypatch.setattr(run_benchmark, "make_judge_model", lambda: None)
 
-    assert preflight_judge_model() is None
+    assert "No judge model is configured" in preflight_judge_model()
 
 
 def test_judge_preflight_reports_and_redacts_model_errors(monkeypatch) -> None:
-    class BrokenJudge:
-        def generate(self, *_args, **_kwargs):
-            raise RuntimeError("bad key secret-google-key")
+    def broken_model():
+        raise RuntimeError("bad key secret-google-key")
 
     monkeypatch.setenv("GOOGLE_API_KEY", "secret-google-key")
-    monkeypatch.setattr(run_benchmark, "make_judge_model", lambda: BrokenJudge())
+    monkeypatch.setattr(run_benchmark, "make_judge_model", broken_model)
 
     issue = preflight_judge_model()
 
@@ -383,19 +408,76 @@ def test_judge_preflight_reports_and_redacts_model_errors(monkeypatch) -> None:
 
 def test_judge_preflight_accepts_valid_response(monkeypatch) -> None:
     class GoodJudge:
-        def generate(self, *_args, **_kwargs):
-            return SimpleNamespace(ok=True), 0
+        pass
 
     monkeypatch.setattr(run_benchmark, "make_judge_model", lambda: GoodJudge())
 
     assert preflight_judge_model() is None
 
 
-def test_judge_error_is_unscored_not_agent_failure(monkeypatch) -> None:
-    def failing_evaluate(**_kwargs):
-        raise RuntimeError("judge quota exhausted")
+def test_batch_scoring_uses_one_judge_call_and_check_counts(monkeypatch) -> None:
+    calls = {"count": 0}
 
-    monkeypatch.setattr(run_benchmark, "evaluate_quietly", failing_evaluate)
+    class BatchJudge:
+        def generate(self, prompt, schema):
+            calls["count"] += 1
+            assert "r001" in prompt
+            assert schema is BatchJudgeResponse
+            return BatchJudgeResponse(
+                results=[
+                    BatchJudgeCaseScore(
+                        resultId="r001",
+                        score=0.9,
+                        result="pass",
+                        passedChecks=2,
+                        failedChecks=0,
+                        reason="All required evidence is present.",
+                    )
+                ]
+            ), 0
+
+    monkeypatch.setattr(run_benchmark, "make_judge_model", lambda: BatchJudge())
+    result = {
+        "runId": "verify",
+        "caseId": "case-001",
+        "evalId": "E25",
+        "evalName": "Batch Tests Before Running",
+        "agent": "supatest",
+        "mode": "build",
+        "exitCode": 0,
+        "timedOut": False,
+        "durationMs": 123,
+        "projectDir": "runs/verify/case-001/supatest/project",
+        "transcriptPath": "runs/verify/case-001/supatest/transcript.log",
+        "changedFiles": ["tests/example.spec.ts"],
+        "passCriteria": ["does A", "does B"],
+        "failCriteria": [],
+    }
+    pending = run_benchmark.PendingResult(
+        result,
+        LLMTestCase(
+            input="Do QA work",
+            actual_output="Exit code: 0\nTimed out: False\nChanged files:\nexample",
+            expected_output="Pass criteria:\n- does A\n- does B",
+        ),
+    )
+
+    scored = run_benchmark.score_pending_results("verify", [pending])[0]
+
+    assert calls["count"] == 1
+    assert scored["result"] == "pass"
+    assert scored["scoreSource"] == "batch-judge"
+    assert scored["passedChecks"] == 2
+    assert scored["failedChecks"] == 0
+    assert run_benchmark.format_cell(scored) == "2p/0f pass"
+
+
+def test_missing_batch_score_is_unscored(monkeypatch) -> None:
+    class EmptyJudge:
+        def generate(self, *_args, **_kwargs):
+            return BatchJudgeResponse(results=[]), 0
+
+    monkeypatch.setattr(run_benchmark, "make_judge_model", lambda: EmptyJudge())
     result = {
         "runId": "verify",
         "caseId": "case-001",
@@ -427,7 +509,7 @@ def test_judge_error_is_unscored_not_agent_failure(monkeypatch) -> None:
     assert scored["scorePercent"] is None
     assert scored["result"] == "unscored"
     assert scored["scoreSource"] == "judge-error"
-    assert "judge quota exhausted" in scored["reason"]
+    assert "Batch judge did not return" in scored["reason"]
 
 
 def test_unscored_results_are_excluded_from_summary_average(tmp_path) -> None:
@@ -519,32 +601,3 @@ No devices found
 """,
         "android",
     )
-
-
-def test_deepeval_console_output_is_suppressed_by_default(monkeypatch, capsys) -> None:
-    def noisy_evaluate(**_kwargs):
-        print("deepeval banner")
-        return "ok"
-
-    monkeypatch.delenv("BENCHMARK_DEEPEVAL_VERBOSE", raising=False)
-    monkeypatch.setattr(run_benchmark, "evaluate", noisy_evaluate)
-
-    assert evaluate_quietly(test_cases=[], metrics=[]) == "ok"
-
-    captured = capsys.readouterr()
-    assert captured.out == ""
-    assert captured.err == ""
-
-
-def test_deepeval_console_output_can_be_enabled(monkeypatch, capsys) -> None:
-    def noisy_evaluate(**_kwargs):
-        print("deepeval banner")
-        return "ok"
-
-    monkeypatch.setenv("BENCHMARK_DEEPEVAL_VERBOSE", "1")
-    monkeypatch.setattr(run_benchmark, "evaluate", noisy_evaluate)
-
-    assert evaluate_quietly(test_cases=[], metrics=[]) == "ok"
-
-    captured = capsys.readouterr()
-    assert "deepeval banner" in captured.out

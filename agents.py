@@ -221,6 +221,7 @@ def agent_environment() -> dict[str, str]:
         if not key.startswith("BENCHMARK_")
         and not key.startswith("DEEPEVAL_")
         and key != "GOOGLE_API_KEY"
+        and key != "OPENAI_API_KEY"
         and key != "SUPATEST_API_KEY"
         and key != "SUPATEST_PROJECT_ID"
     }
