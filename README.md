@@ -83,6 +83,11 @@ BENCHMARK_SUPATEST_BINARY=/Users/lowkeyarhan/Documents/supatest/cli/dist/index.j
 BENCHMARK_SUPATEST_MODEL=premium
 ```
 
+Supatest also needs a project scope for backend sessions. The harness uses
+`BENCHMARK_SUPATEST_PROJECT_ID` first, then falls back to
+`benchmark/.supatest/settings.json`. For the cleanest long-term benchmark,
+use a dedicated Supatest project for benchmark sessions.
+
 For Confident AI dashboard uploads, log DeepEval into the benchmark dotenv file:
 
 ```bash

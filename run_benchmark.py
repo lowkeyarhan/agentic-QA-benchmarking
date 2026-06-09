@@ -130,7 +130,7 @@ def main() -> int:
         print(f"Results dir: {results_dir}")
         return 0
 
-    pending_results: list[PendingResult] = []
+    results: list[dict] = []
 
     with ThreadPoolExecutor(max_workers=parallelism) as executor:
         futures = {
@@ -149,16 +149,19 @@ def main() -> int:
                 pending_result = PendingResult(
                     write_error_result(run_id, eval_id, agent, case_id, error)
                 )
-            pending_results.append(pending_result)
+
+            result = score_pending_results(
+                run_id,
+                [pending_result],
+                run_eval_ids=eval_ids,
+                run_agents=agents,
+            )[0]
+            results.append(result)
             print(
                 f"{eval_id:>4} {agent_display_name(agent):<32} finished "
-                f"exit={pending_result.result['exitCode']} score=pending "
-                f"{pending_result.result['durationMs']}ms"
+                f"exit={result['exitCode']} {result['scorePercent']:>3} "
+                f"{result['result']:<7} {result['durationMs']}ms"
             )
-
-    print()
-    print(f"Scoring {len(pending_results)} completed agent runs with DeepEval...")
-    results = score_pending_results(run_id, pending_results)
     print()
     print("Scores:")
     for result in order_results(eval_ids, agents, results):
@@ -213,7 +216,10 @@ def run_one_case(
 
 
 def score_pending_results(
-    run_id: str, pending_results: list[PendingResult]
+    run_id: str,
+    pending_results: list[PendingResult],
+    run_eval_ids: list[str] | None = None,
+    run_agents: list[str] | None = None,
 ) -> list[dict]:
     results = [dict(item.result) for item in pending_results]
     scoring_jobs = [
@@ -230,7 +236,11 @@ def score_pending_results(
             test_cases=test_cases,
             metrics=[make_metric()],
             identifier=run_id,
-            hyperparameters=build_deepeval_hyperparameters(results),
+            hyperparameters=build_deepeval_hyperparameters(
+                results,
+                run_eval_ids=run_eval_ids,
+                run_agents=run_agents,
+            ),
             async_config=AsyncConfig(run_async=False),
             display_config=DisplayConfig(
                 show_indicator=False,
@@ -288,11 +298,17 @@ def apply_score(result: dict, score: float, reason: str, score_source: str) -> N
     result["scoreSource"] = score_source
 
 
-def build_deepeval_hyperparameters(results: list[dict]) -> dict:
-    eval_ids = sorted(
+def build_deepeval_hyperparameters(
+    results: list[dict],
+    run_eval_ids: list[str] | None = None,
+    run_agents: list[str] | None = None,
+) -> dict:
+    eval_ids = run_eval_ids or sorted(
         {str(item.get("evalId")) for item in results if item.get("evalId")}
     )
-    agents = sorted({str(item.get("agent")) for item in results if item.get("agent")})
+    agents = run_agents or sorted(
+        {str(item.get("agent")) for item in results if item.get("agent")}
+    )
     return {
         "benchmark_run_id": results[0].get("runId", "") if results else "",
         "eval_ids": ",".join(eval_ids),

@@ -152,13 +152,8 @@ def build_command(
         # Headless Supatest checks for an API key before it loads the local login token.
         # A placeholder is enough for locally logged-in CLIs because the token is loaded
         # immediately afterwards by Supatest itself.
-        api_key = (
-            os.getenv("BENCHMARK_SUPATEST_API_KEY")
-            or os.getenv("SUPATEST_API_KEY")
-            or load_supatest_cli_token()
-            or os.getenv(
-                "BENCHMARK_SUPATEST_API_KEY_PLACEHOLDER", "sk_test_benchmark_dummy"
-            )
+        api_key = os.getenv("BENCHMARK_SUPATEST_API_KEY") or os.getenv(
+            "SUPATEST_API_KEY"
         )
         if api_key:
             args.extend(["--supatest-api-key", api_key])
@@ -166,8 +161,12 @@ def build_command(
         cwd = project_dir
 
         project_id = resolve_supatest_project_id()
-        if project_id:
-            args.extend(["--project-id", project_id])
+        if not project_id:
+            raise RuntimeError(
+                "Supatest runs require BENCHMARK_SUPATEST_PROJECT_ID or "
+                "benchmark/.supatest/settings.json projectId."
+            )
+        args.extend(["--project-id", project_id])
 
         if fixture.logs_file:
             args.extend(["--logs", str(fixture.logs_file)])
@@ -258,9 +257,18 @@ def render_command_template(
 
 
 def resolve_supatest_project_id() -> str | None:
-    explicit = os.getenv("BENCHMARK_SUPATEST_PROJECT_ID")
+    explicit = (os.getenv("BENCHMARK_SUPATEST_PROJECT_ID") or "").strip()
     if explicit:
         return explicit
+
+    settings_path = BENCHMARK_ROOT / ".supatest" / "settings.json"
+    if settings_path.exists():
+        try:
+            project_id = json.loads(settings_path.read_text()).get("projectId")
+        except Exception:
+            project_id = None
+        if project_id:
+            return str(project_id).strip() or None
     return None
 
 

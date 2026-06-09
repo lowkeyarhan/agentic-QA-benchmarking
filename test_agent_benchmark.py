@@ -103,11 +103,11 @@ def test_cursor_agent_command_uses_auto_model(tmp_path, monkeypatch) -> None:
     assert "--model auto" in command
 
 
-def test_supatest_project_id_must_be_explicit(monkeypatch) -> None:
+def test_supatest_project_id_uses_explicit_or_benchmark_settings(monkeypatch) -> None:
     monkeypatch.delenv("BENCHMARK_SUPATEST_PROJECT_ID", raising=False)
-    monkeypatch.setenv("SUPATEST_PROJECT_ID", "aiden")
+    monkeypatch.setenv("SUPATEST_PROJECT_ID", "global-env-should-not-leak")
 
-    assert resolve_supatest_project_id() is None
+    assert resolve_supatest_project_id() == "aiden"
 
     monkeypatch.setenv("BENCHMARK_SUPATEST_PROJECT_ID", "benchmark-project")
 
@@ -127,8 +127,9 @@ def test_benchmark_prompt_frames_real_qa_without_exposing_rubric() -> None:
 
 
 def test_supatest_receives_same_benchmark_prompt(tmp_path, monkeypatch) -> None:
-    monkeypatch.setenv("BENCHMARK_SUPATEST_API_KEY_PLACEHOLDER", "sk_test_dummy")
-    monkeypatch.delenv("BENCHMARK_SUPATEST_PROJECT_ID", raising=False)
+    monkeypatch.setenv("BENCHMARK_SUPATEST_PROJECT_ID", "benchmark-project")
+    monkeypatch.delenv("BENCHMARK_SUPATEST_API_KEY", raising=False)
+    monkeypatch.delenv("SUPATEST_API_KEY", raising=False)
     monkeypatch.delenv("BENCHMARK_SUPATEST_MODEL", raising=False)
     project_dir = tmp_path / "project"
     project_dir.mkdir()
@@ -141,6 +142,8 @@ def test_supatest_receives_same_benchmark_prompt(tmp_path, monkeypatch) -> None:
     assert command[1] == build_prompt(fixture)
     assert "real production QA work" in command[1]
     assert command[command.index("--model") + 1] == "premium"
+    assert command[command.index("--project-id") + 1] == "benchmark-project"
+    assert "--supatest-api-key" not in command
 
 
 def test_resolve_eval_ids_all_uses_every_available_fixture() -> None:
