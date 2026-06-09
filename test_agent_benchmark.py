@@ -24,6 +24,7 @@ from run_benchmark import (
     evaluate_quietly,
     format_score_line,
     maestro_output_has_devices,
+    preflight_judge_model,
     required_live_device_platform,
     write_blocked_result,
     write_summary,
@@ -356,6 +357,38 @@ def test_blocked_score_line_uses_na_score(monkeypatch) -> None:
     assert "n/a blocked" in line
     assert result["scorePercent"] is None
     assert result["scoreSource"] == "preflight"
+
+
+def test_judge_preflight_skips_when_no_google_judge(monkeypatch) -> None:
+    monkeypatch.setattr(run_benchmark, "make_judge_model", lambda: None)
+
+    assert preflight_judge_model() is None
+
+
+def test_judge_preflight_reports_and_redacts_model_errors(monkeypatch) -> None:
+    class BrokenJudge:
+        def generate(self, *_args, **_kwargs):
+            raise RuntimeError("bad key secret-google-key")
+
+    monkeypatch.setenv("GOOGLE_API_KEY", "secret-google-key")
+    monkeypatch.setattr(run_benchmark, "make_judge_model", lambda: BrokenJudge())
+
+    issue = preflight_judge_model()
+
+    assert issue is not None
+    assert "RuntimeError" in issue
+    assert "secret-google-key" not in issue
+    assert "<redacted>" in issue
+
+
+def test_judge_preflight_accepts_valid_response(monkeypatch) -> None:
+    class GoodJudge:
+        def generate(self, *_args, **_kwargs):
+            return SimpleNamespace(ok=True), 0
+
+    monkeypatch.setattr(run_benchmark, "make_judge_model", lambda: GoodJudge())
+
+    assert preflight_judge_model() is None
 
 
 def test_judge_error_is_unscored_not_agent_failure(monkeypatch) -> None:

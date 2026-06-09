@@ -55,7 +55,7 @@ except ImportError:
     )
     raise
 
-load_dotenv(BENCHMARK_ROOT / ".env")
+load_dotenv(BENCHMARK_ROOT / ".env", override=True)
 
 from agents import agent_display_name, agent_model_label, run_agent  # noqa: E402
 from deepeval import evaluate  # noqa: E402
@@ -67,7 +67,9 @@ from deepeval.evaluate.configs import (  # noqa: E402
 )
 from deepeval.test_case import LLMTestCase  # noqa: E402
 from fixtures import copy_project, load_fixture, resolve_eval_ids  # noqa: E402
+from pydantic import BaseModel  # noqa: E402
 from scoring import (
+    make_judge_model,
     make_metric,
     make_test_case,
     result_label,
@@ -92,6 +94,10 @@ class PreflightIssue:
     kind: str
     platform: str
     reason: str
+
+
+class JudgePreflightResponse(BaseModel):
+    ok: bool
 
 
 def main() -> int:
@@ -134,6 +140,15 @@ def main() -> int:
             issue = preflight_fixture(load_fixture(eval_id), device_cache)
             if issue:
                 preflight_issues[eval_id] = issue
+    if not is_dry_run and os.getenv("BENCHMARK_DISABLE_JUDGE_PREFLIGHT") != "1":
+        judge_issue = preflight_judge_model()
+        if judge_issue:
+            print(f"Judge preflight failed: {judge_issue}")
+            print(
+                "Fix GOOGLE_API_KEY / DEEPEVAL_GEMINI_MODEL, or set "
+                "BENCHMARK_DISABLE_JUDGE_PREFLIGHT=1 to bypass this guard."
+            )
+            return 2
 
     jobs = [
         (eval_id, agent, case_ids[eval_id])
@@ -221,6 +236,38 @@ def preflight_fixture(
     if platform not in device_cache:
         device_cache[platform] = preflight_maestro_device(platform)
     return device_cache[platform]
+
+
+def preflight_judge_model() -> str | None:
+    judge_model = make_judge_model()
+    if judge_model is None:
+        return None
+
+    try:
+        response, _ = judge_model.generate(
+            'Return JSON with exactly {"ok": true}.',
+            schema=JudgePreflightResponse,
+        )
+    except Exception as error:
+        return redact_configured_secrets(f"{type(error).__name__}: {error}")
+
+    if not getattr(response, "ok", False):
+        return "Judge model returned an unexpected preflight response."
+    return None
+
+
+def redact_configured_secrets(text: str) -> str:
+    for name in (
+        "GOOGLE_API_KEY",
+        "CONFIDENT_API_KEY",
+        "OPENAI_API_KEY",
+        "SUPATEST_API_KEY",
+        "BENCHMARK_SUPATEST_API_KEY",
+    ):
+        value = os.getenv(name)
+        if value and len(value) >= 6:
+            text = text.replace(value, "<redacted>")
+    return text
 
 
 def required_live_device_platform(fixture) -> str | None:

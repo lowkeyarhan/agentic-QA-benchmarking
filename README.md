@@ -120,6 +120,11 @@ the harness records `blocked` for every agent on that eval instead of scoring it
 as an agent failure. Use `BENCHMARK_DISABLE_PREFLIGHT=1` only when you
 intentionally want to bypass that guard.
 
+The DeepEval judge model is also preflighted before agents run. Keep
+`DEEPEVAL_GEMINI_MODEL` on a Gemini model that supports Google GenAI structured
+output; Gemma agent model names do not belong in that setting. If the judge
+model or API key is invalid, the harness exits before launching any agents.
+
 The default run executes every fixture present under `agent-eval-fixtures/fixtures`:
 
 ```text
