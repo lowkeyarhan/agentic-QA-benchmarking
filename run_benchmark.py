@@ -9,7 +9,7 @@ import sys
 import time
 import traceback
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 BENCHMARK_ROOT = Path(__file__).resolve().parent
@@ -56,6 +56,14 @@ except ImportError:
 load_dotenv(BENCHMARK_ROOT / ".env")
 
 from agents import run_agent  # noqa: E402
+from deepeval import evaluate  # noqa: E402
+from deepeval.evaluate.configs import (  # noqa: E402
+    AsyncConfig,
+    CacheConfig,
+    DisplayConfig,
+    ErrorConfig,
+)
+from deepeval.test_case import LLMTestCase  # noqa: E402
 from fixtures import copy_project, load_fixture, resolve_eval_ids  # noqa: E402
 from scoring import (
     make_metric,
@@ -66,9 +74,15 @@ from scoring import (
 
 # Edit these defaults directly, or override with benchmark/.env.
 DEFAULT_EVAL_IDS = "all"
-DEFAULT_AGENTS = ["supatest", "cursor", "codex"]
+DEFAULT_AGENTS = ["supatest", "cursor", "codex", "gemini"]
 DEFAULT_PARALLELISM = 3
 DEFAULT_AGENT_TIMEOUT_SECONDS = 600
+
+
+@dataclass(frozen=True)
+class PendingResult:
+    result: dict
+    test_case: LLMTestCase | None = None
 
 
 def main() -> int:
@@ -116,7 +130,7 @@ def main() -> int:
         print(f"Results dir: {results_dir}")
         return 0
 
-    results: list[dict] = []
+    pending_results: list[PendingResult] = []
 
     with ThreadPoolExecutor(max_workers=parallelism) as executor:
         futures = {
@@ -130,13 +144,23 @@ def main() -> int:
         for future in as_completed(futures):
             eval_id, agent, case_id = futures[future]
             try:
-                result = future.result()
+                pending_result = future.result()
             except Exception as error:
-                result = write_error_result(run_id, eval_id, agent, case_id, error)
-            results.append(result)
+                pending_result = PendingResult(
+                    write_error_result(run_id, eval_id, agent, case_id, error)
+                )
+            pending_results.append(pending_result)
             print(
-                f"{eval_id:>4} {agent:<9} {result['scorePercent']:>3} {result['result']:<7} {result['durationMs']}ms"
+                f"{eval_id:>4} {agent:<9} finished {pending_result.result['durationMs']}ms"
             )
+
+    results = score_pending_results(run_id, pending_results)
+    print()
+    print("Scores:")
+    for result in order_results(eval_ids, agents, results):
+        print(
+            f"{result['evalId']:>4} {result['agent']:<9} {result['scorePercent']:>3} {result['result']:<7} {result['durationMs']}ms"
+        )
 
     timeout_seconds = int(os.environ["BENCHMARK_TIMEOUT_SECONDS"])
     write_summary(
@@ -151,7 +175,7 @@ def main() -> int:
 
 def run_one_case(
     run_id: str, runs_dir: Path, eval_id: str, agent: str, case_id: str
-) -> dict:
+) -> PendingResult:
     fixture = load_fixture(eval_id)
     case_run_dir = runs_dir / case_id / agent
     case_run_dir.mkdir(parents=True, exist_ok=True)
@@ -162,19 +186,6 @@ def run_one_case(
     project_dir = copy_project(fixture, case_run_dir)
 
     run = run_agent(agent, fixture, project_dir, case_run_dir)
-    if run.timed_out:
-        score = 0.0
-        reason = "Timed out before the agent completed the task."
-        score_source = "timeout"
-    else:
-        test_case = make_test_case(fixture, run)
-        metric = make_metric(fixture)
-        metric.measure(test_case)
-        score = float(metric.score or 0.0)
-        reason = metric.reason
-        score_source = "judge"
-    label = result_label(score, run.timed_out)
-
     result = {
         "runId": run_id,
         "caseId": case_id,
@@ -182,11 +193,6 @@ def run_one_case(
         "evalName": fixture.name,
         "agent": agent,
         "mode": fixture.mode,
-        "score": score,
-        "scorePercent": round(score * 100),
-        "result": label,
-        "reason": reason,
-        "scoreSource": score_source,
         "exitCode": run.exit_code,
         "timedOut": run.timed_out,
         "durationMs": run.duration_ms,
@@ -197,7 +203,101 @@ def run_one_case(
         "failCriteria": fixture.fail_criteria,
     }
 
-    return result
+    return PendingResult(result, make_test_case(fixture, run))
+
+
+def score_pending_results(
+    run_id: str, pending_results: list[PendingResult]
+) -> list[dict]:
+    results = [dict(item.result) for item in pending_results]
+    scoring_jobs = [
+        (index, item.test_case)
+        for index, item in enumerate(pending_results)
+        if item.test_case is not None
+    ]
+    if not scoring_jobs:
+        return results
+
+    test_cases = [test_case for _, test_case in scoring_jobs if test_case is not None]
+    try:
+        evaluation = evaluate(
+            test_cases=test_cases,
+            metrics=[make_metric()],
+            identifier=run_id,
+            hyperparameters=build_deepeval_hyperparameters(results),
+            async_config=AsyncConfig(run_async=False),
+            display_config=DisplayConfig(
+                show_indicator=False,
+                print_results=False,
+                inspect_after_run=False,
+                truncate_passing_cases=False,
+            ),
+            cache_config=CacheConfig(write_cache=False, use_cache=False),
+            error_config=ErrorConfig(ignore_errors=False),
+        )
+    except Exception as error:
+        reason = f"{type(error).__name__}: {error}"
+        for result_index, _ in scoring_jobs:
+            apply_score(results[result_index], 0.0, reason, "judge-error")
+        return results
+
+    scored_result_indexes: set[int] = set()
+    for test_result in evaluation.test_results:
+        if test_result.index is None or test_result.index >= len(scoring_jobs):
+            continue
+        result_index = scoring_jobs[test_result.index][0]
+        scored_result_indexes.add(result_index)
+        metric_data = test_result.metrics_data[0] if test_result.metrics_data else None
+        if metric_data is None:
+            apply_score(
+                results[result_index],
+                0.0,
+                "DeepEval returned no metric data for this case.",
+                "judge-error",
+            )
+            continue
+
+        score = float(metric_data.score or 0.0)
+        reason = metric_data.reason or metric_data.error or ""
+        source = "timeout" if results[result_index].get("timedOut") else "judge"
+        apply_score(results[result_index], score, reason, source)
+
+    for result_index, _ in scoring_jobs:
+        if result_index not in scored_result_indexes:
+            apply_score(
+                results[result_index],
+                0.0,
+                "DeepEval did not return a score for this case.",
+                "judge-error",
+            )
+
+    return results
+
+
+def apply_score(result: dict, score: float, reason: str, score_source: str) -> None:
+    result["score"] = score
+    result["scorePercent"] = round(score * 100)
+    result["result"] = result_label(score, bool(result.get("timedOut")))
+    result["reason"] = reason
+    result["scoreSource"] = score_source
+
+
+def build_deepeval_hyperparameters(results: list[dict]) -> dict:
+    eval_ids = sorted(
+        {str(item.get("evalId")) for item in results if item.get("evalId")}
+    )
+    agents = sorted({str(item.get("agent")) for item in results if item.get("agent")})
+    return {
+        "benchmark_run_id": results[0].get("runId", "") if results else "",
+        "eval_ids": ",".join(eval_ids),
+        "agents": ",".join(agents),
+        "parallelism": int(
+            os.getenv("BENCHMARK_PARALLELISM", str(DEFAULT_PARALLELISM))
+        ),
+        "timeout_seconds": int(
+            os.getenv("BENCHMARK_TIMEOUT_SECONDS", str(DEFAULT_AGENT_TIMEOUT_SECONDS))
+        ),
+    }
 
 
 def write_error_result(
@@ -212,6 +312,7 @@ def write_error_result(
         "scorePercent": 0,
         "result": "fail",
         "reason": f"{type(error).__name__}: {error}",
+        "scoreSource": "harness-error",
         "exitCode": 1,
         "timedOut": False,
         "durationMs": 0,

@@ -1,6 +1,6 @@
 # Agent Benchmark
 
-Portable benchmark harness for comparing Supatest, Cursor Agent, and Codex against copied Supatest eval fixtures.
+Portable benchmark harness for comparing Supatest, Cursor Agent, Codex, and Gemini CLI against copied Supatest eval fixtures.
 
 This folder is intended to be self-contained. You can move `benchmark/` to Desktop or another machine and run it there, as long as the required CLIs are installed and logged in:
 
@@ -8,6 +8,7 @@ This folder is intended to be self-contained. You can move `benchmark/` to Deskt
 supatest
 cursor-agent
 codex
+gemini
 ```
 
 ## Layout
@@ -60,10 +61,33 @@ GOOGLE_API_KEY=...
 BENCHMARK_SUPATEST_PROJECT_ID=...
 ```
 
-If `supatest` is not on your `PATH`, set:
+To benchmark a local compiled Supatest instead of the globally installed
+production package, build it and point the harness at the compiled binary:
 
 ```bash
-BENCHMARK_SUPATEST_BINARY=/opt/homebrew/bin/supatest
+cd /Users/lowkeyarhan/Documents/supatest
+pnpm install
+pnpm -F @supatest/cli build
+```
+
+Then set this in `benchmark/.env`:
+
+```bash
+BENCHMARK_SUPATEST_BINARY=/Users/lowkeyarhan/Documents/supatest/cli/dist/index.js
+```
+
+For Confident AI dashboard uploads, log DeepEval into the benchmark dotenv file:
+
+```bash
+cd /Users/lowkeyarhan/Desktop/benchmark
+.venv/bin/deepeval login --save=dotenv:.env
+```
+
+The command prompts for a Confident AI API key from `https://app.confident-ai.com`.
+After a benchmark run, open the latest combined DeepEval report with:
+
+```bash
+.venv/bin/deepeval view
 ```
 
 ## Run
@@ -82,9 +106,28 @@ The default run executes every fixture present under `agent-eval-fixtures/fixtur
 
 ```text
 Evals: all
-Agents: supatest, cursor, codex
+Agents: supatest, cursor, codex, gemini
 Parallelism: 3
 Timeout: 600s per agent run
+```
+
+The checked-in default agent list is:
+
+```bash
+BENCHMARK_AGENTS=supatest,cursor,codex,gemini
+```
+
+Cursor is pinned to Composer 2.5 Fast by default:
+
+```bash
+BENCHMARK_CURSOR_CMD='cursor-agent --print --force --model composer-2.5-fast {prompt}'
+```
+
+Gemini CLI uses non-interactive mode with workspace trust skipped and tool
+approval enabled:
+
+```bash
+BENCHMARK_GEMINI_CMD='gemini --prompt {prompt} --yolo --skip-trust'
 ```
 
 Use a comma-separated `BENCHMARK_EVAL_IDS` value for a smaller smoke or hard
@@ -125,9 +168,11 @@ result JSON maps each case back to its eval ID.
 
 ## Scoring
 
-Non-timeout runs are scored through the same DeepEval judge path for every
-agent. Before judging, the harness removes agent names, local absolute paths,
-benchmark credentials, spinner noise, and repeated terminal status redraws from
-the evidence. The judge prompt instructs the model to score only against the
-task and fixture pass/fail criteria, not against a specific CLI, product, model,
+Runs are scored through one combined DeepEval evaluation identified by the
+benchmark run ID, so Confident AI can show a single dashboard report containing
+the per-agent/per-eval test cases. Timeouts remain hard failures. Before
+judging, the harness removes agent names, local absolute paths, benchmark
+credentials, spinner noise, and repeated terminal status redraws from the
+evidence. The judge prompt instructs the model to score only against the task
+and fixture pass/fail criteria, not against a specific CLI, product, model,
 company, cost profile, or agent type.

@@ -4,15 +4,18 @@ import json
 import os
 from types import SimpleNamespace
 
+from deepeval.test_case import LLMTestCase
+
 from agents import (
     agent_command_env_name,
     agent_environment,
+    build_command,
     changed_file_excerpt,
     with_local_tool_paths,
 )
 from fixtures import available_eval_ids, load_fixture, resolve_eval_ids
 from run_benchmark import write_summary
-from scoring import cleaned_transcript, make_test_case
+from scoring import cleaned_transcript, make_metric, make_test_case
 
 
 def test_agent_environment_hides_benchmark_and_judge_vars(monkeypatch) -> None:
@@ -44,6 +47,37 @@ def test_local_mobile_tool_paths_are_added_when_present(tmp_path, monkeypatch) -
 def test_agent_command_env_name_supports_future_agent_names() -> None:
     assert agent_command_env_name("qa-pro") == "QA_PRO"
     assert agent_command_env_name("vendor.agent/v2") == "VENDOR_AGENT_V2"
+
+
+def test_gemini_agent_command_uses_configured_template(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv(
+        "BENCHMARK_GEMINI_CMD",
+        "gemini --prompt {prompt} --yolo --skip-trust",
+    )
+    project_dir = tmp_path / "project"
+    project_dir.mkdir()
+
+    command, cwd, use_shell = build_command("gemini", load_fixture("E25"), project_dir)
+
+    assert use_shell is True
+    assert cwd == project_dir
+    assert command.startswith("gemini --prompt ")
+    assert "--yolo --skip-trust" in command
+
+
+def test_cursor_agent_command_can_pin_composer_fast(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv(
+        "BENCHMARK_CURSOR_CMD",
+        "cursor-agent --print --force --model composer-2.5-fast {prompt}",
+    )
+    project_dir = tmp_path / "project"
+    project_dir.mkdir()
+
+    command, cwd, use_shell = build_command("cursor", load_fixture("E25"), project_dir)
+
+    assert use_shell is True
+    assert cwd == project_dir
+    assert "--model composer-2.5-fast" in command
 
 
 def test_resolve_eval_ids_all_uses_every_available_fixture() -> None:
@@ -134,6 +168,21 @@ def test_cleaned_transcript_collapses_terminal_status_redraws() -> None:
     assert len(retained_command_lines) == 1
     assert "suppressed 24 repeated terminal status lines" in cleaned
     assert "Processing" not in cleaned
+
+
+def test_timeout_metric_is_a_hard_failure_without_judge_call() -> None:
+    metric = make_metric()
+    score = metric.measure(
+        LLMTestCase(
+            input="Finish the QA task",
+            actual_output="Exit code: 124\nTimed out: True",
+            expected_output="Pass criteria:\n- Complete the task",
+        )
+    )
+
+    assert score == 0.0
+    assert metric.reason == "Timed out before the agent completed the task."
+    assert metric.is_successful() is False
 
 
 def test_write_summary_emits_only_three_result_files(tmp_path) -> None:

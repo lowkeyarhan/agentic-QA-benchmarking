@@ -215,20 +215,7 @@ def resolve_supatest_project_id() -> str | None:
     )
     if explicit:
         return explicit
-
-    settings_path = BENCHMARK_ROOT / ".supatest" / "settings.json"
-    if not settings_path.exists():
-        return None
-
-    try:
-        import json
-
-        data = json.loads(settings_path.read_text())
-    except json.JSONDecodeError:
-        return None
-
-    value = data.get("projectId")
-    return str(value) if value else None
+    return None
 
 
 def load_supatest_cli_token() -> str | None:
