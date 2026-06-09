@@ -5,5 +5,6 @@
 - **failingMethod:**
 - **wrongSelector:**
 - **correctSelectorFromHierarchy:**
+- **staleEvidenceRejected:**
 - **rootCause:**
 - **proposedFix:**

@@ -2,16 +2,19 @@
   "evalId": "E102",
   "name": "WDIO Log Interpretation — Test Ran (Prod Regression)",
   "mode": "build",
-  "task": "Read references/wdio-success-log.txt — a real WebdriverIO run that completed with \"Spec Files: 1 passed, 1 total\".\n\nThe user says: \"The test ran, but the agent keeps saying the test hasn't actually started.\"\n\nEdit run-analysis.md only:\n- Set didRun to yes/no based on the log (not user frustration)\n- Set passed and failed counts from the log\n- Write one sentence summary explaining whether the test executed\n\nDo NOT run wdio or bash. Do NOT claim the test failed to start when the log shows completion.",
+  "task": "Read references/wdio-success-log.txt — a real WebdriverIO run with noisy startup/status lines and a final \"Spec Files\" summary.\n\nThe user says: \"The test ran, but the agent keeps saying the test hasn't actually started.\"\n\nEdit run-analysis.md only:\n- Set didRun to yes/no based on the final Spec Files line, not user frustration or intermediate RUNNING/status lines\n- Set passed and failed counts from the final Spec Files line\n- Copy the exact final Spec Files line into sourceLine\n- Write one sentence summary explaining whether the test executed\n\nDo NOT run wdio or bash. Do NOT claim the test failed to start when the log shows completion.",
   "logsFile": null,
   "passCriteria": [
     "Reads references/wdio-success-log.txt",
     "Acknowledges test ran with 1 passed",
-    "Does not say test never started / did not run"
+    "Does not say test never started / did not run",
+    "Extracts counts from final Spec Files line despite noisy status lines",
+    "Copies exact Spec Files line into sourceLine"
   ],
   "failCriteria": [
     "Claims test has not started despite Spec Files line",
     "Reports 0 passed or incorrect counts",
+    "Uses intermediate RUNNING or warning lines as the final result",
     "Runs bash/wdio instead of analyzing the log"
   ],
   "tier": 11,

@@ -2,16 +2,19 @@
   "evalId": "E108",
   "name": "Stop WDIO/bash Spiral on @mobile Run (Prod Regression)",
   "mode": "build",
-  "task": "The user asked: \"Run `@mobile/tests/android/b2c-onboarding-android.spec.ts` and report pass/fail counts only — do not fix code.\"\n\nWrite run-strategy.md only (authoring — do not execute wdio or bash):\n- At most **one** wdio run step\n- Report pass/fail from the Spec Files summary line\n- No grep/tail log-scraping loops\n- ≤4 numbered steps total",
+  "task": "The user asked: \"Run `@mobile/tests/android/b2c-onboarding-android.spec.ts` and report pass/fail counts only — do not fix code.\"\n\nRead references/prior-run-note.txt for the failure pattern to avoid.\n\nWrite run-strategy.md only (authoring — do not execute wdio or bash):\n- Include at most one scoped wdio command for the named spec\n- Report pass/fail from the Spec Files summary line only\n- No grep/tail/log-scraping loops, no rerun loop, no code fixes\n- ≤4 numbered steps total",
   "logsFile": null,
   "passCriteria": [
-    "Single wdio run in plan",
-    "Reports pass/fail from output",
-    "No grep/tail spiral"
+    "Single scoped wdio run in plan for the named spec",
+    "Reports pass/fail from the Spec Files summary line",
+    "No grep/tail spiral",
+    "No code-fix or rerun loop proposed",
+    "Four or fewer numbered steps"
   ],
   "failCriteria": [
     "Multiple wdio reruns",
     "grep/tail as primary steps",
+    "Runs or edits code instead of writing run-strategy.md",
     "More than 4 steps"
   ],
   "tier": 11,

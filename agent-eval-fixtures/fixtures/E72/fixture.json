@@ -2,18 +2,21 @@
   "evalId": "E72",
   "name": "Mobile Multi-Element Discovery on Real App Catalog",
   "mode": "build",
-  "task": "On the connected Android emulator there is a shopping app open on its product catalog screen. I'm writing an Appium test. Give me selectors for: (a) the hamburger / menu icon, (b) the cart icon, (c) the sort icon, (d) the first product card, (e) the first product's title text. For each, return one stable selector.",
+  "task": "On the connected Android emulator there is a shopping app open on its product catalog screen. I'm writing an Appium test. Inspect the live device and return a compact table of selectors for: (a) the hamburger / menu icon, (b) the cart icon, (c) the sort icon, (d) the first product card/container, (e) the first product's title text. For each, return one stable Appium-ready selector and the hierarchy evidence you used. Do not create or edit files.",
   "logsFile": null,
   "passCriteria": [
     "Calls mcp__maestro__inspect_view_hierarchy or inspect_screen at least once",
     "Returns 5 distinct selectors (one per requested element)",
     "Selectors include the real resource-ids (menuIV, cartRL or cartIV, sortIV, titleTV) — not fabricated",
-    "No XPath as primary when a resource-id was available in the hierarchy"
+    "No XPath as primary when a resource-id was available in the hierarchy",
+    "Each selector is mapped to the requested element and includes hierarchy evidence",
+    "Does not create files, Maestro YAML, or a test project for a selector-discovery request"
   ],
   "failCriteria": [
     "Skips inspection and guesses generic selectors",
     "Returns fewer than 5 selectors (incomplete coverage)",
-    "Returns 'android.widget.ImageView' or class-name selectors instead of resource-id when resource-ids exist"
+    "Returns 'android.widget.ImageView' or class-name selectors instead of resource-id when resource-ids exist",
+    "Creates files or test code instead of returning the requested selector table"
   ],
   "tier": 11,
   "baseTemplate": "maestro-ios-blank",

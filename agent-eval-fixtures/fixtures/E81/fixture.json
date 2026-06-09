@@ -2,17 +2,20 @@
   "evalId": "E81",
   "name": "Mobile WebView Guidance — Context Switch Recommended",
   "mode": "build",
-  "task": "The SauceLabs MyDemoApp on the booted Android emulator has a WebView screen accessible from the menu (called 'WebView'). Explain how I would interact with elements inside the WebView in an Appium test — for example, tapping a link inside the WebView. What's the right approach?",
+  "task": "The SauceLabs MyDemoApp on the booted Android emulator has a WebView screen accessible from the menu (called 'WebView'). Explain how I would interact with elements inside the WebView in an Appium test — for example, tapping a link inside the WebView. Include the native-to-web context boundary, how to enumerate/switch contexts, what selector types apply before and after the switch, and when to switch back. Do not create files or Maestro YAML.",
   "logsFile": null,
   "passCriteria": [
     "Explains that mcp__maestro__inspect_view_hierarchy / inspect_screen / Maestro doesn't descend into WebView DOM",
     "Recommends Appium's context-switch (e.g. driver.getContexts() / driver.switchContext('WEBVIEW_...'))",
-    "Mentions that web-style selectors (CSS / DOM) work inside WebView context, native selectors outside"
+    "Mentions that web-style selectors (CSS / DOM) work inside WebView context, native selectors outside",
+    "Mentions switching back to native context for native controls after WebView interaction",
+    "Does not create files or Maestro flows for an explanation-only request"
   ],
   "failCriteria": [
     "Claims you can use mcp__maestro__inspect_view_hierarchy / inspect_screen to read WebView DOM",
     "Suggests authoring a Maestro YAML flow for WebView interaction",
-    "Misses the context-switch concept entirely"
+    "Misses the context-switch concept entirely",
+    "Creates test code or project files instead of answering the approach"
   ],
   "tier": 11,
   "baseTemplate": "maestro-ios-blank",

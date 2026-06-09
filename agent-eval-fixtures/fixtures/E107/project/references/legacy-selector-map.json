@@ -1,0 +1,9 @@
+[
+  {
+    "screen": "DocumentUpload",
+    "build": "2026.04.12",
+    "deprecated": true,
+    "a11y": "UploadButton",
+    "note": "Historical selector retained to test stale-evidence handling."
+  }
+]

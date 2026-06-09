@@ -2,16 +2,20 @@
   "evalId": "E107",
   "name": "Non-Destructive Fix — Keep Working Methods (Prod Regression)",
   "mode": "build",
-  "task": "pages/document-upload.screen.ts has working fillShipping(), submitOrder(), and verifyConfirmation().\n\nOnly completeDocumentUpload() is broken — it uses ~UploadButton but references/inspect-upload-screen.json shows a11y SubmitUpload.\n\nFix completeDocumentUpload() ONLY:\n- Use ~SubmitUpload from the inspect JSON\n- Keep fillShipping, submitOrder, verifyConfirmation unchanged\n\nEdit pages/document-upload.screen.ts only. Authoring only.",
+  "task": "pages/document-upload.screen.ts has working fillShipping(), submitOrder(), and verifyConfirmation().\n\nOnly completeDocumentUpload() is broken — it uses ~UploadButton. references/inspect-upload-screen.json is the current hierarchy and shows a11y SubmitUpload. references/legacy-selector-map.json is stale and still mentions UploadButton; do not follow it.\n\nFix completeDocumentUpload() ONLY:\n- Use ~SubmitUpload from the current inspect JSON\n- Keep fillShipping, submitOrder, verifyConfirmation unchanged, including method signatures and timeout values\n- Do not add helper abstractions, imports, sleeps, retries, or broad rewrites\n\nEdit pages/document-upload.screen.ts only. Authoring only.",
   "logsFile": null,
   "passCriteria": [
     "All four methods still present",
     "completeDocumentUpload uses ~SubmitUpload",
-    "No ~UploadButton left"
+    "No ~UploadButton left",
+    "Working method bodies and timeout values are preserved",
+    "No new helper abstractions or unrelated imports"
   ],
   "failCriteria": [
     "Removed working methods while fixing upload",
     "Still uses ~UploadButton",
+    "Uses legacy-selector-map.json as current truth",
+    "Changes fillShipping, submitOrder, or verifyConfirmation",
     "Rewrote entire file / deleted unrelated code"
   ],
   "tier": 11,

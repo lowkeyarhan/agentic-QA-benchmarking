@@ -2,17 +2,19 @@
   "evalId": "E105",
   "name": "Root Cause Diagnosis — completeDocumentUploadScreen (Prod Regression)",
   "mode": "build",
-  "task": "Read references/wdio-failure.log and references/inspect-upload-screen.json.\n\nThe test fails in completeDocumentUpload() with ~UploadButton. The user has been debugging for a day with no root cause.\n\nEdit root-cause.md only:\n- Identify failing method and wrong selector from the log\n- Identify correct selector from inspect JSON (SubmitUpload)\n- Explain root cause in one sentence\n- Propose a one-line selector fix\n\nDo NOT suggest grep/tail/rerun loops. Do NOT run bash or wdio.",
+  "task": "Read references/wdio-failure.log, references/inspect-upload-screen.json, and references/legacy-selector-map.json.\n\nThe test fails in completeDocumentUpload() with ~UploadButton. The user has been debugging for a day with no root cause. The legacy selector map is from an older build and is included as a stale-source trap; do not treat it as current hierarchy truth.\n\nEdit root-cause.md only:\n- Identify failing method and wrong selector from the log\n- Identify correct current selector from inspect JSON (SubmitUpload)\n- Explicitly reject the stale legacy UploadButton evidence\n- Explain root cause in one sentence\n- Propose a one-line selector fix\n\nDo NOT suggest grep/tail/rerun loops. Do NOT run bash or wdio.",
   "logsFile": null,
   "passCriteria": [
     "Names ~UploadButton as wrong selector",
     "Cites SubmitUpload from inspect JSON",
     "Identifies completeDocumentUpload failure",
+    "Rejects legacy-selector-map.json as stale evidence instead of following it",
     "No grep/rerun loop as primary fix"
   ],
   "failCriteria": [
     "Vague root cause without hierarchy evidence",
     "Suggests log-grep debug spiral",
+    "Treats legacy UploadButton as the correct fix",
     "Wrong selector left unmentioned"
   ],
   "tier": 11,

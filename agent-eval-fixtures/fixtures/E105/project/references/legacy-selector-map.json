@@ -1,0 +1,15 @@
+[
+  {
+    "screen": "DocumentUpload",
+    "build": "2026.04.12",
+    "deprecated": true,
+    "a11y": "UploadButton",
+    "note": "Old upload CTA before the May accessibility refresh."
+  },
+  {
+    "screen": "DocumentUpload",
+    "build": "2026.04.12",
+    "deprecated": true,
+    "a11y": "CancelUpload"
+  }
+]

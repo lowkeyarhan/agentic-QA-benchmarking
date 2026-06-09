@@ -5,4 +5,5 @@
 - **didRun:**
 - **passed:**
 - **failed:**
+- **sourceLine:**
 - **summary:**
