@@ -1,0 +1,76 @@
+[
+  {
+    "element_num": 1,
+    "depth": 0,
+    "bounds": "[0,0][1080,1920]",
+    "class": "android.widget.FrameLayout",
+    "resource-id": "android:id/content"
+  },
+  {
+    "element_num": 8,
+    "depth": 4,
+    "bounds": "[24,48][96,120]",
+    "class": "android.widget.ImageView",
+    "resource-id": "com.saucelabs.mydemoapp.android:id/menuIV",
+    "content-desc": "Open navigation menu"
+  },
+  {
+    "element_num": 9,
+    "depth": 4,
+    "bounds": "[856,48][928,120]",
+    "class": "android.widget.ImageView",
+    "resource-id": "com.saucelabs.mydemoapp.android:id/sortIV",
+    "content-desc": "Sort products"
+  },
+  {
+    "element_num": 10,
+    "depth": 4,
+    "bounds": "[960,48][1032,120]",
+    "class": "android.widget.ImageView",
+    "resource-id": "com.saucelabs.mydemoapp.android:id/cartIV",
+    "content-desc": "Cart"
+  },
+  {
+    "element_num": 18,
+    "depth": 3,
+    "bounds": "[0,160][1080,1920]",
+    "class": "androidx.recyclerview.widget.RecyclerView",
+    "resource-id": "com.saucelabs.mydemoapp.android:id/productRV"
+  },
+  {
+    "element_num": 23,
+    "depth": 5,
+    "bounds": "[24,184][520,704]",
+    "class": "android.view.ViewGroup",
+    "resource-id": "com.saucelabs.mydemoapp.android:id/productCL",
+    "content-desc": "Product card: Sauce Labs Backpack",
+    "indexWithinParent": 0
+  },
+  {
+    "element_num": 24,
+    "depth": 6,
+    "bounds": "[56,552][488,596]",
+    "class": "android.widget.TextView",
+    "resource-id": "com.saucelabs.mydemoapp.android:id/titleTV",
+    "text": "Sauce Labs Backpack",
+    "parent": 23
+  },
+  {
+    "element_num": 31,
+    "depth": 5,
+    "bounds": "[560,184][1056,704]",
+    "class": "android.view.ViewGroup",
+    "resource-id": "com.saucelabs.mydemoapp.android:id/productCL",
+    "content-desc": "Product card: Sauce Labs Bike Light",
+    "indexWithinParent": 1
+  },
+  {
+    "element_num": 32,
+    "depth": 6,
+    "bounds": "[592,552][1024,596]",
+    "class": "android.widget.TextView",
+    "resource-id": "com.saucelabs.mydemoapp.android:id/titleTV",
+    "text": "Sauce Labs Bike Light",
+    "parent": 31
+  }
+]

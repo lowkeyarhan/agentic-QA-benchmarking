@@ -18,7 +18,16 @@ from agents import (
     with_local_tool_paths,
 )
 from fixtures import available_eval_ids, load_fixture, resolve_eval_ids
-from run_benchmark import format_score_line, write_summary
+import run_benchmark
+from run_benchmark import (
+    PreflightIssue,
+    evaluate_quietly,
+    format_score_line,
+    maestro_output_has_devices,
+    required_live_device_platform,
+    write_blocked_result,
+    write_summary,
+)
 from scoring import cleaned_transcript, make_metric, make_test_case
 
 
@@ -310,3 +319,91 @@ def test_score_line_matches_terminal_scoreboard_shape(monkeypatch) -> None:
     assert "finished" not in line
     assert "exit=" not in line
     assert "pending" not in line
+
+
+def test_blocked_score_line_uses_na_score(monkeypatch) -> None:
+    monkeypatch.setenv("BENCHMARK_SUPATEST_MODEL", "premium")
+    result = write_blocked_result(
+        "verify",
+        load_fixture("E72"),
+        "supatest",
+        "case-002",
+        PreflightIssue(
+            kind="missing-device",
+            platform="android",
+            reason="No local android device is visible to Maestro.",
+        ),
+    )
+
+    line = format_score_line(result)
+
+    assert "E72 supatest [premium]" in line
+    assert "n/a blocked" in line
+    assert result["scorePercent"] is None
+    assert result["scoreSource"] == "preflight"
+
+
+def test_live_device_preflight_only_targets_selected_live_inspection_evals() -> None:
+    assert required_live_device_platform(load_fixture("E72")) is None
+    assert required_live_device_platform(load_fixture("E71")) is None
+    assert required_live_device_platform(load_fixture("E81")) is None
+    assert required_live_device_platform(load_fixture("E103")) is None
+
+
+def test_live_device_preflight_still_detects_future_live_inspection_eval() -> None:
+    fixture = SimpleNamespace(
+        task="Inspect the live Android emulator before answering.",
+        pass_criteria=["Calls mcp__maestro__inspect_view_hierarchy at least once"],
+        fail_criteria=[],
+    )
+
+    assert required_live_device_platform(fixture) == "android"
+
+
+def test_maestro_device_output_parser() -> None:
+    assert maestro_output_has_devices(
+        """
+Local Devices
+────────────────
+Android
+  Pixel_8_API_35   emulator-5554
+""",
+        "android",
+    )
+    assert not maestro_output_has_devices(
+        """
+Local Devices
+────────────────
+No devices found
+""",
+        "android",
+    )
+
+
+def test_deepeval_console_output_is_suppressed_by_default(monkeypatch, capsys) -> None:
+    def noisy_evaluate(**_kwargs):
+        print("deepeval banner")
+        return "ok"
+
+    monkeypatch.delenv("BENCHMARK_DEEPEVAL_VERBOSE", raising=False)
+    monkeypatch.setattr(run_benchmark, "evaluate", noisy_evaluate)
+
+    assert evaluate_quietly(test_cases=[], metrics=[]) == "ok"
+
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == ""
+
+
+def test_deepeval_console_output_can_be_enabled(monkeypatch, capsys) -> None:
+    def noisy_evaluate(**_kwargs):
+        print("deepeval banner")
+        return "ok"
+
+    monkeypatch.setenv("BENCHMARK_DEEPEVAL_VERBOSE", "1")
+    monkeypatch.setattr(run_benchmark, "evaluate", noisy_evaluate)
+
+    assert evaluate_quietly(test_cases=[], metrics=[]) == "ok"
+
+    captured = capsys.readouterr()
+    assert "deepeval banner" in captured.out

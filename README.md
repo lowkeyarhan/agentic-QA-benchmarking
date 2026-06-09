@@ -114,6 +114,12 @@ Dry run:
 ./run_benchmark.py --dry-run
 ```
 
+Live-device evals are preflighted before agents run. If an eval requires
+runtime Maestro inspection and the matching Android/iOS device is not visible,
+the harness records `blocked` for every agent on that eval instead of scoring it
+as an agent failure. Use `BENCHMARK_DISABLE_PREFLIGHT=1` only when you
+intentionally want to bypass that guard.
+
 The default run executes every fixture present under `agent-eval-fixtures/fixtures`:
 
 ```text

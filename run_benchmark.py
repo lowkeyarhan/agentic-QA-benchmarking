@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import contextlib
+import io
 import json
 import os
 import shutil
@@ -85,6 +87,13 @@ class PendingResult:
     test_case: LLMTestCase | None = None
 
 
+@dataclass(frozen=True)
+class PreflightIssue:
+    kind: str
+    platform: str
+    reason: str
+
+
 def main() -> int:
     run_id = os.getenv("BENCHMARK_RUN_ID", time.strftime("%Y%m%d-%H%M%S"))
     eval_ids = resolve_eval_ids(os.getenv("BENCHMARK_EVAL_IDS", DEFAULT_EVAL_IDS))
@@ -118,12 +127,27 @@ def main() -> int:
     case_ids = {
         eval_id: f"case-{index + 1:03d}" for index, eval_id in enumerate(eval_ids)
     }
+    preflight_issues: dict[str, PreflightIssue] = {}
+    if not is_dry_run and os.getenv("BENCHMARK_DISABLE_PREFLIGHT") != "1":
+        device_cache: dict[str, PreflightIssue | None] = {}
+        for eval_id in eval_ids:
+            issue = preflight_fixture(load_fixture(eval_id), device_cache)
+            if issue:
+                preflight_issues[eval_id] = issue
+
     jobs = [
-        (eval_id, agent, case_ids[eval_id]) for eval_id in eval_ids for agent in agents
+        (eval_id, agent, case_ids[eval_id])
+        for eval_id in eval_ids
+        for agent in agents
+        if eval_id not in preflight_issues
     ]
     if is_dry_run:
         print("Cases:")
-        for eval_id, agent, case_id in jobs:
+        for eval_id, agent, case_id in [
+            (eval_id, agent, case_ids[eval_id])
+            for eval_id in eval_ids
+            for agent in agents
+        ]:
             print(f"  {case_id} / {agent_display_name(agent)} ({eval_id})")
         print()
         print(f"Runs dir: {runs_dir}")
@@ -131,6 +155,18 @@ def main() -> int:
         return 0
 
     results: list[dict] = []
+    for eval_id, issue in preflight_issues.items():
+        fixture = load_fixture(eval_id)
+        for agent in agents:
+            result = write_blocked_result(
+                run_id,
+                fixture,
+                agent,
+                case_ids[eval_id],
+                issue,
+            )
+            results.append(result)
+            print(format_score_line(result))
 
     with ThreadPoolExecutor(max_workers=parallelism) as executor:
         futures = {
@@ -172,6 +208,118 @@ def main() -> int:
     print(f"Summary: {results_dir / 'scores.md'}")
     print(f"Combined JSON: {results_dir / 'run.json'}")
     return 0
+
+
+def preflight_fixture(
+    fixture, device_cache: dict[str, PreflightIssue | None]
+) -> PreflightIssue | None:
+    platform = required_live_device_platform(fixture)
+    if not platform:
+        return None
+
+    if platform not in device_cache:
+        device_cache[platform] = preflight_maestro_device(platform)
+    return device_cache[platform]
+
+
+def required_live_device_platform(fixture) -> str | None:
+    text = "\n".join(
+        [
+            fixture.task,
+            "\n".join(fixture.pass_criteria),
+            "\n".join(fixture.fail_criteria),
+        ]
+    ).lower()
+
+    if "authoring only" in text or "do not inspect a live device" in text:
+        return None
+
+    requires_actual_inspection = (
+        "calls mcp__maestro__inspect_view_hierarchy" in text
+        or "calls mcp__maestro__inspect_screen" in text
+        or "inspect the live device" in text
+    )
+    if not requires_actual_inspection:
+        return None
+
+    if "android" in text or "emulator" in text:
+        return "android"
+    if "ios" in text or "simulator" in text:
+        return "ios"
+    return None
+
+
+def preflight_maestro_device(platform: str) -> PreflightIssue | None:
+    maestro = shutil.which("maestro")
+    local_maestro = Path.home() / ".maestro" / "bin" / "maestro"
+    if not maestro and local_maestro.exists():
+        maestro = str(local_maestro)
+    if not maestro:
+        return PreflightIssue(
+            kind="missing-maestro",
+            platform=platform,
+            reason="Maestro CLI was not found on PATH or at ~/.maestro/bin/maestro.",
+        )
+
+    try:
+        completed = subprocess.run(
+            [maestro, "--no-ansi", "list-devices", "--platform", platform],
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            timeout=30,
+            env={**os.environ, "MAESTRO_CLI_NO_ANALYTICS": "true"},
+        )
+    except subprocess.TimeoutExpired:
+        return PreflightIssue(
+            kind="maestro-timeout",
+            platform=platform,
+            reason=f"Timed out while listing {platform} devices with Maestro.",
+        )
+    except OSError as error:
+        return PreflightIssue(
+            kind="maestro-error",
+            platform=platform,
+            reason=f"Failed to list {platform} devices with Maestro: {error}",
+        )
+
+    output = completed.stdout or ""
+    if completed.returncode != 0:
+        return PreflightIssue(
+            kind="maestro-error",
+            platform=platform,
+            reason=(
+                f"Maestro list-devices --platform {platform} exited "
+                f"{completed.returncode}: {compact_output(output)}"
+            ),
+        )
+    if not maestro_output_has_devices(output, platform):
+        return PreflightIssue(
+            kind="missing-device",
+            platform=platform,
+            reason=f"No local {platform} device is visible to Maestro.",
+        )
+    return None
+
+
+def maestro_output_has_devices(output: str, platform: str) -> bool:
+    platform_headings = {"android", "ios", "web"}
+    for raw_line in output.splitlines():
+        if not raw_line.startswith("  "):
+            continue
+        stripped = raw_line.strip()
+        if not stripped or stripped.lower() in platform_headings:
+            continue
+        if stripped.lower() == "no devices found":
+            return False
+        return True
+    return False
+
+
+def compact_output(output: str, max_chars: int = 500) -> str:
+    lines = [line.strip() for line in output.splitlines() if line.strip()]
+    text = " ".join(lines)
+    return text[:max_chars] if text else "no output"
 
 
 def run_one_case(
@@ -224,7 +372,7 @@ def score_pending_results(
 
     test_cases = [test_case for _, test_case in scoring_jobs if test_case is not None]
     try:
-        evaluation = evaluate(
+        evaluation = evaluate_quietly(
             test_cases=test_cases,
             metrics=[make_metric()],
             identifier=run_id,
@@ -282,6 +430,16 @@ def score_pending_results(
     return results
 
 
+def evaluate_quietly(**kwargs):
+    if os.getenv("BENCHMARK_DEEPEVAL_VERBOSE") == "1":
+        return evaluate(**kwargs)
+
+    stdout = io.StringIO()
+    stderr = io.StringIO()
+    with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+        return evaluate(**kwargs)
+
+
 def apply_score(result: dict, score: float, reason: str, score_source: str) -> None:
     result["score"] = score
     result["scorePercent"] = round(score * 100)
@@ -337,6 +495,41 @@ def write_error_result(
     }
 
 
+def write_blocked_result(
+    run_id: str,
+    fixture,
+    agent: str,
+    case_id: str,
+    issue: PreflightIssue,
+) -> dict:
+    return {
+        "runId": run_id,
+        "caseId": case_id,
+        "evalId": fixture.eval_id,
+        "evalName": fixture.name,
+        "agent": agent,
+        "mode": fixture.mode,
+        "score": None,
+        "scorePercent": None,
+        "result": "blocked",
+        "reason": issue.reason,
+        "scoreSource": "preflight",
+        "preflight": {
+            "kind": issue.kind,
+            "platform": issue.platform,
+            "reason": issue.reason,
+        },
+        "exitCode": None,
+        "timedOut": False,
+        "durationMs": 0,
+        "projectDir": None,
+        "transcriptPath": None,
+        "changedFiles": [],
+        "passCriteria": fixture.pass_criteria,
+        "failCriteria": fixture.fail_criteria,
+    }
+
+
 def write_summary(
     results_dir: Path,
     run_id: str,
@@ -360,23 +553,26 @@ def write_summary(
         lines.append("| " + " | ".join(cells) + " |")
 
     lines.append("")
-    lines.append("| Agent | Average | Pass | Partial | Fail |")
-    lines.append("| --- | ---: | ---: | ---: | ---: |")
+    lines.append("| Agent | Average | Scored | Pass | Partial | Fail | Blocked |")
+    lines.append("| --- | ---: | ---: | ---: | ---: | ---: | ---: |")
     for agent in agents:
         agent_results = [item for item in results if item["agent"] == agent]
-        if agent_results:
+        scored_results = scored_only(agent_results)
+        if scored_results:
             average = round(
-                sum(item["scorePercent"] for item in agent_results)
-                / len(agent_results),
+                sum(item["scorePercent"] for item in scored_results)
+                / len(scored_results),
                 1,
             )
         else:
-            average = 0
+            average = "n/a"
         pass_count = sum(1 for item in agent_results if item["result"] == "pass")
         partial_count = sum(1 for item in agent_results if item["result"] == "partial")
         fail_count = sum(1 for item in agent_results if item["result"] == "fail")
+        blocked_count = sum(1 for item in agent_results if item["result"] == "blocked")
         lines.append(
-            f"| {agent_display_name(agent)} | {average} | {pass_count} | {partial_count} | {fail_count} |"
+            f"| {agent_display_name(agent)} | {average} | {len(scored_results)} | "
+            f"{pass_count} | {partial_count} | {fail_count} | {blocked_count} |"
         )
 
     (results_dir / "scores.md").write_text("\n".join(lines) + "\n")
@@ -462,17 +658,24 @@ def build_runs_by_eval(
 
 def summarize_group(results: list[dict]) -> dict:
     total = len(results)
+    scored_results = scored_only(results)
     average = (
-        round(sum(item.get("scorePercent", 0) for item in results) / total, 1)
-        if total
-        else 0
+        round(
+            sum(item.get("scorePercent", 0) for item in scored_results)
+            / len(scored_results),
+            1,
+        )
+        if scored_results
+        else None
     )
     return {
         "total": total,
+        "scored": len(scored_results),
         "averageScorePercent": average,
         "pass": sum(1 for item in results if item.get("result") == "pass"),
         "partial": sum(1 for item in results if item.get("result") == "partial"),
         "fail": sum(1 for item in results if item.get("result") == "fail"),
+        "blocked": sum(1 for item in results if item.get("result") == "blocked"),
         "timedOut": sum(1 for item in results if item.get("timedOut")),
         "durationMs": sum(item.get("durationMs", 0) for item in results),
     }
@@ -487,21 +690,34 @@ def summarize_result(result: dict | None) -> dict | None:
         "durationMs": result.get("durationMs"),
         "timedOut": result.get("timedOut"),
         "exitCode": result.get("exitCode"),
+        "scoreSource": result.get("scoreSource"),
     }
 
 
 def format_cell(result: dict | None) -> str:
     if not result:
         return "-"
+    if result.get("result") == "blocked":
+        return "blocked"
     return f"{result['scorePercent']} {result['result']}"
 
 
 def format_score_line(result: dict) -> str:
+    score = result.get("scorePercent")
+    score_text = "n/a" if score is None else f"{score:>3}"
     return (
         f"{result['evalId']:>4} {agent_display_name(result['agent']):<32} "
-        f"{result['scorePercent']:>3} {result['result']:<7} "
+        f"{score_text:>3} {result['result']:<7} "
         f"{result['durationMs']}ms"
     )
+
+
+def scored_only(results: list[dict]) -> list[dict]:
+    return [
+        item
+        for item in results
+        if item.get("result") != "blocked" and item.get("scorePercent") is not None
+    ]
 
 
 def csv_env(name: str, default: list[str]) -> list[str]:

@@ -1,0 +1,8 @@
+element_num,depth,bounds,attributes,parent_num
+1,0,"[0,0][393,852]","type=XCUIElementTypeApplication; bundleId=com.apple.Preferences",0
+8,2,"[0,96][393,852]","type=XCUIElementTypeTable; name=Settings",1
+21,3,"[16,206][377,262]","type=XCUIElementTypeCell; accessibilityText=Wi-Fi; resource-id=com.apple.settings.wifi; enabled=true",8
+24,3,"[16,264][377,320]","type=XCUIElementTypeCell; accessibilityText=Bluetooth; resource-id=com.apple.settings.bluetooth; enabled=true",8
+31,3,"[16,380][377,436]","type=XCUIElementTypeCell; accessibilityText=General; resource-id=com.apple.settings.general; enabled=true",8
+32,4,"[72,397][180,419]","type=XCUIElementTypeStaticText; accessibilityText=General; parentLabel=General",31
+39,3,"[16,438][377,494]","type=XCUIElementTypeCell; accessibilityText=Accessibility; resource-id=com.apple.settings.accessibility; enabled=true",8
