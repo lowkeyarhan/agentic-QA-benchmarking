@@ -149,9 +149,6 @@ def build_command(
             max_iterations,
         ]
 
-        # Headless Supatest checks for an API key before it loads the local login token.
-        # A placeholder is enough for locally logged-in CLIs because the token is loaded
-        # immediately afterwards by Supatest itself.
         api_key = os.getenv("BENCHMARK_SUPATEST_API_KEY") or os.getenv(
             "SUPATEST_API_KEY"
         )

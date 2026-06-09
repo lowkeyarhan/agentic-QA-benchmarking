@@ -18,7 +18,7 @@ from agents import (
     with_local_tool_paths,
 )
 from fixtures import available_eval_ids, load_fixture, resolve_eval_ids
-from run_benchmark import write_summary
+from run_benchmark import format_score_line, write_summary
 from scoring import cleaned_transcript, make_metric, make_test_case
 
 
@@ -288,3 +288,25 @@ def test_write_summary_emits_only_three_result_files(tmp_path) -> None:
     assert summary["agentModels"]["supatest"] == "premium"
     assert summary["summary"]["byAgent"]["supatest"]["pass"] == 1
     assert run["runsByEval"]["E25"]["supatest"]["caseId"] == "case-001"
+
+
+def test_score_line_matches_terminal_scoreboard_shape(monkeypatch) -> None:
+    monkeypatch.setenv(
+        "BENCHMARK_CURSOR_CMD",
+        "cursor-agent --print --force --model auto {prompt}",
+    )
+
+    line = format_score_line(
+        {
+            "evalId": "E1",
+            "agent": "cursor",
+            "scorePercent": 100,
+            "result": "pass",
+            "durationMs": 35790,
+        }
+    )
+
+    assert line == "  E1 cursor [auto]                    100 pass    35790ms"
+    assert "finished" not in line
+    assert "exit=" not in line
+    assert "pending" not in line

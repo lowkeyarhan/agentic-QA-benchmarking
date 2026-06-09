@@ -157,19 +157,11 @@ def main() -> int:
                 run_agents=agents,
             )[0]
             results.append(result)
-            print(
-                f"{eval_id:>4} {agent_display_name(agent):<32} finished "
-                f"exit={result['exitCode']} {result['scorePercent']:>3} "
-                f"{result['result']:<7} {result['durationMs']}ms"
-            )
+            print(format_score_line(result))
     print()
     print("Scores:")
     for result in order_results(eval_ids, agents, results):
-        print(
-            f"{result['evalId']:>4} {agent_display_name(result['agent']):<32} "
-            f"{result['scorePercent']:>3} {result['result']:<7} "
-            f"{result['durationMs']}ms"
-        )
+        print(format_score_line(result))
 
     timeout_seconds = int(os.environ["BENCHMARK_TIMEOUT_SECONDS"])
     write_summary(
@@ -502,6 +494,14 @@ def format_cell(result: dict | None) -> str:
     if not result:
         return "-"
     return f"{result['scorePercent']} {result['result']}"
+
+
+def format_score_line(result: dict) -> str:
+    return (
+        f"{result['evalId']:>4} {agent_display_name(result['agent']):<32} "
+        f"{result['scorePercent']:>3} {result['result']:<7} "
+        f"{result['durationMs']}ms"
+    )
 
 
 def csv_env(name: str, default: list[str]) -> list[str]:
