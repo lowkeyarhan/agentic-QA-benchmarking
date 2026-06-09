@@ -1,0 +1,11 @@
+[
+  {
+    "b": "[24,520][390,568]",
+    "a11y": "UploadDocumentButton",
+    "note": "Label seen in iOS 18.5 beta 2 build (June 2026). The production build still uses SubmitUpload."
+  },
+  {
+    "b": "[24,580][390,628]",
+    "a11y": "CancelUpload"
+  }
+]

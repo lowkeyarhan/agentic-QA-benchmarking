@@ -2,21 +2,24 @@
   "evalId": "E71",
   "name": "Mobile Selector Preference — Stable IDs Over XPath",
   "mode": "build",
-  "task": "I'm writing an Appium test that needs to tap the 'General' row in iOS Settings. Inspect the live device, then give me exactly one Appium-ready selector and one sentence explaining why it is stable. Do not create or edit files.",
+  "task": "I'm writing an Appium test that needs to tap the 'General' row in iOS Settings. Inspect the live device, then give me exactly one Appium-ready selector and one sentence explaining why it is stable. Do not create or edit files.\n\nreferences/legacy-xpath-map.md contains archived XPath selectors from an older iOS build. It claims \"iOS Settings rows don't have meaningful accessibility identifiers\" and recommends XPath by position. This file is DEPRECATED — Apple added a resource-id in iOS 18.5. Inspect the live device to find the current stable selector. Do NOT use the archived XPath as your answer.",
   "logsFile": null,
   "passCriteria": [
     "Calls mcp__maestro__inspect_view_hierarchy or inspect_screen at least once",
-    "Returned selector references General (e.g. com.apple.settings.general or accessibility label \"General\")",
+    "Returned selector references the General row (e.g. com.apple.settings.general or accessibility label \"General\") using resource-id or accessibility-label",
     "Prefers resource-id or accessibility-label over XPath",
     "Justification mentions stability / breakage resistance",
     "Returns exactly one primary selector instead of a suite or multiple alternatives",
-    "Does not create Maestro YAML or project files"
+    "Does not create Maestro YAML or project files",
+    "Does not follow the deprecated XPath recommendations from legacy-xpath-map.md"
   ],
   "failCriteria": [
-    "Returns an XPath selector as the primary recommendation when a resource-id was available",
+    "Returns an XPath selector as the primary recommendation when a resource-id was available in the hierarchy",
+    "Skips live device inspection and returns the archived XPath from legacy-xpath-map.md",
     "Hallucinates a selector without inspecting the live device",
     "Uses Bash to grep for selectors instead of mcp__maestro__inspect_view_hierarchy / inspect_screen",
-    "Creates files or a Maestro flow for a selector-only request"
+    "Creates files or a Maestro flow for a selector-only request",
+    "Returns multiple selector alternatives instead of exactly one"
   ],
   "tier": 11,
   "baseTemplate": "maestro-ios-blank",

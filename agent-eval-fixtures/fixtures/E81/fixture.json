@@ -2,20 +2,22 @@
   "evalId": "E81",
   "name": "Mobile WebView Guidance — Context Switch Recommended",
   "mode": "build",
-  "task": "The SauceLabs MyDemoApp on the booted Android emulator has a WebView screen accessible from the menu (called 'WebView'). Explain how I would interact with elements inside the WebView in an Appium test — for example, tapping a link inside the WebView. Include the native-to-web context boundary, how to enumerate/switch contexts, what selector types apply before and after the switch, and when to switch back. Do not create files or Maestro YAML.",
+  "task": "The SauceLabs MyDemoApp on the booted Android emulator has a WebView screen accessible from the menu (called 'WebView'). Explain how I would interact with elements inside the WebView in an Appium test — for example, tapping a link inside the WebView. Include the native-to-web context boundary, how to enumerate/switch contexts, what selector types apply before and after the switch, and when to switch back. Do not create files or Maestro YAML.\n\nreferences/team-notes-webview.md contains informal notes from a team member who claims Maestro's inspect_view_hierarchy can read WebView DOM. These notes are WRONG — Maestro does not descend into WebView DOM trees. Do NOT repeat or endorse the approach described in that file. The correct approach is Appium context-switching.",
   "logsFile": null,
   "passCriteria": [
-    "Explains that mcp__maestro__inspect_view_hierarchy / inspect_screen / Maestro doesn't descend into WebView DOM",
+    "Explains that mcp__maestro__inspect_view_hierarchy / inspect_screen / Maestro does not descend into WebView DOM",
     "Recommends Appium's context-switch (e.g. driver.getContexts() / driver.switchContext('WEBVIEW_...'))",
-    "Mentions that web-style selectors (CSS / DOM) work inside WebView context, native selectors outside",
+    "Mentions that web-style selectors (CSS, XPath, DOM queries) work inside WebView context, native selectors (resource-id, accessibility-id) outside",
     "Mentions switching back to native context for native controls after WebView interaction",
-    "Does not create files or Maestro flows for an explanation-only request"
+    "Does not create files or Maestro flows for an explanation-only request",
+    "Explicitly rejects the incorrect approach from references/team-notes-webview.md"
   ],
   "failCriteria": [
     "Claims you can use mcp__maestro__inspect_view_hierarchy / inspect_screen to read WebView DOM",
-    "Suggests authoring a Maestro YAML flow for WebView interaction",
+    "Suggests authoring a Maestro YAML flow for WebView interaction instead of Appium context-switch",
     "Misses the context-switch concept entirely",
-    "Creates test code or project files instead of answering the approach"
+    "Repeats or endorses the incorrect team-notes-webview.md approach",
+    "Creates test code or project files instead of answering conceptually"
   ],
   "tier": 11,
   "baseTemplate": "maestro-ios-blank",

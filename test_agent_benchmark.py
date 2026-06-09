@@ -10,6 +10,7 @@ from agents import (
     agent_command_env_name,
     agent_environment,
     build_command,
+    build_prompt,
     changed_file_excerpt,
     resolve_supatest_project_id,
     with_local_tool_paths,
@@ -92,6 +93,35 @@ def test_supatest_project_id_must_be_explicit(monkeypatch) -> None:
     monkeypatch.setenv("BENCHMARK_SUPATEST_PROJECT_ID", "benchmark-project")
 
     assert resolve_supatest_project_id() == "benchmark-project"
+
+
+def test_benchmark_prompt_frames_real_qa_without_exposing_rubric() -> None:
+    fixture = load_fixture("E25")
+
+    prompt = build_prompt(fixture)
+
+    assert "real production QA work" in prompt
+    assert "User request:" in prompt
+    assert fixture.task in prompt
+    assert "passCriteria" not in prompt
+    assert "failCriteria" not in prompt
+
+
+def test_supatest_receives_same_benchmark_prompt(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("BENCHMARK_SUPATEST_API_KEY_PLACEHOLDER", "sk_test_dummy")
+    monkeypatch.delenv("BENCHMARK_SUPATEST_PROJECT_ID", raising=False)
+    monkeypatch.delenv("BENCHMARK_SUPATEST_MODEL", raising=False)
+    project_dir = tmp_path / "project"
+    project_dir.mkdir()
+    fixture = load_fixture("E25")
+
+    command, cwd, use_shell = build_command("supatest", fixture, project_dir)
+
+    assert use_shell is False
+    assert cwd == project_dir
+    assert command[1] == build_prompt(fixture)
+    assert "real production QA work" in command[1]
+    assert command[command.index("--model") + 1] == "premium"
 
 
 def test_resolve_eval_ids_all_uses_every_available_fixture() -> None:

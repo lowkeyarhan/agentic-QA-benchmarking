@@ -27,6 +27,16 @@ SKIP_DIRS = {
     ".turbo",
 }
 
+QA_AGENT_CONTEXT = [
+    "Context: You are working in a copied customer project as a QA engineer.",
+    "Treat the request like real production QA work: inspect the relevant files, logs, references, and live device or browser state before changing code or answering.",
+    "Keep scope tight: honor file and command restrictions in the user request, and do not create files for selector-only or explanation-only tasks.",
+    "Prefer minimal, maintainable changes. Preserve working code, helpers, assertions, timeouts, and configuration unless the request clearly requires changing them.",
+    "For mobile work, prefer current hierarchy or device evidence over stale notes, old logs, broad XPath/class selectors, or guessed selectors.",
+    "When verification is appropriate, run the smallest relevant command. When the request says authoring-only or do not run commands, do not run commands.",
+    "Report blockers and uncertainty explicitly instead of inventing results.",
+]
+
 
 @dataclass(frozen=True)
 class AgentRunResult:
@@ -123,13 +133,16 @@ def build_command(
             )
 
         max_iterations = os.getenv("BENCHMARK_MAX_ITERATIONS", "75")
+        model = os.getenv("BENCHMARK_SUPATEST_MODEL", "premium")
         binary = os.getenv("BENCHMARK_SUPATEST_BINARY") or "supatest"
         args = [
             binary,
-            fixture.task,
+            build_prompt(fixture),
             "--headless",
             "--mode",
             fixture.mode,
+            "--model",
+            model,
             "--cwd",
             str(project_dir),
             "--max-iterations",
@@ -254,6 +267,9 @@ def load_supatest_cli_token() -> str | None:
 
 def build_prompt(fixture: EvalFixture) -> str:
     parts = [
+        *QA_AGENT_CONTEXT,
+        "",
+        "User request:",
         fixture.task,
         "",
         f"Mode: {fixture.mode}",

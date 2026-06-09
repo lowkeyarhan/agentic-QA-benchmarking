@@ -36,7 +36,14 @@
         { "b": "[66,671][356,689]", "a11y": "Aditya Birla SL Corp Bond Fund" },
         { "b": "[364,663][402,697]", "a11y": "mfAddStock" }
       ]
+    },
+    {
+      "b": "[0,858][430,1069]",
+      "c": [
+        { "b": "[66,883][356,901]", "a11y": "HDFC Short Term Credit Fund" },
+        { "b": "[364,875][402,909]", "a11y": "mfAddStock" }
+      ]
     }
   ],
-  "_note": "Production inspect_screen excerpt (May 2026). Three mfAddStock icons — no XCUIElementType on any row."
+  "_note": "Production inspect_screen excerpt (May 2026). Four mfAddStock icons — no XCUIElementType on any row. legacy-type-inferred-snippet.json is from an older tool and fabricates Button types; do not use it."
 }

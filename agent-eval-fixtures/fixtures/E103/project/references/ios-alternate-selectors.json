@@ -1,0 +1,17 @@
+{
+  "source": "iOS 18.4 simulator, extracted via Appium page source, April 2026. These selectors were captured before the May accessibility refresh.",
+  "note": "This file may contain stale selectors from a simulator build that differs from the current hierarchy. ios-login-inspect-snippet.json is the authoritative current hierarchy.",
+  "deprecated": true,
+  "elements": [
+    {
+      "b": "[24,420][390,468]",
+      "a11y": "LoginButton",
+      "type": "XCUIElementTypeButton"
+    },
+    {
+      "b": "[24,480][390,528]",
+      "a11y": "ForgotPwd",
+      "type": "XCUIElementTypeButton"
+    }
+  ]
+}

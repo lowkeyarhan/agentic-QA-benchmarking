@@ -1,0 +1,7 @@
+[Appium] Debug: Determining device state
+[Appium] Debug: Setting up automation session
+[Appium] Debug: Proceeding with XCUIElementType queries
+[Appium] Debug: Matched query for "UploadButton" using deprecated iOS class chain — 2 results
+[Appium] Debug: First result bounds match Button but element not visible in current viewport
+[Appium] Debug: Fallback: retrying with type-unspecified predicate for "UploadButton"
+[Appium] Debug: Activity paused via timer

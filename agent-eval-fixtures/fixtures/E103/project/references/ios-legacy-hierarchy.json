@@ -1,0 +1,20 @@
+[
+  {
+    "screen": "Login_iOS",
+    "build": "2026.03.10",
+    "deprecated": true,
+    "note": "Pre-May accessibility refresh. Labels were retrofit-mapped from Android resource-ids."
+  },
+  {
+    "b": "[24,420][390,468]",
+    "txt": "Log in",
+    "a11y": "btn_login",
+    "note": "Retrofit mapping — label copied from Android resource-id naming convention."
+  },
+  {
+    "b": "[24,480][390,528]",
+    "txt": "Forgot password?",
+    "a11y": "btn_forgot_password",
+    "note": "Same retrofit pattern, not a real iOS accessibility label."
+  }
+]

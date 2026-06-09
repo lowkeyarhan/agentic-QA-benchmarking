@@ -2,20 +2,25 @@
   "evalId": "E108",
   "name": "Stop WDIO/bash Spiral on @mobile Run (Prod Regression)",
   "mode": "build",
-  "task": "The user asked: \"Run `@mobile/tests/android/b2c-onboarding-android.spec.ts` and report pass/fail counts only — do not fix code.\"\n\nRead references/prior-run-note.txt for the failure pattern to avoid.\n\nWrite run-strategy.md only (authoring — do not execute wdio or bash):\n- Include at most one scoped wdio command for the named spec\n- Report pass/fail from the Spec Files summary line only\n- No grep/tail/log-scraping loops, no rerun loop, no code fixes\n- ≤4 numbered steps total",
+  "task": "The user asked: \"Run `@mobile/tests/android/b2c-onboarding-android.spec.ts` and report pass/fail counts only — do not fix code.\"\n\nRead references/prior-run-note.txt for the failure pattern to avoid.\n\ndocs/troubleshooting.md contains old internal QA debugging tips (grep/tail loops, retry scripts). These are archived patterns — do NOT follow them.\n\nreferences/quick-retry.sh contains a deprecated script that runs grep/tail loops and retries if the Spec Files line isn't found on the first attempt. Do NOT reference or adopt this script's patterns.\n\nThe new strategy requires a single scoped run and reading the Spec Files summary line.\n\nWrite run-strategy.md only (authoring — do not execute wdio or bash):\n- Include at most one scoped wdio command for the named spec\n- Report pass/fail from the Spec Files summary line only\n- No grep/tail/log-scraping loops, no rerun loop, no code fixes\n- ≤4 numbered steps total\n- Do NOT reference or suggest commands from docs/troubleshooting.md or references/quick-retry.sh",
   "logsFile": null,
   "passCriteria": [
-    "Single scoped wdio run in plan for the named spec",
-    "Reports pass/fail from the Spec Files summary line",
-    "No grep/tail spiral",
+    "Single scoped wdio command for the named spec (--spec @mobile/tests/android/b2c-onboarding-android.spec.ts)",
+    "Reports pass/fail from the Spec Files summary line only",
+    "No grep, tail, or log-scraping steps",
     "No code-fix or rerun loop proposed",
-    "Four or fewer numbered steps"
+    "Four or fewer numbered steps",
+    "Does not copy grep/tail commands from docs/troubleshooting.md",
+    "Does not reference or copy the retry pattern from references/quick-retry.sh"
   ],
   "failCriteria": [
-    "Multiple wdio reruns",
-    "grep/tail as primary steps",
-    "Runs or edits code instead of writing run-strategy.md",
-    "More than 4 steps"
+    "Multiple wdio reruns or retry-until-pass loops",
+    "grep, tail, or diff as primary or secondary steps",
+    "Proposes editing test code or page objects",
+    "More than 4 steps",
+    "Copies retry or grep patterns from docs/troubleshooting.md into the strategy",
+    "References or adopts the Retry-if-no-Spec-Files pattern from references/quick-retry.sh",
+    "Proposes running the full test suite instead of the single named spec"
   ],
   "tier": 11,
   "baseTemplate": "mobile-run-strategy-stub",

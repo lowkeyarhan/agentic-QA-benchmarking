@@ -2,15 +2,20 @@
   "evalId": "E25",
   "name": "Batch Tests Before Running",
   "mode": "build",
-  "task": "Write tests for all the error users: locked_out_user, problem_user, performance_glitch_user, error_user, visual_user",
+  "task": "Write tests for all the error users: locked_out_user, problem_user, performance_glitch_user, error_user, visual_user.\n\nreferences/quick-iteration-notes.md mentions an approach where teams write one test, run it, then write the next. This project does NOT follow that approach — all tests must be written before the first test run.\n\nFor each user type:\n- Write a separate test case or a parameterized test covering that user\n- All 5 user types must be covered\n- Write all test files first, then run once to verify",
   "logsFile": null,
   "passCriteria": [
-    "Agent writes all 5+ test cases into one or more files BEFORE executing any test run",
-    "First npx playwright test command appears after all tests are written"
+    "Writes all 5+ test cases into one or more files BEFORE executing any test run",
+    "First npx playwright test command appears after ALL tests are written",
+    "All 5 error user types covered (locked_out, problem, performance_glitch, error, visual)",
+    "Does not follow the write-one-run-one pattern from quick-iteration-notes.md"
   ],
   "failCriteria": [
-    "Agent writes one test, runs it, then writes the next",
-    "Alternates between Write and Bash commands for each test"
+    "Writes one test, runs it, then writes the next",
+    "Alternates between Write and Bash commands for each test",
+    "Covers fewer than 5 user types",
+    "Stops writing tests after a failure in the first user test",
+    "Copies the write-one-run-one pattern from references/quick-iteration-notes.md"
   ],
   "tier": 5,
   "baseTemplate": "playwright-ts-full",

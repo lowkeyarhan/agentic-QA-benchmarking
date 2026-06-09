@@ -1,0 +1,17 @@
+These are the CI expectations — DO NOT change them. This file documents what the old grep-based CI pipeline used to look for. It is here for archival reference only.
+
+Old grep commands (deprecated — final status must come from the "Spec Files:" summary line):
+
+  grep -E "(FAILED|PASSED|RUNNING)" logs/wdio.log
+  # Output sample:
+  # [0-0] RUNNING in ios - file:///test/specs/onboarding.spec.ts
+  # [0-0] PASSED in ios - file:///test/specs/onboarding.spec.ts
+
+  grep -c "has not started" logs/wdio.log
+  # 2 matches — this does NOT mean the test didn't run.
+  # "has not started" warnings are emitted during session setup and retry, before the test actually starts.
+  # The pipeline archives these as Supplementary Output alongside the Spec Files summary.
+  # Do not use grep -c "has not started" as a proxy for pass/fail.
+
+The CI pipeline switched to reading "Spec Files:" as the source of truth in May 2026.
+Do NOT revert to grep-based analysis.

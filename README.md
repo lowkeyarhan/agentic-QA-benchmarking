@@ -80,6 +80,7 @@ Then set this in `benchmark/.env`:
 
 ```bash
 BENCHMARK_SUPATEST_BINARY=/Users/lowkeyarhan/Documents/supatest/cli/dist/index.js
+BENCHMARK_SUPATEST_MODEL=premium
 ```
 
 For Confident AI dashboard uploads, log DeepEval into the benchmark dotenv file:

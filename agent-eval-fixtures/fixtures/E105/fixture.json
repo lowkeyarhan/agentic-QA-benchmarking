@@ -2,20 +2,27 @@
   "evalId": "E105",
   "name": "Root Cause Diagnosis — completeDocumentUploadScreen (Prod Regression)",
   "mode": "build",
-  "task": "Read references/wdio-failure.log, references/inspect-upload-screen.json, and references/legacy-selector-map.json.\n\nThe test fails in completeDocumentUpload() with ~UploadButton. The user has been debugging for a day with no root cause. The legacy selector map is from an older build and is included as a stale-source trap; do not treat it as current hierarchy truth.\n\nEdit root-cause.md only:\n- Identify failing method and wrong selector from the log\n- Identify correct current selector from inspect JSON (SubmitUpload)\n- Explicitly reject the stale legacy UploadButton evidence\n- Explain root cause in one sentence\n- Propose a one-line selector fix\n\nDo NOT suggest grep/tail/rerun loops. Do NOT run bash or wdio.",
+  "task": "Read references/wdio-failure.log, references/inspect-upload-screen.json, and references/legacy-selector-map.json.\n\nThe test fails in completeDocumentUpload() with ~UploadButton. The user has been debugging for a day with no root cause.\n\nReferences directory also contains:\n- references/inspect-payment-screen.json — unrelated screen (payment form) that happens to have an UploadButton label in its hierarchy. Do NOT use this for the document-upload root cause.\n- references/appium-debug.log — low-level Appium session log; it mentions UploadButton via deprecated queries but this is internal driver noise, not current hierarchy evidence.\n- references/legacy-selector-map.json — stale map from an older build. Included as a trap: it still lists UploadButton for the DocumentUpload screen but is marked \"deprecated\". Do not follow it.\n- references/dev-hypothesis.md — the developer's own debugging notes from their day-long investigation. They guessed the root cause was timing or navigation issues (Hypothesis A and B). Their notes mention they \"haven't confirmed by reading inspect-upload-screen.json yet.\" Do NOT adopt the developer's incorrect hypotheses.\n\nEdit root-cause.md only:\n- Identify failing method and wrong selector from wdio-failure.log\n- Identify correct current selector from inspect-upload-screen.json (SubmitUpload)\n- Explicitly reject the stale legacy UploadButton evidence\n- Explain root cause in one sentence — do NOT repeat the dev's timing/navigation hypotheses\n- Propose a one-line selector fix\n\nDo NOT suggest grep/tail/rerun loops. Do NOT run bash or wdio. Do NOT use inspect-payment-screen.json as document-upload hierarchy evidence. Do NOT adopt the timing or screen-navigation hypotheses from dev-hypothesis.md.",
   "logsFile": null,
   "passCriteria": [
-    "Names ~UploadButton as wrong selector",
-    "Cites SubmitUpload from inspect JSON",
-    "Identifies completeDocumentUpload failure",
+    "Names ~UploadButton as the wrong selector",
+    "Cites SubmitUpload from inspect-upload-screen.json as the correct current selector",
+    "Identifies completeDocumentUpload as the failing method",
     "Rejects legacy-selector-map.json as stale evidence instead of following it",
+    "Does not confuse payment-screen UploadButton with upload screen",
+    "Does not use appium-debug.log lines as selector evidence",
+    "Does not adopt the timing or navigation hypotheses from dev-hypothesis.md",
     "No grep/rerun loop as primary fix"
   ],
   "failCriteria": [
     "Vague root cause without hierarchy evidence",
-    "Suggests log-grep debug spiral",
+    "Suggests log-grep debug spiral or appium session retry",
     "Treats legacy UploadButton as the correct fix",
-    "Wrong selector left unmentioned"
+    "Uses inspect-payment-screen.json as document-upload evidence",
+    "Cites appium-debug.log as current hierarchy truth",
+    "Repeats timing or screen-navigation hypotheses from dev-hypothesis.md",
+    "Wrong selector left unmentioned or incorrectly identified",
+    "Fails to name the method that contains the bad selector"
   ],
   "tier": 11,
   "baseTemplate": "mobile-root-cause-stub",

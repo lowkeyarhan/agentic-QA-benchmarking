@@ -1,0 +1,11 @@
+Execution of 1 workers started at 2026-04-15T09:15:00.000Z
+
+[0-0] INFO webdriver: Initiate new session using the W3C protocol
+[0-0] WARN appium: "test has not started" status message emitted
+[0-0] RUNNING in ios - file:///test/specs/onboarding.spec.ts
+[0-0] ERROR: Connection refused — WDIO session aborted
+[0-0] FAILED in ios - file:///test/specs/onboarding.spec.ts
+
+Spec Files:	 0 passed, 1 failed, 1 total
+
+** NOTE: This is from the April 15th run where the test runner had a network issue. The wdio-success-log.txt (May 29th) is the most recent run with a passing result. Use the May 29th log for analysis. **
