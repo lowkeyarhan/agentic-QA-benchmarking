@@ -5,6 +5,7 @@ import re
 from collections import Counter
 
 from deepeval.metrics import BaseMetric, GEval
+from deepeval.metrics.g_eval import Rubric
 from deepeval.models import GeminiModel
 from deepeval.test_case import LLMTestCase, SingleTurnParams
 
@@ -225,6 +226,47 @@ def make_geval_metric() -> GEval:
             "or test output show that the requested work was completed. Penalize timeouts, irrelevant edits, "
             "destructive test weakening, invented selectors, and missing investigation."
         ),
+        rubric=[
+            Rubric(
+                score_range=(0, 0),
+                expected_outcome=(
+                    "Timeout, no meaningful attempt, unreadable output, or no relevant "
+                    "evidence of the requested QA work."
+                ),
+            ),
+            Rubric(
+                score_range=(1, 3),
+                expected_outcome=(
+                    "Major failure: wrong file or target, fabricated evidence, follows a "
+                    "fixture trap, misses the central selector/log/root-cause requirement, "
+                    "or performs destructive/unrelated edits."
+                ),
+            ),
+            Rubric(
+                score_range=(4, 6),
+                expected_outcome=(
+                    "Partial work: addresses the general task but misses important pass "
+                    "criteria, leaves ambiguity in the evidence, returns incomplete "
+                    "coverage, or violates a non-critical constraint."
+                ),
+            ),
+            Rubric(
+                score_range=(7, 8),
+                expected_outcome=(
+                    "Mostly correct: satisfies the core QA objective and avoids major fail "
+                    "criteria, with only minor omissions, weak explanation, or small "
+                    "format/scope issues."
+                ),
+            ),
+            Rubric(
+                score_range=(9, 10),
+                expected_outcome=(
+                    "Production-quality completion: satisfies all material pass criteria, "
+                    "avoids all fail criteria, uses the authoritative evidence, keeps the "
+                    "requested scope, and provides concrete output or edits."
+                ),
+            ),
+        ],
         evaluation_params=[
             SingleTurnParams.INPUT,
             SingleTurnParams.ACTUAL_OUTPUT,

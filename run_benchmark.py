@@ -194,10 +194,11 @@ def main() -> int:
             )[0]
             results.append(result)
             print(format_score_line(result))
-    print()
-    print("Scores:")
-    for result in order_results(eval_ids, agents, results):
-        print(format_score_line(result))
+    if os.getenv("BENCHMARK_PRINT_FINAL_TABLE") == "1":
+        print()
+        print("Scores:")
+        for result in order_results(eval_ids, agents, results):
+            print(format_score_line(result))
 
     timeout_seconds = int(os.environ["BENCHMARK_TIMEOUT_SECONDS"])
     write_summary(
@@ -394,7 +395,7 @@ def score_pending_results(
     except Exception as error:
         reason = f"{type(error).__name__}: {error}"
         for result_index, _ in scoring_jobs:
-            apply_score(results[result_index], 0.0, reason, "judge-error")
+            mark_unscored(results[result_index], reason, "judge-error")
         return results
 
     scored_result_indexes: set[int] = set()
@@ -405,10 +406,18 @@ def score_pending_results(
         scored_result_indexes.add(result_index)
         metric_data = test_result.metrics_data[0] if test_result.metrics_data else None
         if metric_data is None:
-            apply_score(
+            mark_unscored(
                 results[result_index],
-                0.0,
                 "DeepEval returned no metric data for this case.",
+                "judge-error",
+            )
+            continue
+
+        metric_error = getattr(metric_data, "error", None)
+        if metric_error:
+            mark_unscored(
+                results[result_index],
+                f"DeepEval metric error: {metric_error}",
                 "judge-error",
             )
             continue
@@ -420,9 +429,8 @@ def score_pending_results(
 
     for result_index, _ in scoring_jobs:
         if result_index not in scored_result_indexes:
-            apply_score(
+            mark_unscored(
                 results[result_index],
-                0.0,
                 "DeepEval did not return a score for this case.",
                 "judge-error",
             )
@@ -444,6 +452,14 @@ def apply_score(result: dict, score: float, reason: str, score_source: str) -> N
     result["score"] = score
     result["scorePercent"] = round(score * 100)
     result["result"] = result_label(score, bool(result.get("timedOut")))
+    result["reason"] = reason
+    result["scoreSource"] = score_source
+
+
+def mark_unscored(result: dict, reason: str, score_source: str) -> None:
+    result["score"] = None
+    result["scorePercent"] = None
+    result["result"] = "unscored"
     result["reason"] = reason
     result["scoreSource"] = score_source
 
@@ -553,8 +569,10 @@ def write_summary(
         lines.append("| " + " | ".join(cells) + " |")
 
     lines.append("")
-    lines.append("| Agent | Average | Scored | Pass | Partial | Fail | Blocked |")
-    lines.append("| --- | ---: | ---: | ---: | ---: | ---: | ---: |")
+    lines.append(
+        "| Agent | Average | Scored | Pass | Partial | Fail | Blocked | Unscored |"
+    )
+    lines.append("| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |")
     for agent in agents:
         agent_results = [item for item in results if item["agent"] == agent]
         scored_results = scored_only(agent_results)
@@ -570,9 +588,13 @@ def write_summary(
         partial_count = sum(1 for item in agent_results if item["result"] == "partial")
         fail_count = sum(1 for item in agent_results if item["result"] == "fail")
         blocked_count = sum(1 for item in agent_results if item["result"] == "blocked")
+        unscored_count = sum(
+            1 for item in agent_results if item["result"] == "unscored"
+        )
         lines.append(
             f"| {agent_display_name(agent)} | {average} | {len(scored_results)} | "
-            f"{pass_count} | {partial_count} | {fail_count} | {blocked_count} |"
+            f"{pass_count} | {partial_count} | {fail_count} | {blocked_count} | "
+            f"{unscored_count} |"
         )
 
     (results_dir / "scores.md").write_text("\n".join(lines) + "\n")
@@ -676,6 +698,7 @@ def summarize_group(results: list[dict]) -> dict:
         "partial": sum(1 for item in results if item.get("result") == "partial"),
         "fail": sum(1 for item in results if item.get("result") == "fail"),
         "blocked": sum(1 for item in results if item.get("result") == "blocked"),
+        "unscored": sum(1 for item in results if item.get("result") == "unscored"),
         "timedOut": sum(1 for item in results if item.get("timedOut")),
         "durationMs": sum(item.get("durationMs", 0) for item in results),
     }
@@ -699,6 +722,10 @@ def format_cell(result: dict | None) -> str:
         return "-"
     if result.get("result") == "blocked":
         return "blocked"
+    if result.get("result") == "unscored":
+        return "unscored"
+    if result.get("scorePercent") is None:
+        return f"n/a {result['result']}"
     return f"{result['scorePercent']} {result['result']}"
 
 

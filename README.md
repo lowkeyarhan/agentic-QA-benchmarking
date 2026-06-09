@@ -167,9 +167,9 @@ Use `BENCHMARK_EVAL_IDS=all` to include every available fixture.
 
 ## Output
 
-During execution, each agent line is printed when that process exits. The score
-is marked `pending` until all agent runs finish, then the combined DeepEval
-scoring pass prints the pass/partial/fail table.
+During execution, each agent line is printed once after that process exits and
+the judge score is available. Set `BENCHMARK_PRINT_FINAL_TABLE=1` only if you
+also want the ordered scoreboard repeated in the terminal at the end.
 
 ```text
 results/<run-id>/scores.md
@@ -190,11 +190,14 @@ result JSON maps each case back to its eval ID.
 
 ## Scoring
 
-Runs are scored through one combined DeepEval evaluation identified by the
-benchmark run ID, so Confident AI can show a single dashboard report containing
-the per-agent/per-eval test cases. Timeouts remain hard failures. Before
-judging, the harness removes agent names, local absolute paths, benchmark
-credentials, spinner noise, and repeated terminal status redraws from the
-evidence. The judge prompt instructs the model to score only against the task
-and fixture pass/fail criteria, not against a specific CLI, product, model,
-company, cost profile, or agent type.
+Runs are scored through DeepEval with the benchmark run ID attached, so
+Confident AI can group the per-agent/per-eval test cases. Timeouts remain hard
+failures. Judge/runtime errors such as quota exhaustion are recorded as
+`unscored` and excluded from averages instead of being counted as agent
+failures. Before judging, the harness removes agent names, local absolute paths,
+benchmark credentials, spinner noise, and repeated terminal status redraws from
+the evidence. The judge prompt instructs the model to score only against the
+task and fixture pass/fail criteria, not against a specific CLI, product, model,
+company, cost profile, or agent type. The judge also uses an explicit 0-10 QA
+rubric for no-attempt, major-failure, partial, mostly-correct, and
+production-quality outcomes before the score is converted to pass/partial/fail.

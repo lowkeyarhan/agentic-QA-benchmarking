@@ -260,6 +260,21 @@ def test_timeout_metric_is_a_hard_failure_without_judge_call() -> None:
     assert metric.is_successful() is False
 
 
+def test_metric_uses_granular_qa_rubric() -> None:
+    metric = make_metric()
+
+    rubric = metric._judge.rubric
+
+    assert [item.score_range for item in rubric] == [
+        (0, 0),
+        (1, 3),
+        (4, 6),
+        (7, 8),
+        (9, 10),
+    ]
+    assert "Production-quality completion" in rubric[-1].expected_outcome
+
+
 def test_write_summary_emits_only_three_result_files(tmp_path) -> None:
     result = {
         "runId": "verify",
@@ -341,6 +356,99 @@ def test_blocked_score_line_uses_na_score(monkeypatch) -> None:
     assert "n/a blocked" in line
     assert result["scorePercent"] is None
     assert result["scoreSource"] == "preflight"
+
+
+def test_judge_error_is_unscored_not_agent_failure(monkeypatch) -> None:
+    def failing_evaluate(**_kwargs):
+        raise RuntimeError("judge quota exhausted")
+
+    monkeypatch.setattr(run_benchmark, "evaluate_quietly", failing_evaluate)
+    result = {
+        "runId": "verify",
+        "caseId": "case-001",
+        "evalId": "E25",
+        "evalName": "Batch Tests Before Running",
+        "agent": "supatest",
+        "mode": "build",
+        "exitCode": 0,
+        "timedOut": False,
+        "durationMs": 123,
+        "projectDir": "runs/verify/case-001/supatest/project",
+        "transcriptPath": "runs/verify/case-001/supatest/transcript.log",
+        "changedFiles": [],
+        "passCriteria": [],
+        "failCriteria": [],
+    }
+    pending = run_benchmark.PendingResult(
+        result,
+        LLMTestCase(
+            input="Do QA work",
+            actual_output="Exit code: 0\nTimed out: False\nCleaned transcript tail:\ndone",
+            expected_output="Pass criteria:\n- Done",
+        ),
+    )
+
+    scored = run_benchmark.score_pending_results("verify", [pending])[0]
+
+    assert scored["score"] is None
+    assert scored["scorePercent"] is None
+    assert scored["result"] == "unscored"
+    assert scored["scoreSource"] == "judge-error"
+    assert "judge quota exhausted" in scored["reason"]
+
+
+def test_unscored_results_are_excluded_from_summary_average(tmp_path) -> None:
+    passing_result = {
+        "runId": "verify",
+        "caseId": "case-001",
+        "evalId": "E25",
+        "evalName": "Batch Tests Before Running",
+        "agent": "supatest",
+        "mode": "build",
+        "score": 1.0,
+        "scorePercent": 100,
+        "result": "pass",
+        "reason": "ok",
+        "scoreSource": "judge",
+        "exitCode": 0,
+        "timedOut": False,
+        "durationMs": 123,
+        "projectDir": "runs/verify/case-001/supatest/project",
+        "transcriptPath": "runs/verify/case-001/supatest/transcript.log",
+        "changedFiles": ["tests/error-users.spec.ts"],
+        "passCriteria": [],
+        "failCriteria": [],
+    }
+    unscored_result = {
+        **passing_result,
+        "caseId": "case-002",
+        "evalId": "E26",
+        "score": None,
+        "scorePercent": None,
+        "result": "unscored",
+        "reason": "judge quota exhausted",
+        "scoreSource": "judge-error",
+    }
+
+    write_summary(
+        tmp_path,
+        "verify",
+        ["E25", "E26"],
+        ["supatest"],
+        1,
+        600,
+        [passing_result, unscored_result],
+    )
+
+    summary = json.loads((tmp_path / "summary.json").read_text())
+    scores = (tmp_path / "scores.md").read_text()
+
+    assert summary["summary"]["byAgent"]["supatest"]["averageScorePercent"] == 100.0
+    assert summary["summary"]["byAgent"]["supatest"]["scored"] == 1
+    assert summary["summary"]["byAgent"]["supatest"]["fail"] == 0
+    assert summary["summary"]["byAgent"]["supatest"]["unscored"] == 1
+    assert "| E26 | unscored |" in scores
+    assert "Unscored" in scores
 
 
 def test_live_device_preflight_only_targets_selected_live_inspection_evals() -> None:
