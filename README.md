@@ -58,8 +58,14 @@ Edit `.env` and set:
 
 ```bash
 GOOGLE_API_KEY=...
-BENCHMARK_SUPATEST_PROJECT_ID=...
 ```
+
+`BENCHMARK_SUPATEST_PROJECT_ID` is optional. Leave it blank for isolated local
+benchmarks. The harness intentionally does not inherit `.supatest/settings.json`
+or `SUPATEST_PROJECT_ID`, so an interactive Supatest project such as `aiden`
+does not leak into benchmark runs. Set `BENCHMARK_SUPATEST_PROJECT_ID` only if
+you intentionally want Supatest sessions reported under a specific Supatest
+project.
 
 To benchmark a local compiled Supatest instead of the globally installed
 production package, build it and point the harness at the compiled binary:

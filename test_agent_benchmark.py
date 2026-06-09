@@ -11,6 +11,7 @@ from agents import (
     agent_environment,
     build_command,
     changed_file_excerpt,
+    resolve_supatest_project_id,
     with_local_tool_paths,
 )
 from fixtures import available_eval_ids, load_fixture, resolve_eval_ids
@@ -23,13 +24,15 @@ def test_agent_environment_hides_benchmark_and_judge_vars(monkeypatch) -> None:
     monkeypatch.setenv("DEEPEVAL_GEMINI_MODEL", "gemini-2.5-pro")
     monkeypatch.setenv("GOOGLE_API_KEY", "secret")
     monkeypatch.setenv("SUPATEST_API_KEY", "supatest-secret")
+    monkeypatch.setenv("SUPATEST_PROJECT_ID", "aiden")
 
     env = agent_environment()
 
     assert "BENCHMARK_EVAL_IDS" not in env
     assert "DEEPEVAL_GEMINI_MODEL" not in env
     assert "GOOGLE_API_KEY" not in env
-    assert env["SUPATEST_API_KEY"] == "supatest-secret"
+    assert "SUPATEST_API_KEY" not in env
+    assert "SUPATEST_PROJECT_ID" not in env
     assert env["NODE_ENV"] == "development"
 
 
@@ -78,6 +81,17 @@ def test_cursor_agent_command_can_pin_composer_fast(tmp_path, monkeypatch) -> No
     assert use_shell is True
     assert cwd == project_dir
     assert "--model composer-2.5-fast" in command
+
+
+def test_supatest_project_id_must_be_explicit(monkeypatch) -> None:
+    monkeypatch.delenv("BENCHMARK_SUPATEST_PROJECT_ID", raising=False)
+    monkeypatch.setenv("SUPATEST_PROJECT_ID", "aiden")
+
+    assert resolve_supatest_project_id() is None
+
+    monkeypatch.setenv("BENCHMARK_SUPATEST_PROJECT_ID", "benchmark-project")
+
+    assert resolve_supatest_project_id() == "benchmark-project"
 
 
 def test_resolve_eval_ids_all_uses_every_available_fixture() -> None:

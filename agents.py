@@ -179,6 +179,8 @@ def agent_environment() -> dict[str, str]:
         if not key.startswith("BENCHMARK_")
         and not key.startswith("DEEPEVAL_")
         and key != "GOOGLE_API_KEY"
+        and key != "SUPATEST_API_KEY"
+        and key != "SUPATEST_PROJECT_ID"
     }
     env["NODE_ENV"] = "development"
     env["PATH"] = with_local_tool_paths(env.get("PATH", ""))
@@ -210,9 +212,7 @@ def render_command_template(
 
 
 def resolve_supatest_project_id() -> str | None:
-    explicit = os.getenv("BENCHMARK_SUPATEST_PROJECT_ID") or os.getenv(
-        "SUPATEST_PROJECT_ID"
-    )
+    explicit = os.getenv("BENCHMARK_SUPATEST_PROJECT_ID")
     if explicit:
         return explicit
     return None
