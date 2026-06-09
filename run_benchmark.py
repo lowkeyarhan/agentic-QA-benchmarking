@@ -903,7 +903,13 @@ def format_cell(result: dict | None) -> str:
         return "unscored"
     if result.get("scorePercent") is None:
         return f"n/a {result['result']}"
-    return f"{check_score_text(result)} {result['result']}"
+    score = result.get("scorePercent")
+    score_str = f"{score}%"
+    if result.get("passedChecks") is not None or result.get("failedChecks") is not None:
+        passed = int(result.get("passedChecks") or 0)
+        failed = int(result.get("failedChecks") or 0)
+        return f"{score_str} ({passed}p/{failed}f) {result['result']}"
+    return f"{score_str} {result['result']}"
 
 
 def format_score_line(result: dict) -> str:

@@ -423,18 +423,21 @@ def test_batch_scoring_uses_one_judge_call_and_check_counts(monkeypatch) -> None
             calls["count"] += 1
             assert "r001" in prompt
             assert schema is BatchJudgeResponse
-            return BatchJudgeResponse(
-                results=[
-                    BatchJudgeCaseScore(
-                        resultId="r001",
-                        score=0.9,
-                        result="pass",
-                        passedChecks=2,
-                        failedChecks=0,
-                        reason="All required evidence is present.",
-                    )
-                ]
-            ), 0
+            return (
+                BatchJudgeResponse(
+                    results=[
+                        BatchJudgeCaseScore(
+                            resultId="r001",
+                            score=0.9,
+                            result="pass",
+                            passedChecks=2,
+                            failedChecks=0,
+                            reason="All required evidence is present.",
+                        )
+                    ]
+                ),
+                0,
+            )
 
     monkeypatch.setattr(run_benchmark, "make_judge_model", lambda: BatchJudge())
     result = {
@@ -469,7 +472,7 @@ def test_batch_scoring_uses_one_judge_call_and_check_counts(monkeypatch) -> None
     assert scored["scoreSource"] == "batch-judge"
     assert scored["passedChecks"] == 2
     assert scored["failedChecks"] == 0
-    assert run_benchmark.format_cell(scored) == "2p/0f pass"
+    assert run_benchmark.format_cell(scored) == "90% (2p/0f) pass"
 
 
 def test_missing_batch_score_is_unscored(monkeypatch) -> None:
