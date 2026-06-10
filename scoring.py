@@ -18,16 +18,21 @@ CONTROL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 SPINNER_RE = re.compile(r"^\s*[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]\s+(Thinking|Working|Processing)\.*\s*$")
 
 
-def make_test_case(fixture: EvalFixture, run: AgentRunResult) -> LLMTestCase:
+def make_test_case(
+    fixture: EvalFixture, run: AgentRunResult, changed_diff: str = ""
+) -> LLMTestCase:
     transcript = sanitize_evidence(cleaned_transcript(run.transcript), run)
     changed_files = sanitize_evidence("\n".join(run.changed_files), run)
     changed_excerpt = sanitize_evidence(run.changed_file_excerpt, run)
+    changed_diff = sanitize_evidence(changed_diff, run)
     actual_output = "\n\n".join(
         [
             f"Exit code: {run.exit_code}",
             f"Timed out: {run.timed_out}",
             "Changed files:",
             changed_files or "No changed files",
+            "Changed diff:",
+            changed_diff or "No changed diff",
             "Changed file excerpts:",
             changed_excerpt or "No changed file excerpts",
             "Cleaned transcript tail:",
@@ -221,13 +226,17 @@ def make_geval_metric() -> GEval:
             "Give high scores only when the result satisfies the pass criteria, avoids the fail criteria, "
             "makes relevant project changes when needed, and does not merely claim success without evidence. "
             "Do not reward or penalize any specific CLI, product, company, model, brand, cost profile, or agent type. "
-            "Use only the task, pass/fail criteria, changed files, and transcript evidence. "
+            "Use only the task, pass/fail criteria, changed files, unified diffs, and transcript evidence. "
             "A non-zero wrapper exit code is not an automatic failure when the transcript, changed files, "
             "or test output show that the requested work was completed. Penalize timeouts, irrelevant edits, "
-            "destructive test weakening, invented selectors, and missing investigation."
+            "destructive test weakening, expect(true)-style trivial assertions, assertion deletion, "
+            "over-mocking the behavior under test, invented selectors, and missing investigation. "
+            "Assign 0 when the candidate makes tests pass by weakening or deleting meaningful assertions "
+            "instead of preserving the requested QA intent."
         ),
         evaluation_steps=[
             "Check the task, changed files, and transcript evidence against every pass criterion.",
+            "Inspect the unified diff for assertion weakening, deleted expectations, trivial expect(true)-style assertions, excessive mocks, skipped tests, or unrelated rewrites.",
             "Check whether any fail criterion occurred, including stale evidence, fabricated selectors, unrelated edits, destructive rewrites, or forbidden commands.",
             "For edit tasks, verify the requested file scope and that the actual modified content supports the claimed completion.",
             "For selector, log, or explanation tasks, verify the answer is grounded in the authoritative fixture evidence and does not just claim success.",
@@ -327,3 +336,109 @@ def result_label(score: float, timed_out: bool) -> str:
     if score >= 0.4:
         return "partial"
     return "fail"
+
+
+def apply_token_efficiency_scores(results: list[dict]) -> None:
+    """Score token efficiency with a QA-protected baseline.
+
+    The baseline is the lowest token total among agents that met the configured
+    QA threshold for the same eval. This prevents a run that crashes
+    quickly from becoming the "efficient" reference. Missing token usage is a
+    real measurement failure, so it receives 0 efficiency instead of n/a.
+    """
+
+    threshold = configured_token_baseline_threshold_percent()
+    by_eval: dict[str, list[dict]] = {}
+    for result in results:
+        by_eval.setdefault(result.get("evalId", ""), []).append(result)
+
+    for eval_results in by_eval.values():
+        baseline_candidates = [
+            result
+            for result in eval_results
+            if qa_score_percent(result) >= threshold
+            and token_total(result.get("tokenUsage")) is not None
+            and token_total(result.get("tokenUsage")) > 0
+        ]
+        best_passing_tokens = (
+            min(token_total(result.get("tokenUsage")) for result in baseline_candidates)
+            if baseline_candidates
+            else None
+        )
+
+        for result in eval_results:
+            usage = result.setdefault("tokenUsage", {})
+            total_tokens = token_total(usage)
+            qa_percent = qa_score_percent(result)
+
+            if total_tokens is None or total_tokens <= 0:
+                set_token_score(
+                    usage,
+                    0.0,
+                    "missing-token-usage-zero-efficiency",
+                    "token-usage-missing-zero-efficiency",
+                )
+                continue
+
+            if best_passing_tokens is None:
+                set_token_score(usage, 0.0, "no-passing-token-baseline")
+                continue
+
+            raw_score = min(100.0, (best_passing_tokens / total_tokens) * 100.0)
+            if qa_percent < threshold:
+                # Failed/weak QA work cannot win on efficiency just because it
+                # used fewer tokens. Cap efficiency at the QA score itself.
+                raw_score = min(raw_score, max(0.0, qa_percent))
+                basis = "qa-capped-relative-passing-token-baseline"
+            else:
+                basis = "relative-passing-token-baseline"
+
+            set_token_score(usage, raw_score, basis)
+
+
+def set_token_score(
+    usage: dict,
+    score_percent: float,
+    score_basis: str,
+    warning: str | None = None,
+) -> None:
+    usage["scorePercent"] = round(score_percent, 1)
+    usage["score"] = round(score_percent / 100.0, 4)
+    usage["scoreBasis"] = score_basis
+    if warning:
+        warnings = usage.setdefault("warnings", [])
+        if warning not in warnings:
+            warnings.append(warning)
+
+
+def qa_score_percent(result: dict) -> float:
+    if result.get("scorePercent") is not None:
+        return float(result["scorePercent"])
+    if result.get("score") is not None:
+        return float(result["score"]) * 100.0
+    return 0.0
+
+
+def token_total(usage: dict | None) -> int | None:
+    if not usage:
+        return None
+    total = usage.get("totalTokens")
+    return int(total) if total is not None else None
+
+
+def configured_token_baseline_threshold_percent() -> float:
+    raw = os.getenv("BENCHMARK_TOKEN_BASELINE_QA_THRESHOLD", "0.8").strip()
+    try:
+        value = float(raw)
+    except ValueError as error:
+        raise ValueError(
+            "BENCHMARK_TOKEN_BASELINE_QA_THRESHOLD must be between 0 and 1, "
+            "or between 0 and 100 when expressed as a percent."
+        ) from error
+    if value < 0:
+        raise ValueError("BENCHMARK_TOKEN_BASELINE_QA_THRESHOLD must be non-negative.")
+    if value <= 1:
+        return value * 100.0
+    if value <= 100:
+        return value
+    raise ValueError("BENCHMARK_TOKEN_BASELINE_QA_THRESHOLD must be <= 100.")

@@ -44,12 +44,18 @@ DEFAULT_AGENT_MODELS = {
 }
 
 DEFAULT_AGENT_COMMANDS = {
-    "cursor": "cursor-agent --print --force --model {model} {prompt}",
+    "cursor": (
+        "cursor-agent --print --force --output-format stream-json "
+        "--model {model} {prompt}"
+    ),
     "codex": (
         "codex exec -C {cwd} --skip-git-repo-check "
         "--dangerously-bypass-approvals-and-sandbox {model_arg} {prompt}"
     ),
-    "gemini": "gemini --model {model} --prompt {prompt} --yolo --skip-trust",
+    "gemini": (
+        "gemini --model {model} --prompt {prompt} --yolo --skip-trust "
+        "--output-format stream-json"
+    ),
 }
 
 PROMPT_PROFILES = {"qa", "minimal", "raw"}
@@ -86,6 +92,7 @@ def run_agent(
     timeout_seconds = int(os.getenv("BENCHMARK_TIMEOUT_SECONDS", "900"))
 
     command, cwd, use_shell = build_command(agent, fixture, project_dir)
+    stdin_input = agent_stdin_input(agent, fixture)
     start = time.time()
     timed_out = False
 
@@ -94,6 +101,7 @@ def run_agent(
         cwd=cwd,
         shell=use_shell,
         text=True,
+        stdin=subprocess.PIPE if stdin_input is not None else None,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         env=agent_environment(),
@@ -101,7 +109,7 @@ def run_agent(
     )
 
     try:
-        output, _ = proc.communicate(timeout=timeout_seconds)
+        output, _ = proc.communicate(input=stdin_input, timeout=timeout_seconds)
         exit_code = proc.returncode if proc.returncode is not None else 1
     except subprocess.TimeoutExpired:
         timed_out = True
@@ -153,19 +161,36 @@ def build_command(
         max_iterations = os.getenv("BENCHMARK_MAX_ITERATIONS", "75")
         model = agent_model(agent) or DEFAULT_AGENT_MODELS["supatest"]
         binary = os.getenv("BENCHMARK_SUPATEST_BINARY") or "supatest"
-        args = [
-            binary,
-            build_prompt(fixture),
-            "--headless",
-            "--mode",
-            fixture.mode,
-            "--model",
-            model,
-            "--cwd",
-            str(project_dir),
-            "--max-iterations",
-            max_iterations,
-        ]
+        if supatest_machine_mode_enabled():
+            args = [
+                binary,
+                "--output-format",
+                "stream-json",
+                "--input-format",
+                "stream-json",
+                "--mode",
+                fixture.mode,
+                "--model",
+                model,
+                "--cwd",
+                str(project_dir),
+                "--max-iterations",
+                max_iterations,
+            ]
+        else:
+            args = [
+                binary,
+                build_prompt(fixture),
+                "--headless",
+                "--mode",
+                fixture.mode,
+                "--model",
+                model,
+                "--cwd",
+                str(project_dir),
+                "--max-iterations",
+                max_iterations,
+            ]
 
         api_key = os.getenv("BENCHMARK_SUPATEST_API_KEY") or os.getenv(
             "SUPATEST_API_KEY"
@@ -196,6 +221,34 @@ def build_command(
         project_dir,
         True,
     )
+
+
+def agent_stdin_input(agent: str, fixture: EvalFixture) -> str | None:
+    if (
+        agent_family(agent) == "supatest"
+        and not os.getenv("BENCHMARK_SUPATEST_CMD")
+        and supatest_machine_mode_enabled()
+    ):
+        return (
+            json.dumps(
+                {
+                    "type": "user",
+                    "message": {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": build_prompt(fixture)},
+                        ],
+                    },
+                }
+            )
+            + "\n"
+        )
+    return None
+
+
+def supatest_machine_mode_enabled() -> bool:
+    raw = os.getenv("BENCHMARK_SUPATEST_MACHINE_MODE", "1").strip().lower()
+    return raw not in {"0", "false", "no", "off"}
 
 
 def agent_family(agent: str) -> str:

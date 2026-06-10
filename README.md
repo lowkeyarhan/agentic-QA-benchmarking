@@ -84,12 +84,17 @@ Then set this in `benchmark/.env`:
 ```bash
 BENCHMARK_SUPATEST_BINARY=/Users/lowkeyarhan/Documents/supatest/cli/dist/index.js
 BENCHMARK_SUPATEST_MODEL=premium
+BENCHMARK_SUPATEST_MACHINE_MODE=1
 ```
 
 Supatest also needs a project scope for backend sessions. The harness uses
 `BENCHMARK_SUPATEST_PROJECT_ID` first, then falls back to
 `benchmark/.supatest/settings.json`. For the cleanest long-term benchmark,
 use a dedicated Supatest project for benchmark sessions.
+
+`BENCHMARK_SUPATEST_MACHINE_MODE=1` runs Supatest through its stream-json
+machine interface. Keep this enabled for benchmarks because the final
+stream-json result includes token and cost telemetry.
 
 Confident AI dashboard upload is optional and separate from local benchmark
 scoring. Local scoring does not require `CONFIDENT_API_KEY`. If you want to use
@@ -201,9 +206,10 @@ BENCHMARK_CODEX_MODEL=gpt-5.5
 BENCHMARK_GEMINI_MODEL=gemini-3.1-flash-lite
 ```
 
-Built-in command templates exist for Cursor, Codex, and Gemini. For any other
-agent, add it to `BENCHMARK_AGENTS` and set `BENCHMARK_<AGENT>_CMD`. Custom
-templates support these placeholders:
+Built-in command templates exist for Cursor, Codex, and Gemini. Cursor and
+Gemini built-ins use `--output-format stream-json` so token metadata is emitted
+when the CLI exposes it. For any other agent, add it to `BENCHMARK_AGENTS` and
+set `BENCHMARK_<AGENT>_CMD`. Custom templates support these placeholders:
 
 ```bash
 BENCHMARK_QA_PRO_MODEL=qa-large
@@ -325,14 +331,23 @@ folder. The parser understands common fields such as `input_tokens`,
 `output_tokens`, `total_tokens`, `prompt tokens`, `completion tokens`, and Codex
 CLI footers like `tokens used`.
 
+For the built-in agents, the next run attempts to emit machine-readable usage:
+
+- Supatest runs with `BENCHMARK_SUPATEST_MACHINE_MODE=1`, sending the prompt over
+  stdin and reading the final stream-json `usage` payload.
+- Cursor runs with `--output-format stream-json`.
+- Gemini runs with `--output-format stream-json`, including Gemini
+  `usage_metadata` when the CLI exposes it.
+- Codex keeps using the CLI footer parser because it already emits `tokens used`.
+
 The `scores.md` aggregate table includes:
 
-- `Overall` - weighted combined score for ranking agents
 - `QA Avg` - average judge score for correctness
-- `Token Avg` - average relative token-efficiency score for runs with known usage
-- `Token Known` - number of runs where token usage was found
+- `Token Avg` - average relative token-efficiency score
 - `Token Usage` - summed known total tokens
-- `Cost USD` - summed reported or estimated cost, when available
+- `Overall Score` - weighted combined score for ranking agents
+- `Pass`, `Partial`, `Fail` - result distribution for each agent
+- `Checks Pass`, `Checks Fail` - summed judge check counts
 
 By default, `Overall` is calculated as:
 
@@ -347,8 +362,21 @@ less:
 BENCHMARK_OVERALL_QA_WEIGHT=0.8
 ```
 
-If token usage is unknown, the token score and overall score remain `n/a`.
-Unknown usage is not treated as free efficiency.
+Token efficiency is calculated per eval from QA-passing baseline runs only:
+
+```text
+token efficiency = best_passing_tokens / agent_tokens * 100
+```
+
+`best_passing_tokens` ignores agents below
+`BENCHMARK_TOKEN_BASELINE_QA_THRESHOLD`, so an agent that crashes quickly cannot
+become the "most efficient" baseline. Runs below the QA threshold are capped at
+their QA score for token efficiency. If token usage is unknown, token efficiency
+is `0`, so the overall score still exists but the token component is penalized.
+
+```bash
+BENCHMARK_TOKEN_BASELINE_QA_THRESHOLD=0.8
+```
 
 The harness does not hard-code provider prices. To estimate cost, set per-agent
 rates in `.env`:
@@ -362,3 +390,14 @@ BENCHMARK_TOKEN_PRICE_CODEX_TOTAL_PER_1M=
 Agent-specific inline variants are also supported, so
 `codex:gpt-5.5` can use `BENCHMARK_TOKEN_PRICE_CODEX_GPT_5_5_TOTAL_PER_1M`
 before falling back to `BENCHMARK_TOKEN_PRICE_CODEX_TOTAL_PER_1M`.
+
+If an agent or proxy hides usage, leave it blank to receive a zero efficiency
+score, or set an explicit trusted fallback in `.env`:
+
+```bash
+BENCHMARK_TOKEN_USAGE_FALLBACK_SUPATEST_TOKENS=
+BENCHMARK_TOKEN_USAGE_FALLBACK_CURSOR_TOKENS=
+BENCHMARK_TOKEN_USAGE_FALLBACK_CODEX_TOKENS=
+BENCHMARK_TOKEN_USAGE_FALLBACK_GEMINI_TOKENS=
+BENCHMARK_TOKEN_USAGE_FALLBACK_TOKENS=
+```

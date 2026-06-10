@@ -14,6 +14,7 @@ from agents import (
     agent_model,
     agent_model_label,
     agent_run_dir_name,
+    agent_stdin_input,
     build_command,
     build_prompt,
     changed_file_excerpt,
@@ -36,13 +37,19 @@ from run_benchmark import (
     build_artifact_checks,
     format_score_line,
     maestro_output_has_devices,
+    parse_token_usage_json,
     parse_token_usage_text,
     preflight_judge_model,
     required_live_device_platform,
     write_blocked_result,
     write_summary,
 )
-from scoring import cleaned_transcript, make_metric, make_test_case
+from scoring import (
+    apply_token_efficiency_scores,
+    cleaned_transcript,
+    make_metric,
+    make_test_case,
+)
 import scoring
 
 
@@ -144,6 +151,19 @@ def test_built_in_gemini_command_uses_model_env(tmp_path, monkeypatch) -> None:
     assert use_shell is True
     assert cwd == project_dir
     assert command.startswith("gemini --model gemini-2.5-pro --prompt ")
+    assert "--output-format stream-json" in command
+
+
+def test_built_in_cursor_command_uses_stream_json_output(tmp_path, monkeypatch) -> None:
+    monkeypatch.delenv("BENCHMARK_CURSOR_CMD", raising=False)
+    project_dir = tmp_path / "project"
+    project_dir.mkdir()
+
+    command, cwd, use_shell = build_command("cursor", load_fixture("E25"), project_dir)
+
+    assert use_shell is True
+    assert cwd == project_dir
+    assert "--output-format stream-json" in command
 
 
 def test_cursor_agent_command_uses_auto_model(tmp_path, monkeypatch) -> None:
@@ -246,16 +266,23 @@ def test_supatest_receives_same_benchmark_prompt(tmp_path, monkeypatch) -> None:
     monkeypatch.delenv("BENCHMARK_SUPATEST_API_KEY", raising=False)
     monkeypatch.delenv("SUPATEST_API_KEY", raising=False)
     monkeypatch.delenv("BENCHMARK_SUPATEST_MODEL", raising=False)
+    monkeypatch.delenv("BENCHMARK_SUPATEST_MACHINE_MODE", raising=False)
     project_dir = tmp_path / "project"
     project_dir.mkdir()
     fixture = load_fixture("E25")
 
     command, cwd, use_shell = build_command("supatest", fixture, project_dir)
+    stdin_input = agent_stdin_input("supatest", fixture)
 
     assert use_shell is False
     assert cwd == project_dir
-    assert command[1] == build_prompt(fixture)
-    assert "real production QA work" in command[1]
+    assert "--output-format" in command
+    assert command[command.index("--output-format") + 1] == "stream-json"
+    assert "--input-format" in command
+    assert command[command.index("--input-format") + 1] == "stream-json"
+    assert build_prompt(fixture) not in command
+    assert stdin_input is not None
+    assert "real production QA work" in stdin_input
     assert command[command.index("--model") + 1] == "premium"
     assert command[command.index("--project-id") + 1] == "benchmark-project"
     assert "--supatest-api-key" not in command
@@ -363,6 +390,64 @@ def test_token_usage_parser_reads_codex_footer() -> None:
     assert usage["totalTokens"] == 77461
 
 
+def test_token_usage_parser_reads_plain_text_supatest_counters() -> None:
+    usage = parse_token_usage_text(
+        "final answer\nTokens Used: 12,345\nTotal Cost USD: $0.1234\n"
+    )
+
+    assert usage["totalTokens"] == 12345
+    assert usage["estimatedCostUsd"] == 0.1234
+
+
+def test_token_usage_parser_reads_gemini_usage_metadata() -> None:
+    usage = parse_token_usage_json(
+        {
+            "response": {
+                "usage_metadata": {
+                    "prompt_token_count": 1000,
+                    "candidates_token_count": 250,
+                    "total_token_count": 1250,
+                }
+            }
+        }
+    )
+
+    assert usage["inputTokens"] == 1000
+    assert usage["outputTokens"] == 250
+    assert usage["totalTokens"] == 1250
+
+
+def test_build_token_usage_reads_supatest_stream_json_result(tmp_path) -> None:
+    transcript = tmp_path / "transcript.log"
+    transcript.write_text(
+        "\n".join(
+            [
+                "working",
+                json.dumps(
+                    {
+                        "type": "result",
+                        "total_cost_usd": 0.0123,
+                        "usage": {
+                            "input_tokens": 1000,
+                            "output_tokens": 200,
+                            "cache_read_input_tokens": 300,
+                        },
+                    }
+                ),
+            ]
+        )
+    )
+
+    usage = build_token_usage("supatest", transcript, tmp_path)
+
+    assert usage["inputTokens"] == 1000
+    assert usage["outputTokens"] == 200
+    assert usage["cachedInputTokens"] == 300
+    assert usage["totalTokens"] == 1200
+    assert usage["estimatedCostUsd"] == 0.0123
+    assert usage["source"] == "transcript"
+
+
 def test_build_token_usage_reads_json_and_estimates_cost(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("BENCHMARK_TOKEN_PRICE_CODEX_INPUT_PER_1M", "2")
     monkeypatch.setenv("BENCHMARK_TOKEN_PRICE_CODEX_OUTPUT_PER_1M", "10")
@@ -412,12 +497,17 @@ def test_make_test_case_anonymizes_agent_identity_paths_and_tokens(tmp_path) -> 
         transcript_path=transcript_path,
     )
 
-    test_case = make_test_case(load_fixture("E25"), run)
+    test_case = make_test_case(
+        load_fixture("E25"),
+        run,
+        f"--- a/tests/error-users.spec.ts\n+++ b/tests/error-users.spec.ts\n+// {project_dir}\n",
+    )
 
     assert "Agent:" not in test_case.actual_output
     assert "supatest" not in test_case.actual_output.lower()
     assert str(tmp_path) not in test_case.actual_output
     assert "cli_1234567890abcdefghijklmnop" not in test_case.actual_output
+    assert "Changed diff:" in test_case.actual_output
     assert "<project>/tests/error-users.spec.ts" in test_case.actual_output
     assert "<redacted-token>" in test_case.actual_output
 
@@ -529,7 +619,11 @@ def test_write_summary_emits_only_three_result_files(tmp_path) -> None:
     assert "supatest [premium]" in scores
     assert summary["agentModels"]["supatest"] == "premium"
     assert summary["summary"]["byAgent"]["supatest"]["pass"] == 1
+    assert summary["summary"]["byAgent"]["supatest"]["tokenUsage"]["scorePercent"] == 0.0
+    assert summary["summary"]["byAgent"]["supatest"]["overallScorePercent"] == 80.0
     assert run["runsByEval"]["E25"]["supatest"]["caseId"] == "case-001"
+    assert run["runsByEval"]["E25"]["supatest"]["tokenUsage"]["scorePercent"] == 0.0
+    assert run["runsByEval"]["E25"]["supatest"]["overallScorePercent"] == 80.0
 
 
 def test_write_summary_includes_relative_token_efficiency_and_overall_score(
@@ -590,11 +684,12 @@ def test_write_summary_includes_relative_token_efficiency_and_overall_score(
     run = json.loads((tmp_path / "run.json").read_text())
     scores = (tmp_path / "scores.md").read_text()
 
-    assert "| Agent | Overall | QA Avg | Token Avg |" in scores
-    assert "| supatest [premium] | 100.0 | 100.0 | 100.0 | 1 | 1 | 1 |" in scores
-    assert "| cursor [auto] | 90.0 | 100.0 | 50.0 | 1 | 1 | 1 |" in scores
+    assert "| Agent | QA Avg | Token Avg | Token Usage | Overall Score |" in scores
+    assert "| supatest [premium] | 100.0 | 100.0 | 1.0k | 100.0 | 1 | 0 | 0 | 0 | 0 |" in scores
+    assert "| cursor [auto] | 100.0 | 50.0 | 2.0k | 90.0 | 1 | 0 | 0 | 0 | 0 |" in scores
     assert "| Token Usage |" in scores
-    assert "$0.0100" in scores
+    assert "Cost USD" not in scores
+    assert "$0.0100" not in scores
     assert summary["overallScoring"]["qaWeight"] == 0.8
     assert summary["overallScoring"]["tokenUsageWeight"] == 0.2
     assert summary["summary"]["byAgent"]["supatest"]["overallScorePercent"] == 100.0
@@ -605,6 +700,44 @@ def test_write_summary_includes_relative_token_efficiency_and_overall_score(
     assert summary["summary"]["byAgent"]["cursor"]["tokenUsage"]["scorePercent"] == 50.0
     assert run["runsByEval"]["E25"]["cursor"]["tokenUsage"]["scorePercent"] == 50
     assert run["runsByEval"]["E25"]["cursor"]["overallScorePercent"] == 90.0
+
+
+def test_token_efficiency_baseline_ignores_cheap_failed_runs(monkeypatch) -> None:
+    monkeypatch.setenv("BENCHMARK_TOKEN_BASELINE_QA_THRESHOLD", "0.8")
+    results = [
+        {
+            "evalId": "E25",
+            "scorePercent": 100,
+            "tokenUsage": {**run_benchmark.empty_token_usage(), "totalTokens": 1000},
+        },
+        {
+            "evalId": "E25",
+            "scorePercent": 0,
+            "tokenUsage": {**run_benchmark.empty_token_usage(), "totalTokens": 1},
+        },
+        {
+            "evalId": "E25",
+            "scorePercent": 100,
+            "tokenUsage": {**run_benchmark.empty_token_usage(), "totalTokens": 2000},
+        },
+        {
+            "evalId": "E25",
+            "scorePercent": 100,
+            "tokenUsage": run_benchmark.empty_token_usage(),
+        },
+    ]
+
+    apply_token_efficiency_scores(results)
+
+    assert results[0]["tokenUsage"]["scorePercent"] == 100.0
+    assert results[1]["tokenUsage"]["scorePercent"] == 0.0
+    assert results[1]["tokenUsage"]["scoreBasis"] == "qa-capped-relative-passing-token-baseline"
+    assert results[2]["tokenUsage"]["scorePercent"] == 50.0
+    assert results[3]["tokenUsage"]["scorePercent"] == 0.0
+    assert (
+        results[3]["tokenUsage"]["scoreBasis"]
+        == "missing-token-usage-zero-efficiency"
+    )
 
 
 def test_score_line_matches_terminal_scoreboard_shape(monkeypatch) -> None:
@@ -759,6 +892,8 @@ def test_batch_scoring_uses_one_judge_call_and_check_counts(monkeypatch) -> None
         def generate(self, prompt, schema):
             calls["count"] += 1
             assert "r001" in prompt
+            assert '"changedDiff"' in prompt
+            assert "expect(true)" in prompt
             assert schema is BatchJudgeResponse
             return (
                 BatchJudgeResponse(
@@ -790,6 +925,12 @@ def test_batch_scoring_uses_one_judge_call_and_check_counts(monkeypatch) -> None
         "projectDir": "runs/verify/case-001/supatest/project",
         "transcriptPath": "runs/verify/case-001/supatest/transcript.log",
         "changedFiles": ["tests/example.spec.ts"],
+        "changedDiff": (
+            "--- a/tests/example.spec.ts\n"
+            "+++ b/tests/example.spec.ts\n"
+            "-expect(locator).toBeVisible()\n"
+            "+expect(true).toBe(true)\n"
+        ),
         "passCriteria": ["does A", "does B"],
         "failCriteria": [],
     }
@@ -966,7 +1107,7 @@ def test_unscored_results_are_excluded_from_summary_average(tmp_path) -> None:
     assert summary["summary"]["byAgent"]["supatest"]["fail"] == 0
     assert summary["summary"]["byAgent"]["supatest"]["unscored"] == 1
     assert "| E26 | unscored |" in scores
-    assert "Unscored" in scores
+    assert "Unscored" not in scores
 
 
 def test_live_device_preflight_only_targets_selected_live_inspection_evals() -> None:

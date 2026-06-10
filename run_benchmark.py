@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import difflib
 import os
 import re
 import shutil
@@ -76,6 +77,8 @@ from fixtures import (
 )  # noqa: E402
 from pydantic import BaseModel  # noqa: E402
 from scoring import (
+    apply_token_efficiency_scores,
+    configured_token_baseline_threshold_percent,
     make_judge_model,
     make_test_case,
     result_label,
@@ -457,6 +460,9 @@ def run_one_case(
     run = run_agent(agent, fixture, project_dir, case_run_dir)
     artifact_checks = build_artifact_checks(fixture, run)
     token_usage = build_token_usage(agent, run.transcript_path, case_run_dir)
+    changed_diff = build_changed_diff(
+        fixture.project_dir, project_dir, run.changed_files
+    )
     result = {
         "runId": run_id,
         "caseId": case_id,
@@ -470,6 +476,7 @@ def run_one_case(
         "projectDir": str(run.project_dir),
         "transcriptPath": str(run.transcript_path),
         "changedFiles": run.changed_files,
+        "changedDiff": changed_diff,
         "artifactChecks": artifact_checks,
         "artifactWarnings": artifact_checks["warnings"],
         "tokenUsage": token_usage,
@@ -477,7 +484,66 @@ def run_one_case(
         "failCriteria": fixture.fail_criteria,
     }
 
-    return PendingResult(result, make_test_case(fixture, run))
+    return PendingResult(result, make_test_case(fixture, run, changed_diff))
+
+
+def build_changed_diff(
+    source_project_dir: Path,
+    run_project_dir: Path,
+    changed_files: list[str],
+    max_chars: int = 32000,
+) -> str:
+    chunks: list[str] = []
+    remaining = max_chars
+    for relative in sorted(changed_files, key=changed_file_diff_priority):
+        if is_noise_file(relative):
+            continue
+        before_path = source_project_dir / relative
+        after_path = run_project_dir / relative
+        before_lines = read_text_lines_for_diff(before_path)
+        after_lines = read_text_lines_for_diff(after_path)
+        if before_lines is None and after_lines is None:
+            continue
+        diff_lines = list(
+            difflib.unified_diff(
+                before_lines or [],
+                after_lines or [],
+                fromfile=f"a/{relative}",
+                tofile=f"b/{relative}",
+                lineterm="",
+            )
+        )
+        if not diff_lines:
+            continue
+        piece = "\n".join(diff_lines) + "\n"
+        chunks.append(piece[:remaining])
+        remaining -= len(piece)
+        if remaining <= 0:
+            chunks.append(f"\n...[diff truncated at {max_chars} chars]...\n")
+            break
+    return "".join(chunks)[:max_chars]
+
+
+def read_text_lines_for_diff(path: Path) -> list[str] | None:
+    if not path.exists() or not path.is_file():
+        return None
+    try:
+        data = path.read_bytes()
+    except OSError:
+        return None
+    if b"\x00" in data:
+        return ["<binary file>\n"]
+    return data.decode(errors="replace").splitlines()
+
+
+def changed_file_diff_priority(relative: str) -> tuple[int, str]:
+    if is_test_file(relative):
+        return (0, relative)
+    if is_implementation_file(relative):
+        return (1, relative)
+    if relative.lower().endswith(".md"):
+        return (2, relative)
+    return (3, relative)
 
 
 def build_artifact_checks(fixture, run) -> dict:
@@ -556,7 +622,18 @@ def build_token_usage(agent: str, transcript_path: Path, case_run_dir: Path) -> 
         input_tokens = usage.get("inputTokens")
         output_tokens = usage.get("outputTokens")
         if input_tokens is not None or output_tokens is not None:
+            # OpenAI/Codex/Gemini-style totals are sometimes absent even when
+            # split prompt/output counters are present. Keep the derived total
+            # to prompt + output because provider "cached" counters are not
+            # consistently additive across APIs.
             usage["totalTokens"] = int(input_tokens or 0) + int(output_tokens or 0)
+
+    if usage["totalTokens"] is None:
+        fallback_tokens = token_usage_fallback_tokens(agent)
+        if fallback_tokens is not None:
+            usage["totalTokens"] = fallback_tokens
+            sources.append("configured-fallback")
+            usage["warnings"].append("token-usage-fallback")
 
     estimated_cost = estimate_token_cost_usd(agent, usage)
     if estimated_cost is not None:
@@ -564,8 +641,11 @@ def build_token_usage(agent: str, transcript_path: Path, case_run_dir: Path) -> 
 
     if sources:
         usage["source"] = ", ".join(dict.fromkeys(sources))
-    if usage["totalTokens"] is None and not sources:
-        usage["warnings"].append("token-usage-not-found")
+    if usage["totalTokens"] is None:
+        if sources:
+            usage["warnings"].append("token-total-not-found")
+        else:
+            usage["warnings"].append("token-usage-not-found")
     return usage
 
 
@@ -575,11 +655,59 @@ def token_usage_candidate_paths(
     return [
         ("transcript", transcript_path),
         ("run-usage-json", case_run_dir / "usage.json"),
+        ("run-usage-jsonl", case_run_dir / "usage.jsonl"),
         ("run-token-usage-json", case_run_dir / "token-usage.json"),
+        ("run-token-usage-jsonl", case_run_dir / "token-usage.jsonl"),
         ("run-telemetry-json", case_run_dir / "telemetry.json"),
+        ("run-telemetry-jsonl", case_run_dir / "telemetry.jsonl"),
+        ("run-supatest-usage-json", case_run_dir / ".supatest" / "usage.json"),
+        ("run-supatest-usage-jsonl", case_run_dir / ".supatest" / "usage.jsonl"),
+        (
+            "run-supatest-token-usage-json",
+            case_run_dir / ".supatest" / "token-usage.json",
+        ),
+        (
+            "run-supatest-token-usage-jsonl",
+            case_run_dir / ".supatest" / "token-usage.jsonl",
+        ),
+        ("run-supatest-telemetry-json", case_run_dir / ".supatest" / "telemetry.json"),
+        (
+            "run-supatest-telemetry-jsonl",
+            case_run_dir / ".supatest" / "telemetry.jsonl",
+        ),
         ("project-usage-json", case_run_dir / "project" / "usage.json"),
+        ("project-usage-jsonl", case_run_dir / "project" / "usage.jsonl"),
         ("project-token-usage-json", case_run_dir / "project" / "token-usage.json"),
+        (
+            "project-token-usage-jsonl",
+            case_run_dir / "project" / "token-usage.jsonl",
+        ),
         ("project-telemetry-json", case_run_dir / "project" / "telemetry.json"),
+        ("project-telemetry-jsonl", case_run_dir / "project" / "telemetry.jsonl"),
+        (
+            "project-supatest-usage-json",
+            case_run_dir / "project" / ".supatest" / "usage.json",
+        ),
+        (
+            "project-supatest-usage-jsonl",
+            case_run_dir / "project" / ".supatest" / "usage.jsonl",
+        ),
+        (
+            "project-supatest-token-usage-json",
+            case_run_dir / "project" / ".supatest" / "token-usage.json",
+        ),
+        (
+            "project-supatest-token-usage-jsonl",
+            case_run_dir / "project" / ".supatest" / "token-usage.jsonl",
+        ),
+        (
+            "project-supatest-telemetry-json",
+            case_run_dir / "project" / ".supatest" / "telemetry.json",
+        ),
+        (
+            "project-supatest-telemetry-jsonl",
+            case_run_dir / "project" / ".supatest" / "telemetry.jsonl",
+        ),
         ("project-cli-log", case_run_dir / "project" / "cli.log"),
     ]
 
@@ -604,8 +732,26 @@ def parse_token_usage_file(path: Path) -> dict | None:
         if parsed_json is not None:
             parsed_any = merge_token_usage(usage, parse_token_usage_json(parsed_json))
 
+    for parsed_json in parse_json_lines(text):
+        parsed_any = (
+            merge_token_usage(usage, parse_token_usage_json(parsed_json)) or parsed_any
+        )
+
     parsed_any = merge_token_usage(usage, parse_token_usage_text(text)) or parsed_any
     return usage if parsed_any else None
+
+
+def parse_json_lines(text: str) -> list[object]:
+    parsed: list[object] = []
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped.startswith("{"):
+            continue
+        try:
+            parsed.append(json.loads(stripped))
+        except json.JSONDecodeError:
+            continue
+    return parsed
 
 
 def parse_token_usage_json(value) -> dict:
@@ -615,7 +761,12 @@ def parse_token_usage_json(value) -> dict:
         if isinstance(item, dict):
             for raw_key, raw_value in item.items():
                 key = normalize_usage_key(str(raw_key))
-                next_in_usage = in_usage or key in {"usage", "tokenusage", "tokens"}
+                next_in_usage = in_usage or key in {
+                    "usage",
+                    "usagemetadata",
+                    "tokenusage",
+                    "tokens",
+                }
                 assign_json_usage_value(usage, key, raw_value, next_in_usage)
                 walk(raw_value, next_in_usage)
         elif isinstance(item, list):
@@ -638,6 +789,8 @@ def assign_json_usage_value(
         "prompttoken",
         "inputtokens",
         "inputtoken",
+        "prompttokencount",
+        "inputtokencount",
     } or (in_usage and key in {"prompt", "input"}):
         set_max_usage_value(usage, "inputTokens", int(number))
     elif key in {
@@ -646,6 +799,13 @@ def assign_json_usage_value(
         "outputtokens",
         "outputtoken",
         "responsetokens",
+        "candidatetokens",
+        "candidatetokencount",
+        "candidatestokens",
+        "candidatestokencount",
+        "completiontokencount",
+        "outputtokencount",
+        "responsetokencount",
     } or (in_usage and key in {"completion", "output", "response"}):
         set_max_usage_value(usage, "outputTokens", int(number))
     elif key in {
@@ -655,6 +815,8 @@ def assign_json_usage_value(
         "cachereadinputtokens",
         "cachecreationinputtokens",
         "cachedprompttokens",
+        "cachedcontenttokens",
+        "cachedcontenttokencount",
     }:
         set_max_usage_value(usage, "cachedInputTokens", int(number))
     elif key in {
@@ -662,6 +824,7 @@ def assign_json_usage_value(
         "totaltoken",
         "tokensused",
         "tokencount",
+        "totaltokencount",
     } or (in_usage and key == "total"):
         set_max_usage_value(usage, "totalTokens", int(number))
     elif key in {
@@ -678,25 +841,36 @@ def parse_token_usage_text(text: str) -> dict:
     text = re.sub(r"\x1b(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])", "", text)
     usage = empty_token_usage()
 
+    # Codex prints a footer as:
+    #   tokens used
+    #   77,461
     for match in re.finditer(
         r"(?is)\btokens\s+used\s*[\r\n]+[\s`$>]*([0-9][0-9,]*(?:\.[0-9]+)?)",
         text,
     ):
         set_max_usage_value(usage, "totalTokens", int(parse_usage_number(match[1])))
 
+    # Supatest and many proxy CLIs use plain text counters such as
+    # "Tokens Used: 12345" or "Total Tokens = 12345".
+    for match in re.finditer(
+        r"(?i)\b(?:tokens\s+used|total\s+tokens?|total\s+token\s+count|token\s+usage|usage\s+tokens)\b\s*[:=]\s*([0-9][0-9,]*(?:\.[0-9]+)?)",
+        text,
+    ):
+        set_max_usage_value(usage, "totalTokens", int(parse_usage_number(match[1])))
+
     labeled_patterns = [
         (
-            r"(?i)\b(prompt|input|completion|output|response|total|cached|cached\s+input|cache\s+read\s+input|cache\s+creation\s+input)\s+tokens?\s*[:=]\s*([0-9][0-9,]*(?:\.[0-9]+)?)",
+            r"(?i)\b(prompt|input|completion|output|response|candidate|candidates|total|cached|cached\s+input|cached\s+content|cache\s+read\s+input|cache\s+creation\s+input)\s+(?:tokens?|token\s+count)\s*[:=]\s*([0-9][0-9,]*(?:\.[0-9]+)?)",
             1,
             2,
         ),
         (
-            r"(?i)[\"']?\b(prompt_tokens|input_tokens|completion_tokens|output_tokens|response_tokens|total_tokens|cached_tokens|cached_input_tokens|cache_read_input_tokens|cache_creation_input_tokens)\b[\"']?\s*[:=]\s*([0-9][0-9,]*(?:\.[0-9]+)?)",
+            r"(?i)[\"']?\b(prompt_tokens|input_tokens|completion_tokens|output_tokens|response_tokens|candidate_tokens|candidates_tokens|total_tokens|prompt_token_count|candidates_token_count|candidate_token_count|total_token_count|cached_tokens|cached_input_tokens|cached_content_token_count|cache_read_input_tokens|cache_creation_input_tokens)\b[\"']?\s*[:=]\s*([0-9][0-9,]*(?:\.[0-9]+)?)",
             1,
             2,
         ),
         (
-            r"(?i)\b([0-9][0-9,]*(?:\.[0-9]+)?)\s+(prompt|input|completion|output|response|total|cached|cached\s+input)\s+tokens?\b",
+            r"(?i)\b([0-9][0-9,]*(?:\.[0-9]+)?)\s+(prompt|input|completion|output|response|candidate|candidates|total|cached|cached\s+input|cached\s+content)\s+(?:tokens?|token\s+count)\b",
             2,
             1,
         ),
@@ -711,25 +885,45 @@ def parse_token_usage_text(text: str) -> dict:
             )
 
     for match in re.finditer(
-        r"(?i)\b(?:estimated\s+)?(?:total\s+)?cost(?:\s+usd|\s*\(usd\))?\s*[:=]\s*\$?\s*([0-9]+(?:\.[0-9]+)?)",
+        r"(?i)\b(?:estimated\s+)?(?:total\s+)?cost(?:\s+usd|\s*\(usd\))?\s*[:=]\s*\$?\s*([0-9]+(?:\.[0-9]+)?)|\btotal_cost_usd\b[\"']?\s*[:=]\s*\$?\s*([0-9]+(?:\.[0-9]+)?)",
         text,
     ):
-        set_max_usage_value(usage, "estimatedCostUsd", float(match[1]))
+        set_max_usage_value(
+            usage,
+            "estimatedCostUsd",
+            float(next(group for group in match.groups() if group is not None)),
+        )
 
     return usage
 
 
 def token_usage_field_for_label(label: str) -> str | None:
     normalized = normalize_usage_key(label)
-    if normalized in {"prompt", "prompttokens", "input", "inputtokens"}:
+    if normalized in {
+        "prompt",
+        "prompttokens",
+        "prompttokencount",
+        "input",
+        "inputtokens",
+        "inputtokencount",
+    }:
         return "inputTokens"
     if normalized in {
         "completion",
         "completiontokens",
+        "completiontokencount",
         "output",
         "outputtokens",
+        "outputtokencount",
         "response",
         "responsetokens",
+        "responsetokencount",
+        "candidate",
+        "candidatetokens",
+        "candidatetokencount",
+        "candidates",
+        "candidatestokens",
+        "candidatestokencount",
     }:
         return "outputTokens"
     if normalized in {
@@ -737,13 +931,15 @@ def token_usage_field_for_label(label: str) -> str | None:
         "cachedtokens",
         "cachedinput",
         "cachedinputtokens",
+        "cachedcontent",
         "cachereadinput",
         "cachereadinputtokens",
         "cachecreationinput",
         "cachecreationinputtokens",
+        "cachedcontenttokencount",
     }:
         return "cachedInputTokens"
-    if normalized in {"total", "totaltokens"}:
+    if normalized in {"total", "totaltokens", "totaltokencount"}:
         return "totalTokens"
     return None
 
@@ -834,33 +1030,18 @@ def token_price_rate(agent: str, field: str) -> float | None:
     return None
 
 
-def apply_token_efficiency_scores(results: list[dict]) -> None:
-    by_eval: dict[str, list[dict]] = {}
-    for result in results:
-        by_eval.setdefault(result.get("evalId", ""), []).append(result)
+def token_usage_fallback_tokens(agent: str) -> int | None:
+    env_names = [agent_command_env_name(agent)]
+    family_env = agent_command_env_name(agent_family(agent))
+    if family_env not in env_names:
+        env_names.append(family_env)
 
-    for eval_results in by_eval.values():
-        known = [
-            result
-            for result in eval_results
-            if token_total(result.get("tokenUsage")) is not None
-        ]
-        if not known:
-            continue
-
-        best_total = min(token_total(result.get("tokenUsage")) for result in known)
-        if not best_total or best_total <= 0:
-            continue
-
-        for result in known:
-            usage = result.setdefault("tokenUsage", empty_token_usage())
-            total = token_total(usage)
-            if not total or total <= 0:
-                continue
-            score = min(1.0, best_total / total)
-            usage["score"] = round(score, 4)
-            usage["scorePercent"] = round(score * 100)
-            usage["scoreBasis"] = "relative-total-tokens-per-eval"
+    for env_name in env_names:
+        raw = os.getenv(f"BENCHMARK_TOKEN_USAGE_FALLBACK_{env_name}_TOKENS")
+        if raw and raw.strip():
+            return int(raw.strip())
+    raw = os.getenv("BENCHMARK_TOKEN_USAGE_FALLBACK_TOKENS")
+    return int(raw.strip()) if raw and raw.strip() else None
 
 
 def token_total(usage: dict | None) -> int | None:
@@ -882,8 +1063,7 @@ def apply_overall_scores(results: list[dict]) -> None:
             continue
 
         overall_percent = (
-            float(qa_score) * weights["qa"]
-            + float(token_score) * weights["tokenUsage"]
+            float(qa_score) * weights["qa"] + float(token_score) * weights["tokenUsage"]
         )
         result["overallScorePercent"] = round(overall_percent, 1)
         result["overallScore"] = round(overall_percent / 100, 4)
@@ -1144,9 +1324,12 @@ def build_batch_judge_prompt(
 def batch_case_payload(
     result_id: str, result: dict, test_case: object, char_budget: int
 ) -> dict:
-    task_budget = max(300, char_budget // 4)
-    criteria_budget = max(300, char_budget // 4)
-    evidence_budget = max(400, char_budget - task_budget - criteria_budget)
+    task_budget = max(300, char_budget // 5)
+    criteria_budget = max(300, char_budget // 5)
+    diff_budget = max(500, char_budget // 4)
+    evidence_budget = max(
+        400, char_budget - task_budget - criteria_budget - diff_budget
+    )
     return {
         "resultId": result_id,
         "evalId": result.get("evalId"),
@@ -1155,6 +1338,7 @@ def batch_case_payload(
         "exitCode": result.get("exitCode"),
         "timedOut": result.get("timedOut"),
         "changedFiles": result.get("changedFiles") or [],
+        "changedDiff": truncate_text(str(result.get("changedDiff") or ""), diff_budget),
         "artifactChecks": result.get("artifactChecks") or {},
         "task": truncate_text(str(getattr(test_case, "input", "")), task_budget),
         "criteria": truncate_text(
@@ -1345,10 +1529,10 @@ def write_summary(
 
     lines.append("")
     lines.append(
-        "| Agent | Overall | QA Avg | Token Avg | Scored | Overall Scored | Token Known | Pass | Partial | Fail | Blocked | Unscored | Token Usage | Cost USD | Checks Pass | Checks Fail |"
+        "| Agent | QA Avg | Token Avg | Token Usage | Overall Score | Pass | Partial | Fail | Checks Pass | Checks Fail |"
     )
     lines.append(
-        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |"
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |"
     )
     for agent in agents:
         agent_results = [item for item in results if item["agent"] == agent]
@@ -1366,10 +1550,6 @@ def write_summary(
         pass_count = sum(1 for item in agent_results if item["result"] == "pass")
         partial_count = sum(1 for item in agent_results if item["result"] == "partial")
         fail_count = sum(1 for item in agent_results if item["result"] == "fail")
-        blocked_count = sum(1 for item in agent_results if item["result"] == "blocked")
-        unscored_count = sum(
-            1 for item in agent_results if item["result"] == "unscored"
-        )
         passed_checks = sum(
             int(item.get("passedChecks") or 0) for item in agent_results
         )
@@ -1378,14 +1558,11 @@ def write_summary(
         )
         lines.append(
             f"| {agent_display_name(agent)} | "
-            f"{format_optional_number(overall_summary['scorePercent'])} | "
             f"{average} | "
             f"{format_optional_number(token_summary['scorePercent'])} | "
-            f"{len(scored_results)} | {overall_summary['scored']} | "
-            f"{token_summary['known']} | "
-            f"{pass_count} | {partial_count} | {fail_count} | {blocked_count} | "
-            f"{unscored_count} | {format_token_count(token_summary['totalTokens'])} | "
-            f"{format_cost_usd(token_summary['estimatedCostUsd'])} | "
+            f"{format_token_count(token_summary['totalTokens'])} | "
+            f"{format_optional_number(overall_summary['scorePercent'])} | "
+            f"{pass_count} | {partial_count} | {fail_count} | "
             f"{passed_checks} | {failed_checks} |"
         )
 
@@ -1408,16 +1585,20 @@ def write_summary(
         "timeoutSeconds": timeout_seconds,
         "tokenScoring": {
             "scoreRange": "0 to 100",
-            "basis": "relative total tokens per eval; lowest known token total gets 100",
-            "unknownUsage": "left unscored",
+            "baselineQaThresholdPercent": configured_token_baseline_threshold_percent(),
+            "basis": "relative total tokens per eval; lowest known token total among QA-passing runs gets 100",
+            "formula": "bestPassingTokens / agentTokens * 100",
+            "failureCap": "runs below the QA baseline threshold cannot score above their QA percent for token efficiency",
+            "unknownUsage": "scorePercent is 0 when token usage is unavailable",
             "cost": "reported by agent logs or estimated only when BENCHMARK_TOKEN_PRICE_* env vars are set",
+            "fallback": "optional BENCHMARK_TOKEN_USAGE_FALLBACK_<AGENT>_TOKENS env vars can provide explicit totals for opaque agents",
         },
         "overallScoring": {
             "scoreRange": "0 to 100",
             "qaWeight": weights["qa"],
             "tokenUsageWeight": weights["tokenUsage"],
             "formula": "qaScorePercent * qaWeight + tokenUsage.scorePercent * tokenUsageWeight",
-            "unknownTokenUsage": "overallScorePercent is null when token usage score is unavailable",
+            "unknownTokenUsage": "missing token usage contributes 0 to the weighted token component",
         },
     }
     (results_dir / "summary.json").write_text(
@@ -1547,9 +1728,7 @@ def summarize_result(result: dict | None) -> dict | None:
 
 def summarize_overall_score(results: list[dict]) -> dict:
     scored = [
-        result
-        for result in results
-        if result.get("overallScorePercent") is not None
+        result for result in results if result.get("overallScorePercent") is not None
     ]
     return {
         "scored": len(scored),
@@ -1566,8 +1745,18 @@ def summarize_overall_score(results: list[dict]) -> dict:
 
 
 def summarize_token_usage(results: list[dict]) -> dict:
-    known = [result for result in results if token_total(result.get("tokenUsage"))]
-    if not known:
+    known = [
+        result
+        for result in results
+        if token_total(result.get("tokenUsage")) is not None
+    ]
+    scored = [
+        result
+        for result in results
+        if result.get("scorePercent") is not None
+        and (result.get("tokenUsage") or {}).get("scorePercent") is not None
+    ]
+    if not known and not scored:
         return {
             "known": 0,
             "scorePercent": None,
@@ -1578,11 +1767,6 @@ def summarize_token_usage(results: list[dict]) -> dict:
             "estimatedCostUsd": None,
         }
 
-    scored = [
-        result
-        for result in known
-        if (result.get("tokenUsage") or {}).get("scorePercent") is not None
-    ]
     costs = [
         (result.get("tokenUsage") or {}).get("estimatedCostUsd")
         for result in known
@@ -1602,21 +1786,37 @@ def summarize_token_usage(results: list[dict]) -> dict:
             if scored
             else None
         ),
-        "totalTokens": sum(
-            int((result.get("tokenUsage") or {}).get("totalTokens") or 0)
-            for result in known
+        "totalTokens": (
+            sum(
+                int((result.get("tokenUsage") or {}).get("totalTokens") or 0)
+                for result in known
+            )
+            if known
+            else None
         ),
-        "inputTokens": sum(
-            int((result.get("tokenUsage") or {}).get("inputTokens") or 0)
-            for result in known
+        "inputTokens": (
+            sum(
+                int((result.get("tokenUsage") or {}).get("inputTokens") or 0)
+                for result in known
+            )
+            if known
+            else None
         ),
-        "outputTokens": sum(
-            int((result.get("tokenUsage") or {}).get("outputTokens") or 0)
-            for result in known
+        "outputTokens": (
+            sum(
+                int((result.get("tokenUsage") or {}).get("outputTokens") or 0)
+                for result in known
+            )
+            if known
+            else None
         ),
-        "cachedInputTokens": sum(
-            int((result.get("tokenUsage") or {}).get("cachedInputTokens") or 0)
-            for result in known
+        "cachedInputTokens": (
+            sum(
+                int((result.get("tokenUsage") or {}).get("cachedInputTokens") or 0)
+                for result in known
+            )
+            if known
+            else None
         ),
         "estimatedCostUsd": (
             round(sum(float(value) for value in costs), 6) if costs else None
