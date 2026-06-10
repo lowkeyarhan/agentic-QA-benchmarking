@@ -285,7 +285,39 @@ def preflight_judge_model() -> str | None:
             "No judge model is configured. Set DEEPEVAL_JUDGE_PROVIDER and the "
             "matching GOOGLE_API_KEY or OPENAI_API_KEY."
         )
+
+    try:
+        generated = judge_model.generate(
+            judge_preflight_prompt(),
+            schema=BatchJudgeResponse,
+        )
+        response = generated[0] if isinstance(generated, tuple) else generated
+        judge_response = parse_batch_judge_response(response)
+        if len(judge_response.results) != 1:
+            return (
+                "Judge API preflight failed: expected exactly one structured "
+                f"result, got {len(judge_response.results)}."
+            )
+        scored = judge_response.results[0]
+        if scored.resultId != "preflight" or scored.result != "pass":
+            return (
+                "Judge API preflight failed: structured response did not match "
+                "the expected preflight result."
+            )
+    except Exception as error:
+        return redact_configured_secrets(
+            f"Judge API preflight failed: {type(error).__name__}: {error}"
+        )
     return None
+
+
+def judge_preflight_prompt() -> str:
+    return (
+        "This is a connectivity and structured-output preflight for a benchmark "
+        "judge. Return exactly one result with resultId 'preflight', score 1.0, "
+        "result 'pass', passedChecks 1, failedChecks 0, and a short reason. "
+        "Do not include any extra resultIds."
+    )
 
 
 def redact_configured_secrets(text: str) -> str:
@@ -658,6 +690,10 @@ def batch_judge_results(
         run_agents=run_agents,
     )
     response, _ = judge_model.generate(prompt, schema=BatchJudgeResponse)
+    return parse_batch_judge_response(response)
+
+
+def parse_batch_judge_response(response) -> BatchJudgeResponse:
     if isinstance(response, BatchJudgeResponse):
         return response
     if isinstance(response, dict):

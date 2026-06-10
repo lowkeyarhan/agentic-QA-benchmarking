@@ -122,12 +122,13 @@ the harness records `blocked` for every agent on that eval instead of scoring it
 as an agent failure. Use `BENCHMARK_DISABLE_PREFLIGHT=1` only when you
 intentionally want to bypass that guard.
 
-The batch judge model is config-preflighted before agents run. Keep
-`DEEPEVAL_GEMINI_MODEL` on a Gemini model that supports Google GenAI structured
-output; Gemma agent model names do not belong in that setting. If the judge
-provider or API key is missing, the harness exits before launching any agents.
-Scoring happens once at the end of all agent runs with one direct judge API
-call, so Google free-tier RPM is not hammered by one request per result.
+The batch judge model is API-preflighted before agents run with a tiny
+structured-output call. Keep `DEEPEVAL_GEMINI_MODEL` on a Gemini model that
+supports Google GenAI structured output; Gemma agent model names do not belong
+in that setting. If the judge provider, API key, quota, model, or structured
+output path is broken, the harness exits before launching any agents. Scoring
+happens at the end of all agent runs through direct judge API calls, so Google
+free-tier RPM is not hammered by one request per result.
 If Google quota is exhausted, switch the judge to OpenAI:
 
 ```bash

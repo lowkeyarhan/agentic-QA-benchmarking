@@ -544,12 +544,83 @@ def test_judge_preflight_reports_and_redacts_model_errors(monkeypatch) -> None:
 
 
 def test_judge_preflight_accepts_valid_response(monkeypatch) -> None:
+    calls = {"count": 0}
+
     class GoodJudge:
-        pass
+        def generate(self, prompt, schema):
+            calls["count"] += 1
+            assert "preflight" in prompt
+            assert schema is BatchJudgeResponse
+            return (
+                BatchJudgeResponse(
+                    results=[
+                        BatchJudgeCaseScore(
+                            resultId="preflight",
+                            score=1.0,
+                            result="pass",
+                            passedChecks=1,
+                            failedChecks=0,
+                            reason="Judge API is reachable.",
+                        )
+                    ]
+                ),
+                0,
+            )
 
     monkeypatch.setattr(run_benchmark, "make_judge_model", lambda: GoodJudge())
 
     assert preflight_judge_model() is None
+    assert calls["count"] == 1
+
+
+def test_judge_preflight_rejects_malformed_response(monkeypatch) -> None:
+    class BadJudge:
+        def generate(self, *_args, **_kwargs):
+            return BatchJudgeResponse(results=[]), 0
+
+    monkeypatch.setattr(run_benchmark, "make_judge_model", lambda: BadJudge())
+
+    issue = preflight_judge_model()
+
+    assert issue is not None
+    assert "expected exactly one structured result" in issue
+
+
+def test_judge_preflight_reports_and_redacts_api_errors(monkeypatch) -> None:
+    class BrokenJudge:
+        def generate(self, *_args, **_kwargs):
+            raise RuntimeError("api rejected secret-google-key")
+
+    monkeypatch.setenv("GOOGLE_API_KEY", "secret-google-key")
+    monkeypatch.setattr(run_benchmark, "make_judge_model", lambda: BrokenJudge())
+
+    issue = preflight_judge_model()
+
+    assert issue is not None
+    assert "Judge API preflight failed" in issue
+    assert "secret-google-key" not in issue
+    assert "<redacted>" in issue
+
+
+def test_main_stops_before_agents_when_judge_preflight_fails(
+    tmp_path, monkeypatch
+) -> None:
+    def run_one_case_should_not_start(*_args, **_kwargs):
+        raise AssertionError("agent run should not start when judge preflight fails")
+
+    monkeypatch.setenv("BENCHMARK_RUN_ID", "judge-preflight-fails")
+    monkeypatch.setenv("BENCHMARK_EVAL_IDS", "E1")
+    monkeypatch.setenv("BENCHMARK_EVAL_LIMIT", "all")
+    monkeypatch.setenv("BENCHMARK_EVAL_OFFSET", "0")
+    monkeypatch.setenv("BENCHMARK_AGENTS", "supatest")
+    monkeypatch.setenv("BENCHMARK_RESULTS_DIR", str(tmp_path / "results"))
+    monkeypatch.setenv("BENCHMARK_RUNS_DIR", str(tmp_path / "runs"))
+    monkeypatch.setenv("BENCHMARK_DISABLE_PREFLIGHT", "1")
+    monkeypatch.delenv("BENCHMARK_DISABLE_JUDGE_PREFLIGHT", raising=False)
+    monkeypatch.setattr(run_benchmark, "preflight_judge_model", lambda: "judge down")
+    monkeypatch.setattr(run_benchmark, "run_one_case", run_one_case_should_not_start)
+
+    assert run_benchmark.main() == 2
 
 
 def test_batch_scoring_uses_one_judge_call_and_check_counts(monkeypatch) -> None:
