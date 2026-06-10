@@ -97,6 +97,7 @@ def test_agent_family_and_run_dir_support_inline_model_variants() -> None:
 
 def test_agent_model_labels_use_agent_specific_config(monkeypatch) -> None:
     monkeypatch.setenv("BENCHMARK_SUPATEST_MODEL", "premium")
+    monkeypatch.delenv("BENCHMARK_GEMINI_MODEL", raising=False)
     monkeypatch.setenv(
         "BENCHMARK_CURSOR_CMD",
         "cursor-agent --print --force --model auto {prompt}",
@@ -648,6 +649,38 @@ def test_write_summary_emits_only_three_result_files(tmp_path) -> None:
     assert run["runsByEval"]["E25"]["supatest"]["caseId"] == "case-001"
     assert run["runsByEval"]["E25"]["supatest"]["tokenUsage"]["scorePercent"] == 0.0
     assert run["runsByEval"]["E25"]["supatest"]["overallScorePercent"] == 80.0
+
+
+def test_write_summary_creates_missing_results_dir(tmp_path) -> None:
+    result = {
+        "runId": "verify",
+        "caseId": "case-001",
+        "evalId": "E25",
+        "evalName": "Batch Tests Before Running",
+        "agent": "supatest",
+        "mode": "build",
+        "score": 1.0,
+        "scorePercent": 100,
+        "result": "pass",
+        "reason": "ok",
+        "scoreSource": "judge",
+        "exitCode": 0,
+        "timedOut": False,
+        "durationMs": 123,
+        "projectDir": "runs/verify/case-001/supatest/project",
+        "transcriptPath": "runs/verify/case-001/supatest/transcript.log",
+        "changedFiles": [],
+        "tokenUsage": run_benchmark.empty_token_usage(),
+        "passCriteria": [],
+        "failCriteria": [],
+    }
+    results_dir = tmp_path / "nested" / "results"
+
+    write_summary(results_dir, "verify", ["E25"], ["supatest"], 1, 600, [result])
+
+    assert (results_dir / "scores.md").is_file()
+    assert (results_dir / "summary.json").is_file()
+    assert (results_dir / "run.json").is_file()
 
 
 def test_write_summary_includes_relative_token_efficiency_and_overall_score(

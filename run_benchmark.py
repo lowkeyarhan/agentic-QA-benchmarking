@@ -1521,6 +1521,7 @@ def write_summary(
     timeout_seconds: int,
     results: list[dict],
 ) -> None:
+    results_dir.mkdir(parents=True, exist_ok=True)
     apply_token_efficiency_scores(results)
     apply_overall_scores(results)
     by_key = {(item["evalId"], item["agent"]): item for item in results}
