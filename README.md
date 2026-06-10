@@ -112,6 +112,25 @@ After a benchmark run, open the latest combined DeepEval report with:
 .venv/bin/deepeval view
 ```
 
+Supatest eval dashboard upload is also optional and separate from Confident AI.
+Create an API key from the Supatest eval dashboard under **Settings → API Keys**,
+then add it to `benchmark/.env`:
+
+```bash
+BENCHMARK_SUPATEST_EVAL_DASHBOARD_API_KEY=sk_eval...
+BENCHMARK_SUPATEST_EVAL_DASHBOARD_URL=https://evals-dashboard.supatest.ai
+BENCHMARK_SUPATEST_EVAL_DASHBOARD_RUN_NAME=Benchmark {run_id}
+```
+
+When `BENCHMARK_SUPATEST_EVAL_DASHBOARD_API_KEY` is set, the harness posts the
+final scored results to `POST /api/v1/ingest` after local `scores.md`,
+`summary.json`, and `run.json` are written. Only Supatest agent results are
+uploaded; they use separate eval IDs such as `E25:supatest-premium`, with the
+benchmark run ID, agent, token usage, time score, changed files, and transcript
+path included in result metadata. Set
+`BENCHMARK_SUPATEST_EVAL_DASHBOARD_STRICT=1` only if an upload failure should
+make the benchmark exit non-zero after writing local results.
+
 ## Run
 
 ```bash
@@ -345,27 +364,35 @@ The `scores.md` aggregate table includes:
 - `QA Avg` - average judge score for correctness
 - `Token Avg` - average relative token-efficiency score
 - `Token Usage` - summed known total tokens
+- `Time Avg` - average relative runtime-efficiency score
+- `Time` - average wall-clock duration per eval
 - `Overall Score` - weighted combined score for ranking agents
 - `Pass`, `Partial`, `Fail` - result distribution for each agent
-- `Checks Pass`, `Checks Fail` - summed judge check counts
 
 By default, `Overall` is calculated as:
 
 ```text
-overall = QA average * 0.8 + token efficiency average * 0.2
+overall = QA average * 0.7 + token efficiency average * 0.15 + time efficiency average * 0.15
 ```
 
-Change the QA weight in `.env` if you want cost efficiency to matter more or
-less:
+Change the QA and time weights in `.env` if you want efficiency to matter more
+or less. Token efficiency receives the remaining weight:
 
 ```bash
-BENCHMARK_OVERALL_QA_WEIGHT=0.8
+BENCHMARK_OVERALL_QA_WEIGHT=0.7
+BENCHMARK_OVERALL_TIME_WEIGHT=0.15
 ```
 
 Token efficiency is calculated per eval from QA-passing baseline runs only:
 
 ```text
 token efficiency = best_passing_tokens / agent_tokens * 100
+```
+
+Time efficiency is calculated per eval from QA-passing baseline runs only:
+
+```text
+time efficiency = fastest_passing_duration_ms / agent_duration_ms * 100
 ```
 
 `best_passing_tokens` ignores agents below

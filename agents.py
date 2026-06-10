@@ -93,7 +93,7 @@ def run_agent(
 
     command, cwd, use_shell = build_command(agent, fixture, project_dir)
     stdin_input = agent_stdin_input(agent, fixture)
-    start = time.time()
+    start = time.monotonic()
     timed_out = False
 
     proc = subprocess.Popen(
@@ -128,7 +128,7 @@ def run_agent(
     if output is None:
         output = ""
 
-    duration_ms = int((time.time() - start) * 1000)
+    duration_ms = int((time.monotonic() - start) * 1000)
     transcript_path.write_text(output)
     changed_files = diff_snapshots(before, snapshot_files(project_dir))
 
