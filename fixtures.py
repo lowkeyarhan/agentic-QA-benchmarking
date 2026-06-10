@@ -48,7 +48,11 @@ def available_eval_ids(fixtures_root: Path = FIXTURES_ROOT) -> list[str]:
 
 
 def selected_eval_ids() -> list[str]:
-    return resolve_eval_ids(os.getenv("BENCHMARK_EVAL_IDS", "all"))
+    return window_eval_ids(
+        resolve_eval_ids(os.getenv("BENCHMARK_EVAL_IDS", "all")),
+        os.getenv("BENCHMARK_EVAL_LIMIT"),
+        os.getenv("BENCHMARK_EVAL_OFFSET"),
+    )
 
 
 def resolve_eval_ids(raw: str | list[str]) -> list[str]:
@@ -66,6 +70,45 @@ def resolve_eval_ids(raw: str | list[str]) -> list[str]:
             + ". Use BENCHMARK_EVAL_IDS=all to run every available fixture."
         )
     return requested
+
+
+def window_eval_ids(
+    eval_ids: list[str],
+    raw_limit: str | None = None,
+    raw_offset: str | None = None,
+) -> list[str]:
+    offset = parse_non_negative_int(raw_offset, "BENCHMARK_EVAL_OFFSET")
+    limit = parse_eval_limit(raw_limit)
+    selected = eval_ids[offset:]
+    if limit is not None:
+        selected = selected[:limit]
+    if eval_ids and not selected:
+        raise ValueError(
+            "BENCHMARK_EVAL_OFFSET skips every selected eval. "
+            f"Selected {len(eval_ids)} eval(s), offset was {offset}."
+        )
+    return selected
+
+
+def parse_eval_limit(raw: str | None) -> int | None:
+    if raw is None or not raw.strip() or raw.strip().lower() == "all":
+        return None
+    value = parse_non_negative_int(raw, "BENCHMARK_EVAL_LIMIT")
+    if value <= 0:
+        raise ValueError("BENCHMARK_EVAL_LIMIT must be a positive integer or 'all'.")
+    return value
+
+
+def parse_non_negative_int(raw: str | None, name: str) -> int:
+    if raw is None or not raw.strip():
+        return 0
+    try:
+        value = int(raw)
+    except ValueError as error:
+        raise ValueError(f"{name} must be a non-negative integer.") from error
+    if value < 0:
+        raise ValueError(f"{name} must be a non-negative integer.")
+    return value
 
 
 def eval_id_sort_key(eval_id: str) -> tuple[str, int, str]:

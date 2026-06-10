@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -54,7 +55,10 @@ except ImportError:
     )
     raise
 
-load_dotenv(BENCHMARK_ROOT / ".env", override=False)
+load_dotenv(
+    BENCHMARK_ROOT / ".env",
+    override=os.getenv("BENCHMARK_ENV_FILE_OVERRIDE", "1") != "0",
+)
 
 from agents import (  # noqa: E402
     agent_display_name,
@@ -62,7 +66,7 @@ from agents import (  # noqa: E402
     agent_run_dir_name,
     run_agent,
 )
-from fixtures import copy_project, load_fixture, resolve_eval_ids  # noqa: E402
+from fixtures import copy_project, load_fixture, resolve_eval_ids, window_eval_ids  # noqa: E402
 from pydantic import BaseModel  # noqa: E402
 from scoring import (
     make_judge_model,
@@ -106,7 +110,12 @@ class BatchJudgeResponse(BaseModel):
 
 def main() -> int:
     run_id = os.getenv("BENCHMARK_RUN_ID", time.strftime("%Y%m%d-%H%M%S"))
-    eval_ids = resolve_eval_ids(os.getenv("BENCHMARK_EVAL_IDS", DEFAULT_EVAL_IDS))
+    requested_eval_ids = os.getenv("BENCHMARK_EVAL_IDS", DEFAULT_EVAL_IDS)
+    eval_ids = window_eval_ids(
+        resolve_eval_ids(requested_eval_ids),
+        os.getenv("BENCHMARK_EVAL_LIMIT"),
+        os.getenv("BENCHMARK_EVAL_OFFSET"),
+    )
     agents = csv_env("BENCHMARK_AGENTS", DEFAULT_AGENTS)
     parallelism = int(os.getenv("BENCHMARK_PARALLELISM", str(DEFAULT_PARALLELISM)))
     os.environ.setdefault(
@@ -406,6 +415,7 @@ def run_one_case(
     project_dir = copy_project(fixture, case_run_dir)
 
     run = run_agent(agent, fixture, project_dir, case_run_dir)
+    artifact_checks = build_artifact_checks(fixture, run)
     result = {
         "runId": run_id,
         "caseId": case_id,
@@ -419,11 +429,139 @@ def run_one_case(
         "projectDir": str(run.project_dir),
         "transcriptPath": str(run.transcript_path),
         "changedFiles": run.changed_files,
+        "artifactChecks": artifact_checks,
+        "artifactWarnings": artifact_checks["warnings"],
         "passCriteria": fixture.pass_criteria,
         "failCriteria": fixture.fail_criteria,
     }
 
     return PendingResult(result, make_test_case(fixture, run))
+
+
+def build_artifact_checks(fixture, run) -> dict:
+    changed_files = list(run.changed_files)
+    transcript = run.transcript.lower()
+    changed_test_files = [path for path in changed_files if is_test_file(path)]
+    changed_implementation_files = [
+        path for path in changed_files if is_implementation_file(path)
+    ]
+    changed_markdown_files = [
+        path for path in changed_files if path.lower().endswith(".md")
+    ]
+    changed_noise_files = [path for path in changed_files if is_noise_file(path)]
+    changed_relevant_files = [
+        path for path in changed_files if path not in set(changed_noise_files)
+    ]
+    ran_verification = bool(
+        re.search(
+            r"\b(npx\s+playwright|playwright\s+test|npm\s+(test|run)|pnpm\s+(test|run)|yarn\s+(test|run)|vitest|cypress|wdio|maestro\s+test|pytest)\b",
+            transcript,
+        )
+    )
+    rate_limited = "rate limit" in transcript or "resource exhausted" in transcript
+
+    warnings: list[str] = []
+    if not changed_relevant_files and expects_artifact_change(fixture):
+        warnings.append("expected-artifact-change-missing")
+    if changed_files and not changed_relevant_files:
+        warnings.append("only-noisy-files-changed")
+    if fixture.mode in {"build", "fix", "test-feature"} and not ran_verification:
+        if expects_verification(fixture):
+            warnings.append("verification-command-not-observed")
+    if rate_limited:
+        warnings.append("rate-limit-observed")
+
+    return {
+        "changedFileCount": len(changed_files),
+        "changedRelevantFiles": changed_relevant_files,
+        "changedTestFiles": changed_test_files,
+        "changedImplementationFiles": changed_implementation_files,
+        "changedMarkdownFiles": changed_markdown_files,
+        "changedNoiseFiles": changed_noise_files,
+        "createdOrChangedSupatestMemory": ".supatest/SUPATEST.md" in changed_files,
+        "ranVerificationCommand": ran_verification,
+        "rateLimited": rate_limited,
+        "warnings": warnings,
+    }
+
+
+def is_test_file(path: str) -> bool:
+    lower = path.lower()
+    return (
+        lower.endswith((".spec.ts", ".spec.tsx", ".spec.js", ".cy.ts", ".cy.js"))
+        or lower.startswith(("tests/", "test/", "test/specs/", "cypress/e2e/", "e2e/"))
+        or "/tests/" in lower
+        or "/test/specs/" in lower
+    )
+
+
+def is_implementation_file(path: str) -> bool:
+    lower = path.lower()
+    if is_test_file(path) or is_noise_file(path):
+        return False
+    return lower.endswith((".ts", ".tsx", ".js", ".jsx", ".py")) and lower.startswith(
+        ("pages/", "src/", "lib/", "app/", "utils/", "cypress/pages/", "test/specs/")
+    )
+
+
+def is_noise_file(path: str) -> bool:
+    lower = path.lower()
+    name = Path(path).name.lower()
+    return (
+        name in {"package-lock.json", "yarn.lock", "pnpm-lock.yaml", "cli.log"}
+        or lower.endswith(".log")
+        or lower.startswith(("node_modules/", "playwright-report/", "test-results/"))
+    )
+
+
+def expects_artifact_change(fixture) -> bool:
+    text = fixture_expectation_text(fixture)
+    if any(
+        phrase in text
+        for phrase in (
+            "do not create files",
+            "does not create files",
+            "before answering",
+            "selector table",
+            "root cause",
+            "read-only",
+        )
+    ):
+        return False
+    if fixture.mode in {"build", "fix", "plan", "report", "test-feature"}:
+        return True
+    return any(
+        phrase in text
+        for phrase in (
+            "write tests",
+            "writes",
+            "produces",
+            "fix ",
+            "fixes",
+            "edit ",
+            "create ",
+            "adds ",
+        )
+    )
+
+
+def expects_verification(fixture) -> bool:
+    text = fixture_expectation_text(fixture)
+    if "do not run" in text or "does not run" in text or "authoring only" in text:
+        return False
+    if fixture.mode in {"plan", "report"}:
+        return False
+    return True
+
+
+def fixture_expectation_text(fixture) -> str:
+    return "\n".join(
+        [
+            fixture.task,
+            "\n".join(fixture.pass_criteria),
+            "\n".join(fixture.fail_criteria),
+        ]
+    ).lower()
 
 
 def score_pending_results(
@@ -811,6 +949,11 @@ def write_summary(
         "runId": run_id,
         "generatedAt": generated_at,
         "evalIds": eval_ids,
+        "evalSelection": {
+            "requested": os.getenv("BENCHMARK_EVAL_IDS", DEFAULT_EVAL_IDS),
+            "limit": os.getenv("BENCHMARK_EVAL_LIMIT", "all") or "all",
+            "offset": int(os.getenv("BENCHMARK_EVAL_OFFSET", "0") or "0"),
+        },
         "agents": agents,
         "agentModels": {agent: agent_model_label(agent) for agent in agents},
         "parallelism": parallelism,
@@ -908,6 +1051,9 @@ def summarize_group(results: list[dict]) -> dict:
         "unscored": sum(1 for item in results if item.get("result") == "unscored"),
         "passedChecks": sum(int(item.get("passedChecks") or 0) for item in results),
         "failedChecks": sum(int(item.get("failedChecks") or 0) for item in results),
+        "artifactWarnings": sum(
+            len(item.get("artifactWarnings") or []) for item in results
+        ),
         "timedOut": sum(1 for item in results if item.get("timedOut")),
         "durationMs": sum(item.get("durationMs", 0) for item in results),
     }
@@ -925,6 +1071,7 @@ def summarize_result(result: dict | None) -> dict | None:
         "scoreSource": result.get("scoreSource"),
         "passedChecks": result.get("passedChecks"),
         "failedChecks": result.get("failedChecks"),
+        "artifactWarnings": result.get("artifactWarnings") or [],
     }
 
 

@@ -154,12 +154,38 @@ The checked-in default agent list is:
 BENCHMARK_AGENTS=supatest,cursor,codex,gemini
 ```
 
+By default `benchmark/.env` overrides exported shell variables so local runs are
+reproducible. For a one-off shell override, run with:
+
+```bash
+BENCHMARK_ENV_FILE_OVERRIDE=0 BENCHMARK_EVAL_IDS=E3 ./run_benchmark.py
+```
+
+Use `BENCHMARK_EVAL_LIMIT` and `BENCHMARK_EVAL_OFFSET` to run the fixture suite
+in fixed-size batches:
+
+```bash
+BENCHMARK_EVAL_IDS=all
+BENCHMARK_EVAL_LIMIT=5      # use 10, 20, 50, or all for larger runs
+BENCHMARK_EVAL_OFFSET=0     # next 5: 5, next 10: 10, etc.
+```
+
+Examples:
+
+```bash
+BENCHMARK_ENV_FILE_OVERRIDE=0 BENCHMARK_EVAL_IDS=all BENCHMARK_EVAL_LIMIT=5 BENCHMARK_EVAL_OFFSET=0 ./run_benchmark.py
+BENCHMARK_ENV_FILE_OVERRIDE=0 BENCHMARK_EVAL_IDS=all BENCHMARK_EVAL_LIMIT=10 BENCHMARK_EVAL_OFFSET=0 ./run_benchmark.py
+BENCHMARK_ENV_FILE_OVERRIDE=0 BENCHMARK_EVAL_IDS=all BENCHMARK_EVAL_LIMIT=20 BENCHMARK_EVAL_OFFSET=0 ./run_benchmark.py
+BENCHMARK_ENV_FILE_OVERRIDE=0 BENCHMARK_EVAL_IDS=all BENCHMARK_EVAL_LIMIT=50 BENCHMARK_EVAL_OFFSET=0 ./run_benchmark.py
+BENCHMARK_ENV_FILE_OVERRIDE=0 BENCHMARK_EVAL_IDS=all BENCHMARK_EVAL_LIMIT=all BENCHMARK_EVAL_OFFSET=0 ./run_benchmark.py
+```
+
 You can run model variants directly from `.env` by putting the model after a
 colon. The harness reuses the family command template and records each variant
 separately:
 
 ```bash
-BENCHMARK_AGENTS=supatest:premium,cursor:auto,codex:gpt-5,gemini:gemini-2.5-pro
+BENCHMARK_AGENTS=supatest:premium,cursor:auto,codex:gpt-5.5,gemini:gemini-3.1-flash-lite
 ```
 
 For plain agent names, set family model defaults:
@@ -167,7 +193,7 @@ For plain agent names, set family model defaults:
 ```bash
 BENCHMARK_SUPATEST_MODEL=premium
 BENCHMARK_CURSOR_MODEL=auto
-BENCHMARK_CODEX_MODEL=gpt-5
+BENCHMARK_CODEX_MODEL=gpt-5.5
 BENCHMARK_GEMINI_MODEL=gemini-3.1-flash-lite
 ```
 
@@ -232,6 +258,11 @@ Each `results/<run-id>/` folder contains only three files:
 - `scores.md` - human-readable score table
 - `summary.json` - run metadata plus aggregate summary stats
 - `run.json` - full individual case results grouped by eval and agent
+
+Each result in `run.json` also includes deterministic `artifactChecks` and
+`artifactWarnings`, independent of the LLM judge. These record whether the agent
+actually changed test files, implementation/page files, markdown outputs, noisy
+files only, Supatest memory, verification commands, and rate-limit evidence.
 
 Detailed transcripts and copied projects stay under `runs/<run-id>/case-###/...`.
 The `case-###` folder names avoid exposing eval IDs to the agents while the

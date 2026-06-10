@@ -20,12 +20,13 @@ from agents import (
     resolve_supatest_project_id,
     with_local_tool_paths,
 )
-from fixtures import available_eval_ids, load_fixture, resolve_eval_ids
+from fixtures import available_eval_ids, load_fixture, resolve_eval_ids, window_eval_ids
 import run_benchmark
 from run_benchmark import (
     BatchJudgeCaseScore,
     BatchJudgeResponse,
     PreflightIssue,
+    build_artifact_checks,
     format_score_line,
     maestro_output_has_devices,
     preflight_judge_model,
@@ -199,7 +200,8 @@ def test_supatest_project_id_uses_explicit_or_benchmark_settings(monkeypatch) ->
     assert resolve_supatest_project_id() == "benchmark-project"
 
 
-def test_benchmark_prompt_frames_real_qa_without_exposing_rubric() -> None:
+def test_benchmark_prompt_frames_real_qa_without_exposing_rubric(monkeypatch) -> None:
+    monkeypatch.setenv("BENCHMARK_PROMPT_PROFILE", "qa")
     fixture = load_fixture("E25")
 
     prompt = build_prompt(fixture)
@@ -231,6 +233,7 @@ def test_prompt_profile_can_remove_shared_qa_coaching(monkeypatch) -> None:
 
 
 def test_supatest_receives_same_benchmark_prompt(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("BENCHMARK_PROMPT_PROFILE", "qa")
     monkeypatch.setenv("BENCHMARK_SUPATEST_PROJECT_ID", "benchmark-project")
     monkeypatch.delenv("BENCHMARK_SUPATEST_API_KEY", raising=False)
     monkeypatch.delenv("SUPATEST_API_KEY", raising=False)
@@ -256,6 +259,15 @@ def test_resolve_eval_ids_all_uses_every_available_fixture() -> None:
     assert eval_ids == available_eval_ids()
     assert "E18" in eval_ids
     assert "E101" in eval_ids
+
+
+def test_window_eval_ids_supports_limit_and_offset() -> None:
+    eval_ids = ["E1", "E2", "E3", "E4", "E5", "E6"]
+
+    assert window_eval_ids(eval_ids, "5", None) == ["E1", "E2", "E3", "E4", "E5"]
+    assert window_eval_ids(eval_ids, "10", None) == eval_ids
+    assert window_eval_ids(eval_ids, "all", "2") == ["E3", "E4", "E5", "E6"]
+    assert window_eval_ids(eval_ids, "2", "2") == ["E3", "E4"]
 
 
 def test_changed_file_excerpt_prioritizes_tests_and_skips_noise(tmp_path) -> None:
@@ -286,6 +298,41 @@ def test_changed_file_excerpt_prioritizes_tests_and_skips_noise(tmp_path) -> Non
     )
     assert "cli.log" not in excerpt
     assert "package-lock.json" not in excerpt
+
+
+def test_artifact_checks_detect_created_tests_and_verification() -> None:
+    fixture = load_fixture("E3")
+    run = SimpleNamespace(
+        changed_files=[
+            ".supatest/SUPATEST.md",
+            "package-lock.json",
+            "tests/cart-removal.spec.ts",
+        ],
+        transcript="npx playwright test tests/cart-removal.spec.ts --reporter=list",
+    )
+
+    checks = build_artifact_checks(fixture, run)
+
+    assert checks["changedTestFiles"] == ["tests/cart-removal.spec.ts"]
+    assert checks["createdOrChangedSupatestMemory"] is True
+    assert checks["ranVerificationCommand"] is True
+    assert checks["warnings"] == []
+
+
+def test_artifact_checks_warn_when_build_only_changes_noise() -> None:
+    fixture = load_fixture("E7")
+    run = SimpleNamespace(
+        changed_files=["package-lock.json"],
+        transcript="Rate limit exceeded before writing files",
+    )
+
+    checks = build_artifact_checks(fixture, run)
+
+    assert checks["changedRelevantFiles"] == []
+    assert "only-noisy-files-changed" in checks["warnings"]
+    assert "expected-artifact-change-missing" in checks["warnings"]
+    assert "verification-command-not-observed" in checks["warnings"]
+    assert "rate-limit-observed" in checks["warnings"]
 
 
 def test_make_test_case_anonymizes_agent_identity_paths_and_tokens(tmp_path) -> None:
