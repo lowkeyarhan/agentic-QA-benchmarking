@@ -20,15 +20,23 @@ from agents import (
     resolve_supatest_project_id,
     with_local_tool_paths,
 )
-from fixtures import available_eval_ids, load_fixture, resolve_eval_ids, window_eval_ids
+from fixtures import (
+    available_eval_ids,
+    copy_project,
+    load_fixture,
+    resolve_eval_ids,
+    window_eval_ids,
+)
 import run_benchmark
 from run_benchmark import (
     BatchJudgeCaseScore,
     BatchJudgeResponse,
     PreflightIssue,
+    build_token_usage,
     build_artifact_checks,
     format_score_line,
     maestro_output_has_devices,
+    parse_token_usage_text,
     preflight_judge_model,
     required_live_device_platform,
     write_blocked_result,
@@ -261,6 +269,16 @@ def test_resolve_eval_ids_all_uses_every_available_fixture() -> None:
     assert "E101" in eval_ids
 
 
+def test_copy_project_does_not_mount_fixture_root_answer_files(tmp_path) -> None:
+    fixture = load_fixture("E75")
+    assert (fixture.fixture_dir / "solution.md").exists()
+
+    copied = copy_project(fixture, tmp_path)
+
+    assert copied == tmp_path / "project"
+    assert not (copied / "solution.md").exists()
+
+
 def test_window_eval_ids_supports_limit_and_offset() -> None:
     eval_ids = ["E1", "E2", "E3", "E4", "E5", "E6"]
 
@@ -333,6 +351,42 @@ def test_artifact_checks_warn_when_build_only_changes_noise() -> None:
     assert "expected-artifact-change-missing" in checks["warnings"]
     assert "verification-command-not-observed" in checks["warnings"]
     assert "rate-limit-observed" in checks["warnings"]
+
+
+def test_token_usage_parser_reads_codex_footer() -> None:
+    usage = parse_token_usage_text(
+        'done\n"input_tokens": 1000\n"output_tokens": 200\n\ntokens used\n77,461\n'
+    )
+
+    assert usage["inputTokens"] == 1000
+    assert usage["outputTokens"] == 200
+    assert usage["totalTokens"] == 77461
+
+
+def test_build_token_usage_reads_json_and_estimates_cost(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("BENCHMARK_TOKEN_PRICE_CODEX_INPUT_PER_1M", "2")
+    monkeypatch.setenv("BENCHMARK_TOKEN_PRICE_CODEX_OUTPUT_PER_1M", "10")
+    transcript = tmp_path / "transcript.log"
+    transcript.write_text("no usage footer\n")
+    (tmp_path / "usage.json").write_text(
+        json.dumps(
+            {
+                "usage": {
+                    "input_tokens": 1000,
+                    "output_tokens": 200,
+                    "total_tokens": 1200,
+                }
+            }
+        )
+    )
+
+    usage = build_token_usage("codex:gpt-5.5", transcript, tmp_path)
+
+    assert usage["inputTokens"] == 1000
+    assert usage["outputTokens"] == 200
+    assert usage["totalTokens"] == 1200
+    assert usage["estimatedCostUsd"] == 0.004
+    assert usage["source"] == "run-usage-json"
 
 
 def test_make_test_case_anonymizes_agent_identity_paths_and_tokens(tmp_path) -> None:
@@ -476,6 +530,81 @@ def test_write_summary_emits_only_three_result_files(tmp_path) -> None:
     assert summary["agentModels"]["supatest"] == "premium"
     assert summary["summary"]["byAgent"]["supatest"]["pass"] == 1
     assert run["runsByEval"]["E25"]["supatest"]["caseId"] == "case-001"
+
+
+def test_write_summary_includes_relative_token_efficiency_and_overall_score(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.setenv("BENCHMARK_OVERALL_QA_WEIGHT", "0.8")
+    base_result = {
+        "runId": "verify",
+        "caseId": "case-001",
+        "evalId": "E25",
+        "evalName": "Batch Tests Before Running",
+        "mode": "build",
+        "score": 1.0,
+        "scorePercent": 100,
+        "result": "pass",
+        "reason": "ok",
+        "scoreSource": "judge",
+        "exitCode": 0,
+        "timedOut": False,
+        "durationMs": 123,
+        "projectDir": "runs/verify/case-001/agent/project",
+        "transcriptPath": "runs/verify/case-001/agent/transcript.log",
+        "changedFiles": ["tests/error-users.spec.ts"],
+        "passCriteria": [],
+        "failCriteria": [],
+    }
+    supatest_result = {
+        **base_result,
+        "agent": "supatest",
+        "tokenUsage": {
+            **run_benchmark.empty_token_usage(),
+            "totalTokens": 1000,
+            "estimatedCostUsd": 0.01,
+            "source": "transcript",
+        },
+    }
+    cursor_result = {
+        **base_result,
+        "agent": "cursor",
+        "tokenUsage": {
+            **run_benchmark.empty_token_usage(),
+            "totalTokens": 2000,
+            "source": "transcript",
+        },
+    }
+
+    write_summary(
+        tmp_path,
+        "verify",
+        ["E25"],
+        ["supatest", "cursor"],
+        1,
+        600,
+        [supatest_result, cursor_result],
+    )
+
+    summary = json.loads((tmp_path / "summary.json").read_text())
+    run = json.loads((tmp_path / "run.json").read_text())
+    scores = (tmp_path / "scores.md").read_text()
+
+    assert "| Agent | Overall | QA Avg | Token Avg |" in scores
+    assert "| supatest [premium] | 100.0 | 100.0 | 100.0 | 1 | 1 | 1 |" in scores
+    assert "| cursor [auto] | 90.0 | 100.0 | 50.0 | 1 | 1 | 1 |" in scores
+    assert "| Token Usage |" in scores
+    assert "$0.0100" in scores
+    assert summary["overallScoring"]["qaWeight"] == 0.8
+    assert summary["overallScoring"]["tokenUsageWeight"] == 0.2
+    assert summary["summary"]["byAgent"]["supatest"]["overallScorePercent"] == 100.0
+    assert summary["summary"]["byAgent"]["cursor"]["overallScorePercent"] == 90.0
+    assert (
+        summary["summary"]["byAgent"]["supatest"]["tokenUsage"]["scorePercent"] == 100.0
+    )
+    assert summary["summary"]["byAgent"]["cursor"]["tokenUsage"]["scorePercent"] == 50.0
+    assert run["runsByEval"]["E25"]["cursor"]["tokenUsage"]["scorePercent"] == 50
+    assert run["runsByEval"]["E25"]["cursor"]["overallScorePercent"] == 90.0
 
 
 def test_score_line_matches_terminal_scoreboard_shape(monkeypatch) -> None:

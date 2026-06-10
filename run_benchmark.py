@@ -61,12 +61,19 @@ load_dotenv(
 )
 
 from agents import (  # noqa: E402
+    agent_command_env_name,
     agent_display_name,
+    agent_family,
     agent_model_label,
     agent_run_dir_name,
     run_agent,
 )
-from fixtures import copy_project, load_fixture, resolve_eval_ids, window_eval_ids  # noqa: E402
+from fixtures import (
+    copy_project,
+    load_fixture,
+    resolve_eval_ids,
+    window_eval_ids,
+)  # noqa: E402
 from pydantic import BaseModel  # noqa: E402
 from scoring import (
     make_judge_model,
@@ -80,6 +87,7 @@ DEFAULT_EVAL_IDS = "all"
 DEFAULT_AGENTS = ["supatest", "cursor", "codex", "gemini"]
 DEFAULT_PARALLELISM = 3
 DEFAULT_AGENT_TIMEOUT_SECONDS = 600
+DEFAULT_OVERALL_QA_WEIGHT = 0.8
 
 
 @dataclass(frozen=True)
@@ -448,6 +456,7 @@ def run_one_case(
 
     run = run_agent(agent, fixture, project_dir, case_run_dir)
     artifact_checks = build_artifact_checks(fixture, run)
+    token_usage = build_token_usage(agent, run.transcript_path, case_run_dir)
     result = {
         "runId": run_id,
         "caseId": case_id,
@@ -463,6 +472,7 @@ def run_one_case(
         "changedFiles": run.changed_files,
         "artifactChecks": artifact_checks,
         "artifactWarnings": artifact_checks["warnings"],
+        "tokenUsage": token_usage,
         "passCriteria": fixture.pass_criteria,
         "failCriteria": fixture.fail_criteria,
     }
@@ -515,6 +525,392 @@ def build_artifact_checks(fixture, run) -> dict:
         "rateLimited": rate_limited,
         "warnings": warnings,
     }
+
+
+def empty_token_usage() -> dict:
+    return {
+        "inputTokens": None,
+        "outputTokens": None,
+        "cachedInputTokens": None,
+        "totalTokens": None,
+        "estimatedCostUsd": None,
+        "score": None,
+        "scorePercent": None,
+        "scoreBasis": None,
+        "source": None,
+        "warnings": [],
+    }
+
+
+def build_token_usage(agent: str, transcript_path: Path, case_run_dir: Path) -> dict:
+    usage = empty_token_usage()
+    sources: list[str] = []
+    for source_name, path in token_usage_candidate_paths(transcript_path, case_run_dir):
+        parsed = parse_token_usage_file(path)
+        if not parsed:
+            continue
+        merge_token_usage(usage, parsed)
+        sources.append(source_name)
+
+    if usage["totalTokens"] is None:
+        input_tokens = usage.get("inputTokens")
+        output_tokens = usage.get("outputTokens")
+        if input_tokens is not None or output_tokens is not None:
+            usage["totalTokens"] = int(input_tokens or 0) + int(output_tokens or 0)
+
+    estimated_cost = estimate_token_cost_usd(agent, usage)
+    if estimated_cost is not None:
+        usage["estimatedCostUsd"] = round(estimated_cost, 6)
+
+    if sources:
+        usage["source"] = ", ".join(dict.fromkeys(sources))
+    if usage["totalTokens"] is None and not sources:
+        usage["warnings"].append("token-usage-not-found")
+    return usage
+
+
+def token_usage_candidate_paths(
+    transcript_path: Path, case_run_dir: Path
+) -> list[tuple[str, Path]]:
+    return [
+        ("transcript", transcript_path),
+        ("run-usage-json", case_run_dir / "usage.json"),
+        ("run-token-usage-json", case_run_dir / "token-usage.json"),
+        ("run-telemetry-json", case_run_dir / "telemetry.json"),
+        ("project-usage-json", case_run_dir / "project" / "usage.json"),
+        ("project-token-usage-json", case_run_dir / "project" / "token-usage.json"),
+        ("project-telemetry-json", case_run_dir / "project" / "telemetry.json"),
+        ("project-cli-log", case_run_dir / "project" / "cli.log"),
+    ]
+
+
+def parse_token_usage_file(path: Path) -> dict | None:
+    if not path.exists() or not path.is_file():
+        return None
+
+    text = path.read_text(errors="replace")
+    if len(text) > 2_000_000:
+        text = text[-2_000_000:]
+
+    usage = empty_token_usage()
+    parsed_any = False
+
+    stripped = text.strip()
+    if stripped.startswith(("{", "[")):
+        try:
+            parsed_json = json.loads(stripped)
+        except json.JSONDecodeError:
+            parsed_json = None
+        if parsed_json is not None:
+            parsed_any = merge_token_usage(usage, parse_token_usage_json(parsed_json))
+
+    parsed_any = merge_token_usage(usage, parse_token_usage_text(text)) or parsed_any
+    return usage if parsed_any else None
+
+
+def parse_token_usage_json(value) -> dict:
+    usage = empty_token_usage()
+
+    def walk(item, in_usage: bool = False) -> None:
+        if isinstance(item, dict):
+            for raw_key, raw_value in item.items():
+                key = normalize_usage_key(str(raw_key))
+                next_in_usage = in_usage or key in {"usage", "tokenusage", "tokens"}
+                assign_json_usage_value(usage, key, raw_value, next_in_usage)
+                walk(raw_value, next_in_usage)
+        elif isinstance(item, list):
+            for child in item:
+                walk(child, in_usage)
+
+    walk(value)
+    return usage
+
+
+def assign_json_usage_value(
+    usage: dict, key: str, raw_value, in_usage: bool = False
+) -> None:
+    number = parse_numeric_value(raw_value)
+    if number is None:
+        return
+
+    if key in {
+        "prompttokens",
+        "prompttoken",
+        "inputtokens",
+        "inputtoken",
+    } or (in_usage and key in {"prompt", "input"}):
+        set_max_usage_value(usage, "inputTokens", int(number))
+    elif key in {
+        "completiontokens",
+        "completiontoken",
+        "outputtokens",
+        "outputtoken",
+        "responsetokens",
+    } or (in_usage and key in {"completion", "output", "response"}):
+        set_max_usage_value(usage, "outputTokens", int(number))
+    elif key in {
+        "cachedtokens",
+        "cachedinputtokens",
+        "cacheinputtokens",
+        "cachereadinputtokens",
+        "cachecreationinputtokens",
+        "cachedprompttokens",
+    }:
+        set_max_usage_value(usage, "cachedInputTokens", int(number))
+    elif key in {
+        "totaltokens",
+        "totaltoken",
+        "tokensused",
+        "tokencount",
+    } or (in_usage and key == "total"):
+        set_max_usage_value(usage, "totalTokens", int(number))
+    elif key in {
+        "costusd",
+        "estimatedcostusd",
+        "totalcostusd",
+        "totalcost",
+        "evaluationcost",
+    }:
+        set_max_usage_value(usage, "estimatedCostUsd", float(number))
+
+
+def parse_token_usage_text(text: str) -> dict:
+    text = re.sub(r"\x1b(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])", "", text)
+    usage = empty_token_usage()
+
+    for match in re.finditer(
+        r"(?is)\btokens\s+used\s*[\r\n]+[\s`$>]*([0-9][0-9,]*(?:\.[0-9]+)?)",
+        text,
+    ):
+        set_max_usage_value(usage, "totalTokens", int(parse_usage_number(match[1])))
+
+    labeled_patterns = [
+        (
+            r"(?i)\b(prompt|input|completion|output|response|total|cached|cached\s+input|cache\s+read\s+input|cache\s+creation\s+input)\s+tokens?\s*[:=]\s*([0-9][0-9,]*(?:\.[0-9]+)?)",
+            1,
+            2,
+        ),
+        (
+            r"(?i)[\"']?\b(prompt_tokens|input_tokens|completion_tokens|output_tokens|response_tokens|total_tokens|cached_tokens|cached_input_tokens|cache_read_input_tokens|cache_creation_input_tokens)\b[\"']?\s*[:=]\s*([0-9][0-9,]*(?:\.[0-9]+)?)",
+            1,
+            2,
+        ),
+        (
+            r"(?i)\b([0-9][0-9,]*(?:\.[0-9]+)?)\s+(prompt|input|completion|output|response|total|cached|cached\s+input)\s+tokens?\b",
+            2,
+            1,
+        ),
+    ]
+    for pattern, label_group, value_group in labeled_patterns:
+        for match in re.finditer(pattern, text):
+            field = token_usage_field_for_label(match[label_group])
+            if not field:
+                continue
+            set_max_usage_value(
+                usage, field, int(parse_usage_number(match[value_group]))
+            )
+
+    for match in re.finditer(
+        r"(?i)\b(?:estimated\s+)?(?:total\s+)?cost(?:\s+usd|\s*\(usd\))?\s*[:=]\s*\$?\s*([0-9]+(?:\.[0-9]+)?)",
+        text,
+    ):
+        set_max_usage_value(usage, "estimatedCostUsd", float(match[1]))
+
+    return usage
+
+
+def token_usage_field_for_label(label: str) -> str | None:
+    normalized = normalize_usage_key(label)
+    if normalized in {"prompt", "prompttokens", "input", "inputtokens"}:
+        return "inputTokens"
+    if normalized in {
+        "completion",
+        "completiontokens",
+        "output",
+        "outputtokens",
+        "response",
+        "responsetokens",
+    }:
+        return "outputTokens"
+    if normalized in {
+        "cached",
+        "cachedtokens",
+        "cachedinput",
+        "cachedinputtokens",
+        "cachereadinput",
+        "cachereadinputtokens",
+        "cachecreationinput",
+        "cachecreationinputtokens",
+    }:
+        return "cachedInputTokens"
+    if normalized in {"total", "totaltokens"}:
+        return "totalTokens"
+    return None
+
+
+def normalize_usage_key(value: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "", value.lower())
+
+
+def parse_numeric_value(value) -> float | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str) and re.fullmatch(
+        r"\$?\s*[0-9][0-9,]*(?:\.[0-9]+)?", value.strip()
+    ):
+        return parse_usage_number(value)
+    return None
+
+
+def parse_usage_number(value: str) -> float:
+    return float(value.strip().lstrip("$").replace(",", ""))
+
+
+def merge_token_usage(target: dict, source: dict | None) -> bool:
+    if not source:
+        return False
+
+    changed = False
+    for field in (
+        "inputTokens",
+        "outputTokens",
+        "cachedInputTokens",
+        "totalTokens",
+        "estimatedCostUsd",
+    ):
+        value = source.get(field)
+        if value is None:
+            continue
+        changed = set_max_usage_value(target, field, value) or changed
+    return changed
+
+
+def set_max_usage_value(usage: dict, field: str, value: int | float) -> bool:
+    current = usage.get(field)
+    if current is None or value > current:
+        usage[field] = value
+        return True
+    return False
+
+
+def estimate_token_cost_usd(agent: str, usage: dict) -> float | None:
+    reported_cost = usage.get("estimatedCostUsd")
+    if reported_cost is not None:
+        return float(reported_cost)
+
+    total_rate = token_price_rate(agent, "TOTAL")
+    total_tokens = usage.get("totalTokens")
+    if total_rate is not None and total_tokens is not None:
+        return (float(total_tokens) / 1_000_000) * total_rate
+
+    cost = 0.0
+    has_rate = False
+    for usage_field, rate_field in (
+        ("inputTokens", "INPUT"),
+        ("outputTokens", "OUTPUT"),
+        ("cachedInputTokens", "CACHED_INPUT"),
+    ):
+        rate = token_price_rate(agent, rate_field)
+        tokens = usage.get(usage_field)
+        if rate is None or tokens is None:
+            continue
+        has_rate = True
+        cost += (float(tokens) / 1_000_000) * rate
+    return cost if has_rate else None
+
+
+def token_price_rate(agent: str, field: str) -> float | None:
+    env_names = [agent_command_env_name(agent)]
+    family_env = agent_command_env_name(agent_family(agent))
+    if family_env not in env_names:
+        env_names.append(family_env)
+
+    for env_name in env_names:
+        raw = os.getenv(f"BENCHMARK_TOKEN_PRICE_{env_name}_{field}_PER_1M")
+        if raw:
+            return float(raw)
+    return None
+
+
+def apply_token_efficiency_scores(results: list[dict]) -> None:
+    by_eval: dict[str, list[dict]] = {}
+    for result in results:
+        by_eval.setdefault(result.get("evalId", ""), []).append(result)
+
+    for eval_results in by_eval.values():
+        known = [
+            result
+            for result in eval_results
+            if token_total(result.get("tokenUsage")) is not None
+        ]
+        if not known:
+            continue
+
+        best_total = min(token_total(result.get("tokenUsage")) for result in known)
+        if not best_total or best_total <= 0:
+            continue
+
+        for result in known:
+            usage = result.setdefault("tokenUsage", empty_token_usage())
+            total = token_total(usage)
+            if not total or total <= 0:
+                continue
+            score = min(1.0, best_total / total)
+            usage["score"] = round(score, 4)
+            usage["scorePercent"] = round(score * 100)
+            usage["scoreBasis"] = "relative-total-tokens-per-eval"
+
+
+def token_total(usage: dict | None) -> int | None:
+    if not usage:
+        return None
+    total = usage.get("totalTokens")
+    return int(total) if total is not None else None
+
+
+def apply_overall_scores(results: list[dict]) -> None:
+    weights = overall_score_weights()
+    for result in results:
+        qa_score = result.get("scorePercent")
+        token_score = (result.get("tokenUsage") or {}).get("scorePercent")
+        if qa_score is None or token_score is None:
+            result["overallScore"] = None
+            result["overallScorePercent"] = None
+            result["overallScoreSource"] = None
+            continue
+
+        overall_percent = (
+            float(qa_score) * weights["qa"]
+            + float(token_score) * weights["tokenUsage"]
+        )
+        result["overallScorePercent"] = round(overall_percent, 1)
+        result["overallScore"] = round(overall_percent / 100, 4)
+        result["overallScoreSource"] = "weighted-qa-token"
+
+
+def overall_score_weights() -> dict[str, float]:
+    qa_weight = configured_overall_qa_weight()
+    return {
+        "qa": qa_weight,
+        "tokenUsage": round(1.0 - qa_weight, 4),
+    }
+
+
+def configured_overall_qa_weight() -> float:
+    raw = os.getenv(
+        "BENCHMARK_OVERALL_QA_WEIGHT", str(DEFAULT_OVERALL_QA_WEIGHT)
+    ).strip()
+    try:
+        value = float(raw)
+    except ValueError as error:
+        raise ValueError(
+            "BENCHMARK_OVERALL_QA_WEIGHT must be between 0 and 1."
+        ) from error
+    if value < 0 or value > 1:
+        raise ValueError("BENCHMARK_OVERALL_QA_WEIGHT must be between 0 and 1.")
+    return value
 
 
 def is_test_file(path: str) -> bool:
@@ -737,7 +1133,8 @@ def build_batch_judge_prompt(
         "Do not reward or penalize any agent name, vendor, model, speed, or cost. "
         "A non-zero wrapper exit code is not automatic failure if evidence proves completion. "
         "Penalize missing evidence, fabricated selectors, stale evidence, forbidden commands, "
-        "irrelevant edits, destructive rewrites, and unsupported claims. "
+        "irrelevant edits, destructive rewrites, trivial assertions such as expect(true), "
+        "assertion weakening, over-mocking the behavior under test, and unsupported claims. "
         "Return exactly one result for every case resultId and no extra resultIds. "
         "Use result labels consistent with the score thresholds. "
         "Keep reasons short and evidence-based.\n\n" + json.dumps(payload, indent=2)
@@ -758,6 +1155,7 @@ def batch_case_payload(
         "exitCode": result.get("exitCode"),
         "timedOut": result.get("timedOut"),
         "changedFiles": result.get("changedFiles") or [],
+        "artifactChecks": result.get("artifactChecks") or {},
         "task": truncate_text(str(getattr(test_case, "input", "")), task_budget),
         "criteria": truncate_text(
             str(getattr(test_case, "expected_output", "")), criteria_budget
@@ -878,6 +1276,7 @@ def write_error_result(
         "exitCode": 1,
         "timedOut": False,
         "durationMs": 0,
+        "tokenUsage": empty_token_usage(),
         "traceback": traceback.format_exc(),
     }
 
@@ -911,6 +1310,7 @@ def write_blocked_result(
         "exitCode": None,
         "timedOut": False,
         "durationMs": 0,
+        "tokenUsage": empty_token_usage(),
         "projectDir": None,
         "transcriptPath": None,
         "changedFiles": [],
@@ -928,6 +1328,8 @@ def write_summary(
     timeout_seconds: int,
     results: list[dict],
 ) -> None:
+    apply_token_efficiency_scores(results)
+    apply_overall_scores(results)
     by_key = {(item["evalId"], item["agent"]): item for item in results}
     lines = [
         "| Eval | " + " | ".join(agent_display_name(agent) for agent in agents) + " |",
@@ -943,14 +1345,16 @@ def write_summary(
 
     lines.append("")
     lines.append(
-        "| Agent | Average | Scored | Pass | Partial | Fail | Blocked | Unscored | Checks Pass | Checks Fail |"
+        "| Agent | Overall | QA Avg | Token Avg | Scored | Overall Scored | Token Known | Pass | Partial | Fail | Blocked | Unscored | Token Usage | Cost USD | Checks Pass | Checks Fail |"
     )
     lines.append(
-        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |"
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |"
     )
     for agent in agents:
         agent_results = [item for item in results if item["agent"] == agent]
         scored_results = scored_only(agent_results)
+        token_summary = summarize_token_usage(agent_results)
+        overall_summary = summarize_overall_score(agent_results)
         if scored_results:
             average = round(
                 sum(item["scorePercent"] for item in scored_results)
@@ -973,14 +1377,22 @@ def write_summary(
             int(item.get("failedChecks") or 0) for item in agent_results
         )
         lines.append(
-            f"| {agent_display_name(agent)} | {average} | {len(scored_results)} | "
+            f"| {agent_display_name(agent)} | "
+            f"{format_optional_number(overall_summary['scorePercent'])} | "
+            f"{average} | "
+            f"{format_optional_number(token_summary['scorePercent'])} | "
+            f"{len(scored_results)} | {overall_summary['scored']} | "
+            f"{token_summary['known']} | "
             f"{pass_count} | {partial_count} | {fail_count} | {blocked_count} | "
-            f"{unscored_count} | {passed_checks} | {failed_checks} |"
+            f"{unscored_count} | {format_token_count(token_summary['totalTokens'])} | "
+            f"{format_cost_usd(token_summary['estimatedCostUsd'])} | "
+            f"{passed_checks} | {failed_checks} |"
         )
 
     (results_dir / "scores.md").write_text("\n".join(lines) + "\n")
     ordered_results = order_results(eval_ids, agents, results)
     generated_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    weights = overall_score_weights()
     metadata = {
         "runId": run_id,
         "generatedAt": generated_at,
@@ -994,6 +1406,19 @@ def write_summary(
         "agentModels": {agent: agent_model_label(agent) for agent in agents},
         "parallelism": parallelism,
         "timeoutSeconds": timeout_seconds,
+        "tokenScoring": {
+            "scoreRange": "0 to 100",
+            "basis": "relative total tokens per eval; lowest known token total gets 100",
+            "unknownUsage": "left unscored",
+            "cost": "reported by agent logs or estimated only when BENCHMARK_TOKEN_PRICE_* env vars are set",
+        },
+        "overallScoring": {
+            "scoreRange": "0 to 100",
+            "qaWeight": weights["qa"],
+            "tokenUsageWeight": weights["tokenUsage"],
+            "formula": "qaScorePercent * qaWeight + tokenUsage.scorePercent * tokenUsageWeight",
+            "unknownTokenUsage": "overallScorePercent is null when token usage score is unavailable",
+        },
     }
     (results_dir / "summary.json").write_text(
         json.dumps(
@@ -1076,10 +1501,15 @@ def summarize_group(results: list[dict]) -> dict:
         if scored_results
         else None
     )
+    token_usage = summarize_token_usage(results)
+    overall_score = summarize_overall_score(results)
     return {
         "total": total,
         "scored": len(scored_results),
         "averageScorePercent": average,
+        "overallScorePercent": overall_score["scorePercent"],
+        "overallScored": overall_score["scored"],
+        "tokenUsage": token_usage,
         "pass": sum(1 for item in results if item.get("result") == "pass"),
         "partial": sum(1 for item in results if item.get("result") == "partial"),
         "fail": sum(1 for item in results if item.get("result") == "fail"),
@@ -1100,6 +1530,9 @@ def summarize_result(result: dict | None) -> dict | None:
         return None
     return {
         "scorePercent": result.get("scorePercent"),
+        "overallScore": result.get("overallScore"),
+        "overallScorePercent": result.get("overallScorePercent"),
+        "overallScoreSource": result.get("overallScoreSource"),
         "result": result.get("result"),
         "durationMs": result.get("durationMs"),
         "timedOut": result.get("timedOut"),
@@ -1108,6 +1541,86 @@ def summarize_result(result: dict | None) -> dict | None:
         "passedChecks": result.get("passedChecks"),
         "failedChecks": result.get("failedChecks"),
         "artifactWarnings": result.get("artifactWarnings") or [],
+        "tokenUsage": result.get("tokenUsage") or empty_token_usage(),
+    }
+
+
+def summarize_overall_score(results: list[dict]) -> dict:
+    scored = [
+        result
+        for result in results
+        if result.get("overallScorePercent") is not None
+    ]
+    return {
+        "scored": len(scored),
+        "scorePercent": (
+            round(
+                sum(float(result.get("overallScorePercent") or 0) for result in scored)
+                / len(scored),
+                1,
+            )
+            if scored
+            else None
+        ),
+    }
+
+
+def summarize_token_usage(results: list[dict]) -> dict:
+    known = [result for result in results if token_total(result.get("tokenUsage"))]
+    if not known:
+        return {
+            "known": 0,
+            "scorePercent": None,
+            "totalTokens": None,
+            "inputTokens": None,
+            "outputTokens": None,
+            "cachedInputTokens": None,
+            "estimatedCostUsd": None,
+        }
+
+    scored = [
+        result
+        for result in known
+        if (result.get("tokenUsage") or {}).get("scorePercent") is not None
+    ]
+    costs = [
+        (result.get("tokenUsage") or {}).get("estimatedCostUsd")
+        for result in known
+        if (result.get("tokenUsage") or {}).get("estimatedCostUsd") is not None
+    ]
+    return {
+        "known": len(known),
+        "scorePercent": (
+            round(
+                sum(
+                    (result.get("tokenUsage") or {}).get("scorePercent")
+                    for result in scored
+                )
+                / len(scored),
+                1,
+            )
+            if scored
+            else None
+        ),
+        "totalTokens": sum(
+            int((result.get("tokenUsage") or {}).get("totalTokens") or 0)
+            for result in known
+        ),
+        "inputTokens": sum(
+            int((result.get("tokenUsage") or {}).get("inputTokens") or 0)
+            for result in known
+        ),
+        "outputTokens": sum(
+            int((result.get("tokenUsage") or {}).get("outputTokens") or 0)
+            for result in known
+        ),
+        "cachedInputTokens": sum(
+            int((result.get("tokenUsage") or {}).get("cachedInputTokens") or 0)
+            for result in known
+        ),
+        "estimatedCostUsd": (
+            round(sum(float(value) for value in costs), 6) if costs else None
+        ),
     }
 
 
@@ -1127,6 +1640,25 @@ def format_cell(result: dict | None) -> str:
         failed = int(result.get("failedChecks") or 0)
         return f"{score_str} ({passed}p/{failed}f) {result['result']}"
     return f"{score_str} {result['result']}"
+
+
+def format_optional_number(value) -> str:
+    return "n/a" if value is None else str(value)
+
+
+def format_token_count(value) -> str:
+    if value is None:
+        return "n/a"
+    value = int(value)
+    if value >= 1_000_000:
+        return f"{value / 1_000_000:.2f}M"
+    if value >= 1_000:
+        return f"{value / 1_000:.1f}k"
+    return str(value)
+
+
+def format_cost_usd(value) -> str:
+    return "n/a" if value is None else f"${float(value):.4f}"
 
 
 def format_score_line(result: dict) -> str:

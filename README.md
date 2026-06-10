@@ -39,6 +39,9 @@ into:
 runs/<run-id>/case-###/<agent>/project
 ```
 
+Host-side fixture notes and answer keys such as `solution.md` stay outside the
+agent workspace. The harness copies only the `project/` subtree for execution.
+
 ## Setup
 
 From inside this folder:
@@ -265,6 +268,12 @@ Each result in `run.json` also includes deterministic `artifactChecks` and
 actually changed test files, implementation/page files, markdown outputs, noisy
 files only, Supatest memory, verification commands, and rate-limit evidence.
 
+Each result also includes `tokenUsage` when the agent transcript or usage
+sidecar exposes token data. Known token usage is scored separately from task
+correctness: within each eval, the lowest known token total receives a token
+efficiency score of `100`, and other known runs receive `best_tokens /
+agent_tokens`. Unknown usage remains `n/a`.
+
 Detailed transcripts and copied projects stay under `runs/<run-id>/case-###/...`.
 The `case-###` folder names avoid exposing eval IDs to the agents while the
 result JSON maps each case back to its eval ID.
@@ -279,6 +288,11 @@ benchmark credentials, spinner noise, and repeated terminal status redraws from
 the evidence. The judge scores only against the task and fixture pass/fail
 criteria, not against a specific CLI, product, model, company, cost profile, or
 agent type.
+
+The judge receives changed-file excerpts and deterministic artifact checks, not
+just the process exit code. It is instructed to penalize lazy or deceptive test
+changes such as `expect(true)`, assertion weakening, over-mocking the behavior
+under test, fabricated selectors, and unsupported success claims.
 
 For large runs, the batch prompt budget matters more than a DeepEval process
 timeout. Defaults are:
@@ -302,3 +316,49 @@ several sequential judge calls. Raise process timeouts only if a judge request
 actually times out after chunking. Score cells show satisfied pass checks and
 triggered fail checks as `<passed>p/<failed>f result`, for example
 `7p/0f pass`.
+
+## Token Usage
+
+Token usage is extracted from agent transcripts and common usage sidecars such
+as `usage.json`, `token-usage.json`, `telemetry.json`, and `cli.log` in the run
+folder. The parser understands common fields such as `input_tokens`,
+`output_tokens`, `total_tokens`, `prompt tokens`, `completion tokens`, and Codex
+CLI footers like `tokens used`.
+
+The `scores.md` aggregate table includes:
+
+- `Overall` - weighted combined score for ranking agents
+- `QA Avg` - average judge score for correctness
+- `Token Avg` - average relative token-efficiency score for runs with known usage
+- `Token Known` - number of runs where token usage was found
+- `Token Usage` - summed known total tokens
+- `Cost USD` - summed reported or estimated cost, when available
+
+By default, `Overall` is calculated as:
+
+```text
+overall = QA average * 0.8 + token efficiency average * 0.2
+```
+
+Change the QA weight in `.env` if you want cost efficiency to matter more or
+less:
+
+```bash
+BENCHMARK_OVERALL_QA_WEIGHT=0.8
+```
+
+If token usage is unknown, the token score and overall score remain `n/a`.
+Unknown usage is not treated as free efficiency.
+
+The harness does not hard-code provider prices. To estimate cost, set per-agent
+rates in `.env`:
+
+```bash
+BENCHMARK_TOKEN_PRICE_CODEX_INPUT_PER_1M=
+BENCHMARK_TOKEN_PRICE_CODEX_OUTPUT_PER_1M=
+BENCHMARK_TOKEN_PRICE_CODEX_TOTAL_PER_1M=
+```
+
+Agent-specific inline variants are also supported, so
+`codex:gpt-5.5` can use `BENCHMARK_TOKEN_PRICE_CODEX_GPT_5_5_TOTAL_PER_1M`
+before falling back to `BENCHMARK_TOKEN_PRICE_CODEX_TOTAL_PER_1M`.
