@@ -1124,6 +1124,12 @@ def is_noise_file(path: str) -> bool:
 
 def expects_artifact_change(fixture) -> bool:
     text = fixture_expectation_text(fixture)
+    if fixture.mode == "plan":
+        return False
+    if fixture.mode == "report":
+        return True
+    if explicitly_requires_artifact_change(text):
+        return True
     if any(
         phrase in text
         for phrase in (
@@ -1136,21 +1142,21 @@ def expects_artifact_change(fixture) -> bool:
         )
     ):
         return False
-    if fixture.mode in {"build", "fix", "plan", "report", "test-feature"}:
+    if fixture.mode in {"build", "fix", "test-feature"}:
         return True
-    return any(
-        phrase in text
-        for phrase in (
-            "write tests",
-            "writes",
-            "produces",
-            "fix ",
-            "fixes",
-            "edit ",
-            "create ",
-            "adds ",
-        )
-    )
+    return explicitly_requires_artifact_change(text)
+
+
+def explicitly_requires_artifact_change(text: str) -> bool:
+    file_extensions = r"(?:md|ts|tsx|js|jsx|py|json|html|txt|yaml|yml)"
+    patterns = [
+        rf"\b(?:edit|update|modify|fix|implement)\s+[^.\n]*\.{file_extensions}\b",
+        rf"\b(?:write|create|generate|produce)\s+[^.\n]*\.{file_extensions}\b",
+        r"\bcreates\s+\.supatest/reports/",
+        r"\b(?:write|create|add)s?\s+(?:a\s+)?(?:playwright|webdriverio|cypress|maestro\s+)?tests?\b",
+        r"\b(?:write|create|add)s?\s+[^.\n]*test files?\b",
+    ]
+    return any(re.search(pattern, text) for pattern in patterns)
 
 
 def expects_verification(fixture) -> bool:
@@ -1312,6 +1318,9 @@ def build_batch_judge_prompt(
         "Use only the task, criteria, changed files, excerpts, and transcript evidence. "
         "Do not reward or penalize any agent name, vendor, model, speed, or cost. "
         "A non-zero wrapper exit code is not automatic failure if evidence proves completion. "
+        "Plan-mode cases are read-only: do not require changed files, and judge the "
+        "delivered plan or recommendation from transcript evidence unless the criteria "
+        "explicitly require a file. "
         "Penalize missing evidence, fabricated selectors, stale evidence, forbidden commands, "
         "irrelevant edits, destructive rewrites, trivial assertions such as expect(true), "
         "assertion weakening, over-mocking the behavior under test, and unsupported claims. "

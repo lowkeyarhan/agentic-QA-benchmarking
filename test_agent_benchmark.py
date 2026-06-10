@@ -380,6 +380,28 @@ def test_artifact_checks_warn_when_build_only_changes_noise() -> None:
     assert "rate-limit-observed" in checks["warnings"]
 
 
+def test_artifact_checks_do_not_require_files_for_plan_mode() -> None:
+    fixture = load_fixture("E31")
+    run = SimpleNamespace(
+        changed_files=[],
+        transcript="Here is the test plan.\n\n## Not Testing\n- External links: low risk.",
+    )
+
+    checks = build_artifact_checks(fixture, run)
+
+    assert checks["changedRelevantFiles"] == []
+    assert checks["warnings"] == []
+
+
+def test_artifact_checks_still_require_report_artifacts() -> None:
+    fixture = load_fixture("E61")
+    run = SimpleNamespace(changed_files=[], transcript="Here is the report.")
+
+    checks = build_artifact_checks(fixture, run)
+
+    assert "expected-artifact-change-missing" in checks["warnings"]
+
+
 def test_token_usage_parser_reads_codex_footer() -> None:
     usage = parse_token_usage_text(
         'done\n"input_tokens": 1000\n"output_tokens": 200\n\ntokens used\n77,461\n'
@@ -619,7 +641,9 @@ def test_write_summary_emits_only_three_result_files(tmp_path) -> None:
     assert "supatest [premium]" in scores
     assert summary["agentModels"]["supatest"] == "premium"
     assert summary["summary"]["byAgent"]["supatest"]["pass"] == 1
-    assert summary["summary"]["byAgent"]["supatest"]["tokenUsage"]["scorePercent"] == 0.0
+    assert (
+        summary["summary"]["byAgent"]["supatest"]["tokenUsage"]["scorePercent"] == 0.0
+    )
     assert summary["summary"]["byAgent"]["supatest"]["overallScorePercent"] == 80.0
     assert run["runsByEval"]["E25"]["supatest"]["caseId"] == "case-001"
     assert run["runsByEval"]["E25"]["supatest"]["tokenUsage"]["scorePercent"] == 0.0
@@ -685,8 +709,13 @@ def test_write_summary_includes_relative_token_efficiency_and_overall_score(
     scores = (tmp_path / "scores.md").read_text()
 
     assert "| Agent | QA Avg | Token Avg | Token Usage | Overall Score |" in scores
-    assert "| supatest [premium] | 100.0 | 100.0 | 1.0k | 100.0 | 1 | 0 | 0 | 0 | 0 |" in scores
-    assert "| cursor [auto] | 100.0 | 50.0 | 2.0k | 90.0 | 1 | 0 | 0 | 0 | 0 |" in scores
+    assert (
+        "| supatest [premium] | 100.0 | 100.0 | 1.0k | 100.0 | 1 | 0 | 0 | 0 | 0 |"
+        in scores
+    )
+    assert (
+        "| cursor [auto] | 100.0 | 50.0 | 2.0k | 90.0 | 1 | 0 | 0 | 0 | 0 |" in scores
+    )
     assert "| Token Usage |" in scores
     assert "Cost USD" not in scores
     assert "$0.0100" not in scores
@@ -731,12 +760,14 @@ def test_token_efficiency_baseline_ignores_cheap_failed_runs(monkeypatch) -> Non
 
     assert results[0]["tokenUsage"]["scorePercent"] == 100.0
     assert results[1]["tokenUsage"]["scorePercent"] == 0.0
-    assert results[1]["tokenUsage"]["scoreBasis"] == "qa-capped-relative-passing-token-baseline"
+    assert (
+        results[1]["tokenUsage"]["scoreBasis"]
+        == "qa-capped-relative-passing-token-baseline"
+    )
     assert results[2]["tokenUsage"]["scorePercent"] == 50.0
     assert results[3]["tokenUsage"]["scorePercent"] == 0.0
     assert (
-        results[3]["tokenUsage"]["scoreBasis"]
-        == "missing-token-usage-zero-efficiency"
+        results[3]["tokenUsage"]["scoreBasis"] == "missing-token-usage-zero-efficiency"
     )
 
 
@@ -951,6 +982,43 @@ def test_batch_scoring_uses_one_judge_call_and_check_counts(monkeypatch) -> None
     assert scored["passedChecks"] == 2
     assert scored["failedChecks"] == 0
     assert run_benchmark.format_cell(scored) == "90% (2p/0f) pass"
+
+
+def test_batch_judge_prompt_treats_plan_mode_transcript_as_deliverable() -> None:
+    result = {
+        "runId": "verify",
+        "caseId": "case-001",
+        "evalId": "E31",
+        "evalName": "Planner",
+        "agent": "supatest",
+        "mode": "plan",
+        "exitCode": 0,
+        "timedOut": False,
+        "durationMs": 123,
+        "projectDir": "runs/verify/case-001/supatest/project",
+        "transcriptPath": "runs/verify/case-001/supatest/transcript.log",
+        "changedFiles": [],
+        "changedDiff": "",
+        "artifactChecks": {"warnings": []},
+        "passCriteria": ["Plan includes a Not Testing section"],
+        "failCriteria": ["No Not Testing section"],
+    }
+    test_case = LLMTestCase(
+        input="Create a test plan",
+        actual_output="Exit code: 0\nTimed out: False\nFinal answer includes a plan.",
+        expected_output="Pass criteria:\n- Plan includes a Not Testing section",
+    )
+
+    prompt = run_benchmark.build_batch_judge_prompt(
+        "verify",
+        [result],
+        [(0, test_case)],
+        run_eval_ids=["E31"],
+        run_agents=["supatest"],
+    )
+
+    assert "Plan-mode cases are read-only" in prompt
+    assert "do not require changed files" in prompt
 
 
 def test_batch_scoring_can_chunk_large_runs(monkeypatch) -> None:
