@@ -154,18 +154,47 @@ The checked-in default agent list is:
 BENCHMARK_AGENTS=supatest,cursor,codex,gemini
 ```
 
-Cursor uses Auto by default:
+You can run model variants directly from `.env` by putting the model after a
+colon. The harness reuses the family command template and records each variant
+separately:
 
 ```bash
-BENCHMARK_CURSOR_CMD='cursor-agent --print --force --model auto {prompt}'
+BENCHMARK_AGENTS=supatest:premium,cursor:auto,codex:gpt-5,gemini:gemini-2.5-pro
 ```
 
-Gemini CLI uses non-interactive mode with workspace trust skipped and tool
-approval enabled:
+For plain agent names, set family model defaults:
 
 ```bash
-BENCHMARK_GEMINI_CMD='gemini --model gemini-3.1-flash-lite --prompt {prompt} --yolo --skip-trust'
+BENCHMARK_SUPATEST_MODEL=premium
+BENCHMARK_CURSOR_MODEL=auto
+BENCHMARK_CODEX_MODEL=gpt-5
+BENCHMARK_GEMINI_MODEL=gemini-3.1-flash-lite
 ```
+
+Built-in command templates exist for Cursor, Codex, and Gemini. For any other
+agent, add it to `BENCHMARK_AGENTS` and set `BENCHMARK_<AGENT>_CMD`. Custom
+templates support these placeholders:
+
+```bash
+BENCHMARK_QA_PRO_MODEL=qa-large
+BENCHMARK_QA_PRO_CMD='qa-pro run --model {model} --cwd {cwd} {prompt}'
+BENCHMARK_AGENTS=supatest,qa-pro
+```
+
+`{model_arg}` expands to `--model <model>` when a model is selected, otherwise
+empty. `{model}` expands to only the shell-quoted model value.
+
+Prompt profile also affects score separation:
+
+```bash
+BENCHMARK_PROMPT_PROFILE=qa       # shared QA coaching for every agent
+BENCHMARK_PROMPT_PROFILE=minimal  # task + mode + cwd boundary
+BENCHMARK_PROMPT_PROFILE=raw      # fixture task only, plus failure log when present
+```
+
+Use `qa` when measuring task ability under a common QA frame. Use `raw` or
+`minimal` when you want product-specific agent behavior to show through more
+clearly.
 
 Use a comma-separated `BENCHMARK_EVAL_IDS` value for a smaller smoke or hard
 suite. This seven-task subset is useful when you want a quick complex pass
@@ -181,8 +210,9 @@ without running the full fixture set:
 | E77  | Fix: integrate a user-provided selector snippet into a reusable pattern       |
 | E101 | Prod regression: translate Maestro/iOS hierarchy evidence into WDIO selectors |
 
-Edit `.env` or the defaults at the top of `run_benchmark.py` to change that.
-Use `BENCHMARK_EVAL_IDS=all` to include every available fixture.
+Edit `.env` to change the evals, agents, models, prompt profile, parallelism,
+timeouts, or judge budget. Use `BENCHMARK_EVAL_IDS=all` to include every
+available fixture.
 
 ## Output
 
@@ -216,5 +246,27 @@ failures. Before judging, the harness removes agent names, local absolute paths,
 benchmark credentials, spinner noise, and repeated terminal status redraws from
 the evidence. The judge scores only against the task and fixture pass/fail
 criteria, not against a specific CLI, product, model, company, cost profile, or
-agent type. Score cells show satisfied pass checks and triggered fail checks as
-`<passed>p/<failed>f result`, for example `7p/0f pass`.
+agent type.
+
+For large runs, the batch prompt budget matters more than a DeepEval process
+timeout. Defaults are:
+
+```bash
+BENCHMARK_BATCH_TOTAL_CASE_CHARS=180000
+BENCHMARK_BATCH_CASE_CHARS=5000
+BENCHMARK_JUDGE_BATCH_SIZE=
+```
+
+A 100-eval x 4-agent run has 400 judged cases. With the defaults, each case is
+trimmed to about 450 characters in a single judge call, which can flatten scores
+because the judge sees too little evidence. Prefer:
+
+```bash
+BENCHMARK_JUDGE_BATCH_SIZE=25
+```
+
+That keeps the per-case budget near the configured 5000 characters while making
+several sequential judge calls. Raise process timeouts only if a judge request
+actually times out after chunking. Score cells show satisfied pass checks and
+triggered fail checks as `<passed>p/<failed>f result`, for example
+`7p/0f pass`.

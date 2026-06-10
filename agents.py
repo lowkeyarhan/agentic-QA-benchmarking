@@ -37,6 +37,23 @@ QA_AGENT_CONTEXT = [
     "Report blockers and uncertainty explicitly instead of inventing results.",
 ]
 
+DEFAULT_AGENT_MODELS = {
+    "cursor": "auto",
+    "gemini": "gemini-3.1-flash-lite",
+    "supatest": "premium",
+}
+
+DEFAULT_AGENT_COMMANDS = {
+    "cursor": "cursor-agent --print --force --model {model} {prompt}",
+    "codex": (
+        "codex exec -C {cwd} --skip-git-repo-check "
+        "--dangerously-bypass-approvals-and-sandbox {model_arg} {prompt}"
+    ),
+    "gemini": "gemini --model {model} --prompt {prompt} --yolo --skip-trust",
+}
+
+PROMPT_PROFILES = {"qa", "minimal", "raw"}
+
 
 @dataclass(frozen=True)
 class AgentRunResult:
@@ -123,17 +140,18 @@ def run_agent(
 def build_command(
     agent: str, fixture: EvalFixture, project_dir: Path
 ) -> tuple[list[str] | str, Path, bool]:
-    if agent == "supatest":
+    family = agent_family(agent)
+    if family == "supatest":
         custom_template = os.getenv("BENCHMARK_SUPATEST_CMD")
         if custom_template:
             return (
-                render_command_template(custom_template, fixture, project_dir),
+                render_command_template(custom_template, fixture, project_dir, agent),
                 project_dir,
                 True,
             )
 
         max_iterations = os.getenv("BENCHMARK_MAX_ITERATIONS", "75")
-        model = os.getenv("BENCHMARK_SUPATEST_MODEL", "premium")
+        model = agent_model(agent) or DEFAULT_AGENT_MODELS["supatest"]
         binary = os.getenv("BENCHMARK_SUPATEST_BINARY") or "supatest"
         args = [
             binary,
@@ -169,33 +187,97 @@ def build_command(
             args.extend(["--logs", str(fixture.logs_file)])
         return args, cwd, False
 
-    template_name = f"BENCHMARK_{agent_command_env_name(agent)}_CMD"
-    template = os.getenv(template_name)
+    template_name, template = agent_command_template(agent)
     if not template:
         raise RuntimeError(f"{template_name} is required to run agent '{agent}'")
 
-    return render_command_template(template, fixture, project_dir), project_dir, True
+    return (
+        render_command_template(template, fixture, project_dir, agent),
+        project_dir,
+        True,
+    )
+
+
+def agent_family(agent: str) -> str:
+    return agent.split(":", 1)[0].strip()
+
+
+def agent_inline_model(agent: str) -> str | None:
+    if ":" not in agent:
+        return None
+    model = agent.split(":", 1)[1].strip()
+    return model or None
+
+
+def agent_run_dir_name(agent: str) -> str:
+    return re.sub(r"[^A-Za-z0-9_.-]+", "-", agent).strip("-") or "agent"
 
 
 def agent_command_env_name(agent: str) -> str:
     return re.sub(r"[^A-Za-z0-9]+", "_", agent).strip("_").upper()
 
 
-def agent_model_label(agent: str) -> str:
-    env_name = agent_command_env_name(agent)
-    explicit = os.getenv(f"BENCHMARK_{env_name}_MODEL_LABEL")
+def agent_model(agent: str) -> str | None:
+    id_env_name = agent_command_env_name(agent)
+    explicit = os.getenv(f"BENCHMARK_{id_env_name}_MODEL")
     if explicit:
-        return explicit
+        return explicit.strip()
 
-    if agent == "supatest":
-        return os.getenv("BENCHMARK_SUPATEST_MODEL", "premium")
+    inline_model = agent_inline_model(agent)
+    if inline_model:
+        return inline_model
 
-    template = os.getenv(f"BENCHMARK_{env_name}_CMD")
+    family = agent_family(agent)
+    family_env_name = agent_command_env_name(family)
+    explicit = os.getenv(f"BENCHMARK_{family_env_name}_MODEL")
+    return explicit.strip() if explicit else None
+
+
+def agent_model_label(agent: str) -> str:
+    env_names = [agent_command_env_name(agent)]
+    family = agent_family(agent)
+    family_env_name = agent_command_env_name(family)
+    if family_env_name not in env_names:
+        env_names.append(family_env_name)
+
+    for env_name in env_names:
+        explicit = os.getenv(f"BENCHMARK_{env_name}_MODEL_LABEL")
+        if explicit:
+            return explicit
+
+    configured_model = agent_model(agent)
+    if configured_model:
+        return configured_model
+
+    if family == "supatest":
+        return DEFAULT_AGENT_MODELS["supatest"]
+
+    _, template = agent_command_template(agent)
     return model_from_command_template(template) or "default"
 
 
 def agent_display_name(agent: str) -> str:
-    return f"{agent} [{agent_model_label(agent)}]"
+    return f"{agent_family(agent)} [{agent_model_label(agent)}]"
+
+
+def agent_command_template(agent: str) -> tuple[str, str | None]:
+    env_names = [agent_command_env_name(agent)]
+    family = agent_family(agent)
+    family_env_name = agent_command_env_name(family)
+    if family_env_name not in env_names:
+        env_names.append(family_env_name)
+
+    for env_name in env_names:
+        template_name = f"BENCHMARK_{env_name}_CMD"
+        template = os.getenv(template_name)
+        if template:
+            return template_name, template
+
+    template = DEFAULT_AGENT_COMMANDS.get(family)
+    if template:
+        return f"built-in {family} command", template
+
+    return f"BENCHMARK_{family_env_name}_CMD", None
 
 
 def model_from_command_template(template: str | None) -> str | None:
@@ -240,16 +322,21 @@ def with_local_tool_paths(path_value: str) -> str:
 
 
 def render_command_template(
-    template: str, fixture: EvalFixture, project_dir: Path
+    template: str, fixture: EvalFixture, project_dir: Path, agent: str
 ) -> str:
     prompt = build_prompt(fixture)
     project_id = resolve_supatest_project_id() or ""
+    model = agent_model(agent) or DEFAULT_AGENT_MODELS.get(agent_family(agent), "")
+    model_arg = f"--model {shlex.quote(model)}" if model else ""
     return template.format(
+        agent=shlex.quote(agent_family(agent)),
         prompt=shlex.quote(prompt),
         task=shlex.quote(fixture.task),
         mode=shlex.quote(fixture.mode),
         cwd=shlex.quote(str(project_dir)),
         logs_file=shlex.quote(str(fixture.logs_file)) if fixture.logs_file else "",
+        model=shlex.quote(model) if model else "",
+        model_arg=model_arg,
         project_id=shlex.quote(project_id),
     )
 
@@ -305,15 +392,33 @@ def load_supatest_cli_token() -> str | None:
 
 
 def build_prompt(fixture: EvalFixture) -> str:
-    parts = [
-        *QA_AGENT_CONTEXT,
-        "",
-        "User request:",
-        fixture.task,
-        "",
-        f"Mode: {fixture.mode}",
-        "Work only inside the current project directory.",
-    ]
+    profile = os.getenv("BENCHMARK_PROMPT_PROFILE", "qa").strip().lower() or "qa"
+    if profile not in PROMPT_PROFILES:
+        raise ValueError(
+            "BENCHMARK_PROMPT_PROFILE must be one of: "
+            + ", ".join(sorted(PROMPT_PROFILES))
+        )
+
+    if profile == "raw":
+        parts = [fixture.task]
+    elif profile == "minimal":
+        parts = [
+            "User request:",
+            fixture.task,
+            "",
+            f"Mode: {fixture.mode}",
+            "Work only inside the current project directory.",
+        ]
+    else:
+        parts = [
+            *QA_AGENT_CONTEXT,
+            "",
+            "User request:",
+            fixture.task,
+            "",
+            f"Mode: {fixture.mode}",
+            "Work only inside the current project directory.",
+        ]
     if fixture.logs_file:
         parts.extend(
             [

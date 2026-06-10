@@ -54,9 +54,14 @@ except ImportError:
     )
     raise
 
-load_dotenv(BENCHMARK_ROOT / ".env", override=True)
+load_dotenv(BENCHMARK_ROOT / ".env", override=False)
 
-from agents import agent_display_name, agent_model_label, run_agent  # noqa: E402
+from agents import (  # noqa: E402
+    agent_display_name,
+    agent_model_label,
+    agent_run_dir_name,
+    run_agent,
+)
 from fixtures import copy_project, load_fixture, resolve_eval_ids  # noqa: E402
 from pydantic import BaseModel  # noqa: E402
 from scoring import (
@@ -209,7 +214,16 @@ def main() -> int:
 
     if pending_results:
         print()
-        print(f"Scoring {len(pending_results)} completed runs with one judge call...")
+        batch_size = configured_judge_batch_size(len(pending_results))
+        if batch_size:
+            print(
+                f"Scoring {len(pending_results)} completed runs with judge batches "
+                f"of {batch_size}..."
+            )
+        else:
+            print(
+                f"Scoring {len(pending_results)} completed runs with one judge call..."
+            )
         results.extend(
             score_pending_results(
                 run_id,
@@ -383,7 +397,7 @@ def run_one_case(
     run_id: str, runs_dir: Path, eval_id: str, agent: str, case_id: str
 ) -> PendingResult:
     fixture = load_fixture(eval_id)
-    case_run_dir = runs_dir / case_id / agent
+    case_run_dir = runs_dir / case_id / agent_run_dir_name(agent)
     case_run_dir.mkdir(parents=True, exist_ok=True)
     if fixture.logs_file:
         neutral_logs_file = case_run_dir / "failure.log"
@@ -444,24 +458,44 @@ def score_pending_results(
     if not scoring_jobs:
         return results
 
-    try:
-        judge_response = batch_judge_results(
-            run_id,
-            results,
-            scoring_jobs,
-            run_eval_ids=run_eval_ids,
-            run_agents=run_agents,
-        )
-    except Exception as error:
-        reason = redact_configured_secrets(f"{type(error).__name__}: {error}")
-        for result_index, _ in scoring_jobs:
-            mark_unscored(results[result_index], reason, "judge-error")
-        for result in results:
-            result.pop("_judgeResultId", None)
-        return results
+    batch_size = configured_judge_batch_size(len(scoring_jobs))
+    scoring_batches = (
+        list(chunked(scoring_jobs, batch_size)) if batch_size else [scoring_jobs]
+    )
+    for scoring_batch in scoring_batches:
+        try:
+            judge_response = batch_judge_results(
+                run_id,
+                results,
+                scoring_batch,
+                run_eval_ids=run_eval_ids,
+                run_agents=run_agents,
+            )
+        except Exception as error:
+            reason = redact_configured_secrets(f"{type(error).__name__}: {error}")
+            for result_index, _ in scoring_batch:
+                mark_unscored(results[result_index], reason, "judge-error")
+            for result in results:
+                result.pop("_judgeResultId", None)
+            continue
 
-    apply_batch_judgement(results, scoring_jobs, judge_response)
+        apply_batch_judgement(results, scoring_batch, judge_response)
     return results
+
+
+def configured_judge_batch_size(job_count: int) -> int:
+    raw = os.getenv("BENCHMARK_JUDGE_BATCH_SIZE", "").strip()
+    if not raw:
+        return 0
+    value = int(raw)
+    if value <= 0 or job_count <= 0:
+        return 0
+    return min(value, job_count)
+
+
+def chunked(items: list[tuple[int, object]], chunk_size: int):
+    for index in range(0, len(items), chunk_size):
+        yield items[index : index + chunk_size]
 
 
 def batch_judge_results(

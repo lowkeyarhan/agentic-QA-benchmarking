@@ -10,7 +10,10 @@ from agents import (
     agent_command_env_name,
     agent_display_name,
     agent_environment,
+    agent_family,
+    agent_model,
     agent_model_label,
+    agent_run_dir_name,
     build_command,
     build_prompt,
     changed_file_excerpt,
@@ -69,6 +72,13 @@ def test_agent_command_env_name_supports_future_agent_names() -> None:
     assert agent_command_env_name("vendor.agent/v2") == "VENDOR_AGENT_V2"
 
 
+def test_agent_family_and_run_dir_support_inline_model_variants() -> None:
+    assert agent_family("codex:gpt-5") == "codex"
+    assert agent_model("codex:gpt-5") == "gpt-5"
+    assert agent_run_dir_name("codex:gpt-5/fast") == "codex-gpt-5-fast"
+    assert agent_display_name("codex:gpt-5") == "codex [gpt-5]"
+
+
 def test_agent_model_labels_use_agent_specific_config(monkeypatch) -> None:
     monkeypatch.setenv("BENCHMARK_SUPATEST_MODEL", "premium")
     monkeypatch.setenv(
@@ -84,6 +94,18 @@ def test_agent_model_labels_use_agent_specific_config(monkeypatch) -> None:
     assert agent_model_label("cursor") == "auto"
     assert agent_model_label("gemini") == "gemini-3.1-flash-lite"
     assert agent_display_name("supatest") == "supatest [premium]"
+
+
+def test_inline_agent_model_overrides_family_model_default(monkeypatch) -> None:
+    monkeypatch.setenv("BENCHMARK_CODEX_MODEL", "family-default")
+
+    assert agent_model("codex:gpt-5") == "gpt-5"
+    assert agent_model_label("codex:gpt-5") == "gpt-5"
+
+    monkeypatch.setenv("BENCHMARK_CODEX_GPT_5_MODEL", "id-specific")
+
+    assert agent_model("codex:gpt-5") == "id-specific"
+    assert agent_model_label("codex:gpt-5") == "id-specific"
 
 
 def test_gemini_agent_command_uses_configured_template(tmp_path, monkeypatch) -> None:
@@ -102,6 +124,19 @@ def test_gemini_agent_command_uses_configured_template(tmp_path, monkeypatch) ->
     assert "--yolo --skip-trust" in command
 
 
+def test_built_in_gemini_command_uses_model_env(tmp_path, monkeypatch) -> None:
+    monkeypatch.delenv("BENCHMARK_GEMINI_CMD", raising=False)
+    monkeypatch.setenv("BENCHMARK_GEMINI_MODEL", "gemini-2.5-pro")
+    project_dir = tmp_path / "project"
+    project_dir.mkdir()
+
+    command, cwd, use_shell = build_command("gemini", load_fixture("E25"), project_dir)
+
+    assert use_shell is True
+    assert cwd == project_dir
+    assert command.startswith("gemini --model gemini-2.5-pro --prompt ")
+
+
 def test_cursor_agent_command_uses_auto_model(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv(
         "BENCHMARK_CURSOR_CMD",
@@ -115,6 +150,42 @@ def test_cursor_agent_command_uses_auto_model(tmp_path, monkeypatch) -> None:
     assert use_shell is True
     assert cwd == project_dir
     assert "--model auto" in command
+
+
+def test_codex_model_arg_placeholder_is_empty_until_configured(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.delenv("BENCHMARK_CODEX_CMD", raising=False)
+    monkeypatch.delenv("BENCHMARK_CODEX_MODEL", raising=False)
+    project_dir = tmp_path / "project"
+    project_dir.mkdir()
+
+    command, _, _ = build_command("codex", load_fixture("E25"), project_dir)
+
+    assert "--model" not in command
+
+    command, _, _ = build_command("codex:gpt-5", load_fixture("E25"), project_dir)
+
+    assert "--model gpt-5" in command
+
+
+def test_generic_agent_command_can_render_model_placeholders(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.setenv(
+        "BENCHMARK_QA_PRO_CMD",
+        "qa-pro run --model {model} {model_arg} --cwd {cwd} {prompt}",
+    )
+    monkeypatch.setenv("BENCHMARK_QA_PRO_MODEL", "qa-large")
+    project_dir = tmp_path / "project"
+    project_dir.mkdir()
+
+    command, cwd, use_shell = build_command("qa-pro", load_fixture("E25"), project_dir)
+
+    assert use_shell is True
+    assert cwd == project_dir
+    assert "--model qa-large --model qa-large" in command
+    assert f"--cwd {project_dir}" in command
 
 
 def test_supatest_project_id_uses_explicit_or_benchmark_settings(monkeypatch) -> None:
@@ -138,6 +209,25 @@ def test_benchmark_prompt_frames_real_qa_without_exposing_rubric() -> None:
     assert fixture.task in prompt
     assert "passCriteria" not in prompt
     assert "failCriteria" not in prompt
+
+
+def test_prompt_profile_can_remove_shared_qa_coaching(monkeypatch) -> None:
+    fixture = load_fixture("E25")
+    monkeypatch.setenv("BENCHMARK_PROMPT_PROFILE", "raw")
+
+    prompt = build_prompt(fixture)
+
+    assert prompt.startswith(fixture.task)
+    assert "real production QA work" not in prompt
+    assert "User request:" not in prompt
+
+    monkeypatch.setenv("BENCHMARK_PROMPT_PROFILE", "minimal")
+
+    prompt = build_prompt(fixture)
+
+    assert "User request:" in prompt
+    assert "real production QA work" not in prompt
+    assert f"Mode: {fixture.mode}" in prompt
 
 
 def test_supatest_receives_same_benchmark_prompt(tmp_path, monkeypatch) -> None:
@@ -473,6 +563,69 @@ def test_batch_scoring_uses_one_judge_call_and_check_counts(monkeypatch) -> None
     assert scored["passedChecks"] == 2
     assert scored["failedChecks"] == 0
     assert run_benchmark.format_cell(scored) == "90% (2p/0f) pass"
+
+
+def test_batch_scoring_can_chunk_large_runs(monkeypatch) -> None:
+    calls = {"count": 0}
+
+    class BatchJudge:
+        def generate(self, prompt, schema):
+            calls["count"] += 1
+            assert schema is BatchJudgeResponse
+            assert "r001" in prompt
+            return (
+                BatchJudgeResponse(
+                    results=[
+                        BatchJudgeCaseScore(
+                            resultId="r001",
+                            score=0.8,
+                            result="pass",
+                            passedChecks=1,
+                            failedChecks=0,
+                            reason=f"Chunk {calls['count']} scored.",
+                        )
+                    ]
+                ),
+                0,
+            )
+
+    monkeypatch.setenv("BENCHMARK_JUDGE_BATCH_SIZE", "1")
+    monkeypatch.setattr(run_benchmark, "make_judge_model", lambda: BatchJudge())
+
+    pending = []
+    for index, eval_id in enumerate(["E25", "E29"], start=1):
+        result = {
+            "runId": "verify",
+            "caseId": f"case-{index:03d}",
+            "evalId": eval_id,
+            "evalName": "Fixture",
+            "agent": "supatest",
+            "mode": "build",
+            "exitCode": 0,
+            "timedOut": False,
+            "durationMs": 123,
+            "projectDir": f"runs/verify/case-{index:03d}/supatest/project",
+            "transcriptPath": f"runs/verify/case-{index:03d}/supatest/transcript.log",
+            "changedFiles": [],
+            "passCriteria": ["does A"],
+            "failCriteria": [],
+        }
+        pending.append(
+            run_benchmark.PendingResult(
+                result,
+                LLMTestCase(
+                    input="Do QA work",
+                    actual_output="Exit code: 0\nTimed out: False\nDone",
+                    expected_output="Pass criteria:\n- does A",
+                ),
+            )
+        )
+
+    scored = run_benchmark.score_pending_results("verify", pending)
+
+    assert calls["count"] == 2
+    assert [item["scorePercent"] for item in scored] == [80, 80]
+    assert [item["reason"] for item in scored] == ["Chunk 1 scored.", "Chunk 2 scored."]
 
 
 def test_missing_batch_score_is_unscored(monkeypatch) -> None:
