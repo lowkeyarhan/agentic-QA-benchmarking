@@ -9,6 +9,7 @@ import socket
 import signal
 import shlex
 import subprocess
+import tempfile
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -59,6 +60,7 @@ DEFAULT_AGENT_COMMANDS = {
 }
 
 PROMPT_PROFILES = {"qa", "minimal", "raw"}
+DEFAULT_HIDDEN_HOST_TOOLS = "rtk"
 
 
 @dataclass(frozen=True)
@@ -104,7 +106,7 @@ def run_agent(
         stdin=subprocess.PIPE if stdin_input is not None else None,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
-        env=agent_environment(),
+        env=agent_environment(agent),
         start_new_session=True,
     )
 
@@ -349,7 +351,7 @@ def model_from_command_template(template: str | None) -> str | None:
     return None
 
 
-def agent_environment() -> dict[str, str]:
+def agent_environment(agent: str | None = None) -> dict[str, str]:
     env = {
         key: value
         for key, value in os.environ.items()
@@ -361,7 +363,10 @@ def agent_environment() -> dict[str, str]:
         and key != "SUPATEST_PROJECT_ID"
     }
     env["NODE_ENV"] = "development"
-    env["PATH"] = with_local_tool_paths(env.get("PATH", ""))
+    env["PATH"] = with_hidden_host_tools(
+        with_local_tool_paths(env.get("PATH", "")),
+        hidden_host_tools(),
+    )
     return env
 
 
@@ -372,6 +377,81 @@ def with_local_tool_paths(path_value: str) -> str:
         if tool_dir.exists() and tool_entry not in entries:
             entries.insert(0, tool_entry)
     return os.pathsep.join(entries)
+
+
+def hidden_host_tools() -> list[str]:
+    raw = os.getenv("BENCHMARK_HIDE_HOST_TOOLS", DEFAULT_HIDDEN_HOST_TOOLS).strip()
+    if raw.lower() in {"", "0", "false", "no", "off", "none"}:
+        return []
+    return [tool.strip() for tool in raw.split(",") if tool.strip()]
+
+
+def with_hidden_host_tools(path_value: str, tools: list[str]) -> str:
+    if not tools:
+        return path_value
+
+    hidden = set(tools)
+    entries = [entry for entry in path_value.split(os.pathsep) if entry]
+    sanitized_entries = []
+    for entry in entries:
+        path = Path(entry)
+        if path_contains_hidden_tool(path, hidden):
+            sanitized_entries.append(str(sanitized_path_dir(path, hidden)))
+        else:
+            sanitized_entries.append(entry)
+    return os.pathsep.join(sanitized_entries)
+
+
+def path_contains_hidden_tool(path: Path, hidden: set[str]) -> bool:
+    try:
+        return any((path / tool).exists() for tool in hidden)
+    except OSError:
+        return False
+
+
+def sanitized_path_dir(source_dir: Path, hidden: set[str]) -> Path:
+    source_key = str(source_dir.resolve(strict=False))
+    hidden_key = ",".join(sorted(hidden))
+    digest = hashlib.sha256(f"{source_key}\0{hidden_key}".encode()).hexdigest()[:16]
+    sanitized_dir = (
+        Path(tempfile.gettempdir()) / "agent-benchmark-sanitized-path" / digest
+    )
+    sanitized_dir.mkdir(parents=True, exist_ok=True)
+
+    try:
+        children = list(source_dir.iterdir())
+    except OSError:
+        return sanitized_dir
+
+    for child in children:
+        if child.name in hidden:
+            continue
+        if not child.is_file() and not child.is_symlink():
+            continue
+        if not os.access(child, os.X_OK):
+            continue
+
+        target = sanitized_dir / child.name
+        if target.exists() or target.is_symlink():
+            continue
+        try:
+            target.symlink_to(child)
+        except OSError:
+            continue
+    return sanitized_dir
+
+
+def tool_policy_metadata() -> dict[str, object]:
+    hidden = hidden_host_tools()
+    return {
+        "hiddenHostTools": hidden,
+        "hiddenFromAgentPath": hidden,
+        "rtkPolicy": (
+            "Host-level rtk is hidden from benchmark-launched agent PATH by "
+            "default. Supatest may use RTK only when provided by its own "
+            "compiled runtime/toolchain."
+        ),
+    }
 
 
 def render_command_template(

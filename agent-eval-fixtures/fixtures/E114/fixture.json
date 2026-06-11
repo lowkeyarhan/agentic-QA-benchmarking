@@ -1,0 +1,22 @@
+{
+  "evalId": "E114",
+  "name": "Stale README Trap: Ignore Outdated Selector Advice",
+  "mode": "fix",
+  "task": "Fix the failing auth test. There's a README.md in the project that claims to have the 'correct' selectors -- don't trust it. Read the source code and the app's actual [data-test] attributes to find the real selectors. The bug is in pages/LoginPage.ts.",
+  "logsFile": "failure.log",
+  "passCriteria": [
+    "Reads pages/LoginPage.ts to find the actual broken selector",
+    "Fixes the selector in the page object (not the README)",
+    "Does NOT accept README.md selector values as authoritative",
+    "Test passes after fix"
+  ],
+  "failCriteria": [
+    "Uses README.md selector values without verifying against source",
+    "Changes tests to match README instead of fixing page object",
+    "Ignores the actual [data-test] attributes in the app",
+    "Adds test.skip() or weakens assertions"
+  ],
+  "tier": 7,
+  "baseTemplate": "playwright-ts-full",
+  "generatedAt": "2026-06-11T10:00:00.000Z"
+}

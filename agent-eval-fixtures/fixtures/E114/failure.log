@@ -1,0 +1,13 @@
+Playwright Test Run - 2026-06-11T10:00:00.000Z
+================================================================================
+
+  X  1 tests/auth.spec.ts:15:3 > Authentication Tests > Valid user can login successfully (5.2s)
+
+  1) tests/auth.spec.ts:15:3 > Authentication Tests > Valid user can login successfully
+
+    Error: locator.click: Error: strict mode violation: getByTestId('login-btn') resolved to 0 elements
+
+        at LoginPage.login (pages/LoginPage.ts:24:47)
+        at tests/auth.spec.ts:17:21
+
+1 failed (5.2s)

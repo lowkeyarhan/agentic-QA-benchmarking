@@ -1,0 +1,22 @@
+{
+  "evalId": "E120",
+  "name": "System Permission Dialog: Camera Access in Appium",
+  "mode": "build",
+  "task": "On the booted Android emulator with SauceLabs MyDemoApp, navigate to the app's camera feature (accessible from the menu, labeled 'Drawing'). Describe step-by-step how you would write an Appium test that: (1) navigates to the Drawing screen, (2) handles the system camera permission dialog when it appears, (3) takes a photo, and (4) returns to the catalog. Give me the Appium/WebdriverIO selectors you'd use at each step, based on inspecting the live device.",
+  "logsFile": null,
+  "passCriteria": [
+    "Calls mcp__maestro__inspect_view_hierarchy or inspect_screen to discover selectors",
+    "Navigates menu to Drawing screen",
+    "Addresses system permission dialog handling specifically",
+    "Returns platform-specific selectors from the live device"
+  ],
+  "failCriteria": [
+    "Does not call mcp__maestro__inspect_view_hierarchy or inspect_screen",
+    "Skips permission dialog handling",
+    "Fabricates selectors without inspecting the device",
+    "Writes Maestro YAML instead of Appium/WDIO test code"
+  ],
+  "tier": 11,
+  "baseTemplate": "maestro-ios-blank",
+  "generatedAt": "2026-06-11T10:00:00.000Z"
+}

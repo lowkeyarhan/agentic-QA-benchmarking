@@ -1,0 +1,22 @@
+{
+  "evalId": "E116",
+  "name": "API Mocking: Intercept and Conditionally Respond",
+  "mode": "build",
+  "task": "Write a Playwright test that uses page.route() to mock the https://www.saucedemo.com inventory API. Intercept requests to /inventory.html and serve a custom HTML page showing exactly 3 products (not the default 6). Verify the page renders only 3 products. Use standard_user / secret_sauce.",
+  "logsFile": null,
+  "passCriteria": [
+    "Uses page.route() or context.route() to intercept requests",
+    "Mocked response returns exactly 3 products",
+    "Test verifies page shows exactly 3 products via assertion",
+    "Login still works (mocking is scoped correctly)"
+  ],
+  "failCriteria": [
+    "No network interception -- hits live API only",
+    "Mocks so aggressively that login breaks",
+    "Assertion doesn't verify the correct product count",
+    "Uses page.pause() or interactive-only APIs"
+  ],
+  "tier": 8,
+  "baseTemplate": "playwright-ts-full",
+  "generatedAt": "2026-06-11T10:00:00.000Z"
+}

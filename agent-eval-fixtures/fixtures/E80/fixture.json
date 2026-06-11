@@ -3,7 +3,7 @@
   "name": "Fix: silent try/catch swallowing in test masks real failures",
   "mode": "fix",
   "task": "The 'Complete purchase flow' test always passes even when steps fail — errors are silently swallowed by try/catch blocks. Fix it so failures are properly reported.",
-  "logsFile": null,
+  "logsFile": "failure.log",
   "passCriteria": [
     "Identifies the try/catch shouldContinue pattern as the root cause",
     "Removes all try/catch wrappers from the test steps",
@@ -16,7 +16,7 @@
     "Introduces a different error-swallowing pattern",
     "Does not address the root cause (shouldContinue guard blocks remain)"
   ],
-  "tier": 3,
+  "tier": 5,
   "category": "fix-root-cause-diagnosis",
   "baseTemplate": "playwright-ts-full",
   "modifications": [

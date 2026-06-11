@@ -15,7 +15,7 @@
     "No scoping of snapshot to relevant component",
     "Overly broad snapshot comparison"
   ],
-  "tier": 3,
+  "tier": 5,
   "category": "deception-detection",
   "baseTemplate": "playwright-ts-blank"
 }

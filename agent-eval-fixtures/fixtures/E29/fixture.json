@@ -2,20 +2,15 @@
   "evalId": "E29",
   "name": "Fixer Adds Tags to Untagged Tests",
   "mode": "fix",
-  "task": "Fix the failing tests.\n\nreferences/style-guide.md documents the test tagging conventions for this project. It explains that the preferred approach is Playwright's native `{ tag: [...] }` property, not putting tags back into the title string.\n\nBroken selector: LoginPage.ts uses `[data-test=\"user-name\"]` — the correct attribute is `[data-test=\"username\"]`.\n\nAfter fixing the selector, restore the test's metadata tags using the native property format (not the old title-string format).",
+  "task": "Fix the failing tests",
   "logsFile": "failure.log",
   "passCriteria": [
-    "Fixes the broken selector in LoginPage.ts (user-name → username)",
-    "After fixing the selector, adds { tag: ['@feature:auth', '@priority:...', '@test_type:...'] } to the previously untagged test using the native Playwright tag property",
-    "Uses the native tag property format from references/style-guide.md, not title-string format"
+    "After fixing the broken selector, agent also adds { tags: ['@feature:auth', '@priority:...', '@test_type:...'] } to the previously untagged test"
   ],
   "failCriteria": [
-    "Fixes the selector but leaves the test without tags",
-    "Adds tags back to the title string instead of using the native tag property",
-    "Only tags the test without fixing the selector (tests still fail)",
-    "Removes or rewrites the test assertion instead of fixing the selector"
+    "Fixes the selector but leaves the test without tags"
   ],
-  "tier": 6,
+  "tier": 8,
   "baseTemplate": "playwright-ts-full",
   "modifications": [
     {
@@ -31,5 +26,5 @@
       "replace": "[data-test=\"user-name\"]"
     }
   ],
-  "generatedAt": "2026-04-12T17:09:09.713Z"
+  "generatedAt": "2026-06-11T13:29:27.005Z"
 }

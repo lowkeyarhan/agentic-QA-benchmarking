@@ -139,6 +139,7 @@ npx tsx capture-failure-logs.ts E14
 ```
 
 This script will:
+
 1. Install dependencies in the fixture's project directory
 2. Run the tests (expecting them to fail)
 3. Save the failure output to `failure.log`
@@ -153,23 +154,24 @@ npx tsx validate-fixtures.ts
 ```
 
 This checks:
+
 - `fixture.json` exists and has required fields (evalId, name, mode, task)
 - `project/` directory exists with a valid `package.json`
 - `failure.log` exists for fix-mode evals
 
 ## Eval Modes Summary
 
-| Eval IDs | Mode | Description |
-|----------|------|-------------|
-| E1-E13 | build | Write new tests based on task description |
-| E14-E16 | fix | Fix failing tests using failure.log |
-| E17-E18 | build | Additional build mode evals |
-| E19-E26 | plan | Create test plans without execution |
-| E27-E29 | fix | Additional fix mode evals |
-| E30-E32 | build | Advanced build mode evals |
-| E78 | build | Context-first: write from page objects without over-exploration |
-| E79 | fix | Fix spurious page.close() in afterEach causing Target closed |
-| E80 | fix | Fix silent try/catch shouldContinue error swallowing |
+| Eval IDs | Mode  | Description                                                     |
+| -------- | ----- | --------------------------------------------------------------- |
+| E1-E13   | build | Write new tests based on task description                       |
+| E14-E16  | fix   | Fix failing tests using failure.log                             |
+| E17-E18  | build | Additional build mode evals                                     |
+| E19-E26  | plan  | Create test plans without execution                             |
+| E27-E29  | fix   | Additional fix mode evals                                       |
+| E30-E32  | build | Advanced build mode evals                                       |
+| E78      | build | Context-first: write from page objects without over-exploration |
+| E79      | fix   | Fix spurious page.close() in afterEach causing Target closed    |
+| E80      | fix   | Fix silent try/catch shouldContinue error swallowing            |
 
 ## fixture.json Schema
 

@@ -16,7 +16,7 @@
     "Changes test to use fixture with wrong value",
     "Fixes test by updating expected data"
   ],
-  "tier": 2,
+  "tier": 3,
   "category": "deception-detection",
   "baseTemplate": "playwright-ts-minimal"
 }

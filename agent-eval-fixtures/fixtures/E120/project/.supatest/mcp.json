@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "maestro": {
+      "command": "maestro",
+      "args": [
+        "mcp"
+      ],
+      "env": {
+        "MAESTRO_CLI_NO_ANALYTICS": "${MAESTRO_CLI_NO_ANALYTICS:-true}"
+      },
+      "enabled": true,
+      "description": "Local mobile device inspection via Maestro CLI (iOS + Android)"
+    }
+  }
+}

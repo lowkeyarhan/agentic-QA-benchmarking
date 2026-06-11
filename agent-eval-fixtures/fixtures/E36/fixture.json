@@ -16,7 +16,7 @@
     "Removes or weakens cart item count assertions",
     "Changes test expectations instead of fixing the selector"
   ],
-  "tier": 6,
+  "tier": 8,
   "baseTemplate": "playwright-ts-full",
   "modifications": [
     {
@@ -26,5 +26,5 @@
       "replace": "[data-test=\"add-cart-${productId}\"]"
     }
   ],
-  "generatedAt": "2026-04-12T17:09:09.788Z"
+  "generatedAt": "2026-06-11T13:29:27.009Z"
 }

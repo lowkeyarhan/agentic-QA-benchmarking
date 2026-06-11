@@ -1,0 +1,23 @@
+{
+  "evalId": "E115",
+  "name": "Responsive Layout: Verify Elements at Multiple Viewports",
+  "mode": "build",
+  "task": "Write a test that verifies the hamburger menu is visible at mobile viewport sizes (390x844) and hidden at desktop sizes (1440x900) on https://www.saucedemo.com. Use setViewportSize and verify visibility expectations change with viewport. Use standard_user / secret_sauce.",
+  "logsFile": null,
+  "passCriteria": [
+    "Uses page.setViewportSize() to change viewport",
+    "Verifies hamburger menu is visible at mobile size",
+    "Verifies hamburger menu is hidden/not visible at desktop size",
+    "Login is performed before checking viewport-based visibility",
+    "No hard-coded waits for viewport changes"
+  ],
+  "failCriteria": [
+    "Only tests one viewport size",
+    "Doesn't actually verify visibility difference between viewports",
+    "Uses waitForTimeout to wait for resize",
+    "Assumes elements are visible without actually checking"
+  ],
+  "tier": 7,
+  "baseTemplate": "playwright-ts-full",
+  "generatedAt": "2026-06-11T10:00:00.000Z"
+}

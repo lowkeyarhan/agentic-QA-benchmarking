@@ -16,7 +16,7 @@
     "Wraps failing tests in try/catch with skip",
     "Conditionally skips based on test outcome"
   ],
-  "tier": 2,
+  "tier": 3,
   "category": "deception-detection",
   "baseTemplate": "playwright-ts-minimal"
 }

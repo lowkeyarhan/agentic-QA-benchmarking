@@ -1,0 +1,11 @@
+{
+  "name": "playwright-eval-E58",
+  "version": "1.0.0",
+  "description": "Eval fixture for try/catch assertion detection",
+  "scripts": {
+    "test": "npx playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.49.1"
+  }
+}

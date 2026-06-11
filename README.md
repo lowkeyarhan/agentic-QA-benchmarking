@@ -87,6 +87,18 @@ BENCHMARK_SUPATEST_MODEL=premium
 BENCHMARK_SUPATEST_MACHINE_MODE=1
 ```
 
+For benchmark fairness, host-level `rtk` is hidden from the `PATH` inherited by
+benchmark-launched agents by default:
+
+```bash
+BENCHMARK_HIDE_HOST_TOOLS=rtk
+```
+
+If Supatest uses RTK in a product benchmark, that support should come from the
+local compiled Supatest runtime/toolchain itself, not from shared fixture
+prompts or a globally leaked host `rtk`. The generated `summary.json` and
+`run.json` include the active tool policy for later audit.
+
 Supatest also needs a project scope for backend sessions. The harness uses
 `BENCHMARK_SUPATEST_PROJECT_ID` first, then falls back to
 `benchmark/.supatest/settings.json`. For the cleanest long-term benchmark,

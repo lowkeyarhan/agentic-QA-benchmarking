@@ -1,0 +1,23 @@
+{
+  "evalId": "E117",
+  "name": "Bug Report from Checkout Failure Logs",
+  "mode": "report",
+  "task": "Analyze the failure log in failure.log and the checkout test and page object source files. Produce a structured bug report that identifies root causes for both failures. Do NOT edit any files or run tests -- produce a report only.",
+  "logsFile": "failure.log",
+  "passCriteria": [
+    "Analyzes both failures from the log",
+    "First failure: identifies wrong tax calculation or total mismatch",
+    "Second failure: identifies confirmation text mismatch ('Order Complete!' vs expected)",
+    "Produces structured bug report (root cause, severity, affected tests)",
+    "Does NOT modify any project files or run tests"
+  ],
+  "failCriteria": [
+    "Edits test files or source code",
+    "Runs any test commands",
+    "Only addresses one of the two failures",
+    "Vague analysis without specific root cause identification"
+  ],
+  "tier": 8,
+  "baseTemplate": "playwright-ts-full",
+  "generatedAt": "2026-06-11T10:00:00.000Z"
+}

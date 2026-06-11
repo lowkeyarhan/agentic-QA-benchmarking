@@ -1,0 +1,32 @@
+Playwright Test Run - 2026-06-11
+================================================================================
+
+  X  1 tests/toast.spec.ts:14:3 > Toast Notification Tests > Add to cart shows toast notification (6.5s)
+  X  2 tests/toast.spec.ts:23:3 > Toast Notification Tests > Toast appears for each add-to-cart (7.1s)
+
+  1) tests/toast.spec.ts:14:3 > Toast Notification Tests > Add to cart shows toast notification
+
+    Error: expect(locator).toBeVisible()
+
+    Locator: getByTestId('toast-notification')
+    Expected: visible
+    Received: <element not found>
+
+    Call log:
+      - expect.toBeVisible with timeout 5000ms
+      - waiting for getByTestId('toast-notification')
+      -   locator resolved to 0 elements
+
+        at tests/toast.spec.ts:19:28
+
+  2) tests/toast.spec.ts:23:3 > Toast Notification Tests > Toast appears for each add-to-cart
+
+    Error: expect(locator).toBeVisible()
+
+    Locator: getByTestId('toast-notification')
+    Expected: visible
+    Received: <element not found>
+
+        at tests/toast.spec.ts:29:28
+
+  2 failed (13.6s)

@@ -1,0 +1,31 @@
+Playwright Test Run - 2026-06-11
+================================================================================
+
+  X  1 tests/checkout.spec.ts:84:3 > Checkout Flow Tests > Overview calculates correct total (6.2s)
+  X  2 tests/checkout.spec.ts:95:3 > Checkout Flow Tests > Order confirmation shows correct data (5.8s)
+
+  1) tests/checkout.spec.ts:84:3 > Checkout Flow Tests > Overview calculates correct total
+
+    Error: expect(received).toBeCloseTo(expected)
+
+    Expected: approx 43.18 (2 digits)
+    Received:   53.17
+
+      86 |     const itemTotal = await overviewPage.getItemTotal();
+      87 |     const tax = await overviewPage.getTax();
+      88 |     const total = itemTotal + tax;
+    > 89 |     expect(total).toBeCloseTo(43.18, 2);
+         |                   ^
+      90 |   });
+
+  2) tests/checkout.spec.ts:95:3 > Checkout Flow Tests > Order confirmation shows correct data
+
+    Error: expect(locator).toHaveText(expected)
+
+    Locator: getByTestId('complete-header')
+    Expected: "Thank you for your order!"
+    Received: "Order Complete!"
+
+        at tests/checkout.spec.ts:102:45
+
+2 failed (12.1s)

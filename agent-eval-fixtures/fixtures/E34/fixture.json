@@ -17,7 +17,7 @@
     "Misidentifies root cause as selector or timing issue",
     "Keeps hard-coded product expectations without data setup"
   ],
-  "tier": 2,
+  "tier": 6,
   "baseTemplate": "playwright-ts-full",
   "modifications": [
     {

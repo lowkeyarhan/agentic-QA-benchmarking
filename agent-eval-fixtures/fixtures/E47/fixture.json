@@ -16,7 +16,7 @@
     "Assertion too weak to catch price calculation bugs",
     "Uses toBeGreaterThan(29) instead of exact value"
   ],
-  "tier": 1,
+  "tier": 5,
   "category": "deception-detection",
   "baseTemplate": "playwright-ts-blank"
 }

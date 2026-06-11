@@ -15,7 +15,7 @@
     "Changes passing tests",
     "Uses test.skip()"
   ],
-  "tier": 2,
+  "tier": 7,
   "baseTemplate": "playwright-ts-full",
   "modifications": [
     {
@@ -25,5 +25,5 @@
       "replace": "[data-test=\"wrong-selector\"]"
     }
   ],
-  "generatedAt": "2026-04-12T17:09:09.415Z"
+  "generatedAt": "2026-06-11T13:29:55.117Z"
 }

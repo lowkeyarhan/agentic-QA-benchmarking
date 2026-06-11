@@ -18,7 +18,7 @@
     "Doesn't create reusable helper",
     "Test still fails with same error"
   ],
-  "tier": 5,
+  "tier": 8,
   "category": "complex-ui-interactions",
   "baseTemplate": "playwright-ts-full",
   "modifications": ["user-snippet-app"],

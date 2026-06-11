@@ -1,0 +1,19 @@
+Playwright Test Run - 2026-06-11
+================================================================================
+
+  Running tests...
+
+  (The 'Complete purchase flow' test passes silently even when steps fail)
+
+  1) Behavior Bug: All assertions pass because errors are swallowed by try/catch
+
+    The test at tests/checkout.spec.ts uses shouldContinue guards and try/catch blocks
+    around every step. When any step fails, the error is caught, shouldContinue is set
+    to false, and the remaining steps are silently skipped. The test always reports as
+    "passed" because no assertion ever runs or fails.
+
+    Locator failures, network errors, and assertion failures are all silently swallowed.
+
+    Fix: Remove try/catch wrappers and shouldContinue guards so errors propagate.
+
+  0 failed (0 results, 1 passed but should have failed)

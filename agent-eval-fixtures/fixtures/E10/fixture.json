@@ -5,12 +5,16 @@
   "task": "Write a test for the login flow on https://www.saucedemo.com",
   "logsFile": null,
   "passCriteria": [
-    "Uses getByRole(), getByLabel(), getByPlaceholder(), getByText(), or [data-test] attributes"
+    "Uses getByRole(), getByLabel(), getByPlaceholder(), getByText(), or [data-test] attributes for username, password, and login button",
+    "No CSS class selectors, XPath, or nth-child selectors used",
+    "Test actually performs login flow (fills fields and clicks button)",
+    "Verifies login succeeded by checking URL change or inventory page content"
   ],
   "failCriteria": [
-    "CSS class selectors",
-    "XPath",
-    "Fragile nth-child"
+    "CSS class selectors like .form_input or .btn_action",
+    "XPath selectors",
+    "Fragile nth-child or positional selectors",
+    "Test that doesn't actually verify login outcome (no assertion after clicking login)"
   ],
   "tier": 1,
   "baseTemplate": "playwright-ts-blank",

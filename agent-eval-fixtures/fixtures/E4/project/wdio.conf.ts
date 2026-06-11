@@ -1,27 +1,26 @@
-import type { Options } from "@wdio/types";
-import { config as dotenvConfig } from "dotenv";
+import type { Options } from '@wdio/types';
+import { config as dotenvConfig } from 'dotenv';
 
 // Load environment variables from .env file
-dotenvConfig({ path: "./.env", override: true });
+dotenvConfig({ path: './.env', override: true });
 
 // Explicitly set the env vars to ensure they're available
-process.env.SUPATEST_API_URL =
-  process.env.SUPATEST_API_URL || "http://localhost:9090";
-process.env.SUPATEST_API_KEY =
-  process.env.SUPATEST_API_KEY || "sk_test_benchmark_dummy";
-process.env.SUPATEST_PROJECT_ID =
-  process.env.SUPATEST_PROJECT_ID || "proj_local_swaglabs";
+process.env.SUPATEST_API_URL = process.env.SUPATEST_API_URL || 'http://localhost:9090';
+process.env.SUPATEST_API_KEY = process.env.SUPATEST_API_KEY || 'sk_test_benchmark_dummy';
+process.env.SUPATEST_PROJECT_ID = process.env.SUPATEST_PROJECT_ID || 'proj_local_swaglabs';
 
 export const config: Options.Testrunner = {
   // ====================
   // Runner Configuration
   // ====================
-  runner: "local",
+  runner: 'local',
 
   // ==================
   // Specify Test Files
   // ==================
-  specs: ["./test/specs/**/*.ts"],
+  specs: [
+    './test/specs/**/*.ts'
+  ],
 
   // ============
   // Capabilities
@@ -30,39 +29,34 @@ export const config: Options.Testrunner = {
   // time. Depending on the number of capabilities, WebdriverIO launches several test
   // sessions. Within your capabilities you can overwrite the specified values and options.
   maxInstances: 10,
-  capabilities: [
-    {
-      browserName: "chrome",
-      browserVersion: "latest",
-      "wdio:chromedriverOptions": {
-        // For more options see https://github.com/chromium/chromium/tree/master/chrome/test/chromedriver/json#chrome-capabilities
-      },
-      // Disable headless mode by default, can be overridden with --headed flag
-      "goog:chromeOptions": {
-        args:
-          process.env.HEADED === "true"
-            ? []
-            : [
-                "--headless=new",
-                "--disable-gpu",
-                "--no-sandbox",
-                "--disable-dev-shm-usage",
-                "--disable-setuid-sandbox",
-              ],
-      },
+  capabilities: [{
+    browserName: 'chrome',
+    browserVersion: 'latest',
+    'wdio:chromedriverOptions': {
+      // For more options see https://github.com/chromium/chromium/tree/master/chrome/test/chromedriver/json#chrome-capabilities
     },
-  ],
+    // Disable headless mode by default, can be overridden with --headed flag
+    'goog:chromeOptions': {
+      args: process.env.HEADED === 'true' ? [] : [
+        '--headless=new',
+        '--disable-gpu',
+        '--no-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-setuid-sandbox'
+      ]
+    }
+  }],
 
   // ===================
   // Test Configurations
   // ===================
   // Level of logging verbosity: trace | debug | info | warn | error | silent
-  logLevel: "info",
+  logLevel: 'info',
 
   // Set specific log levels per logger
   logLevels: {
-    webdriver: "info",
-    "@wdio/applitools-service": "info",
+    webdriver: 'info',
+    '@wdio/applitools-service': 'info'
   },
 
   // Warns when a deprecated command is used
@@ -76,7 +70,7 @@ export const config: Options.Testrunner = {
   // with `/`, the base url gets prepended, not including the path portion of your baseUrl.
   // If your `url` parameter does not start with `/` and is a completely valid URL,
   // the base url will not be prepended.
-  baseUrl: "https://www.saucedemo.com",
+  baseUrl: 'https://www.saucedemo.com',
 
   // Default timeout for all waitFor* commands.
   waitforTimeout: 10000,
@@ -97,7 +91,7 @@ export const config: Options.Testrunner = {
   // Framework you want to run your specs with.
   // The following are supported: Mocha, Jasmine, and Cucumber
   // see also: https://webdriver.io/docs/frameworks
-  framework: "mocha",
+  framework: 'mocha',
 
   // The number of times to retry the entire specfile when it fails as a whole
   specFileRetries: 0,
@@ -110,22 +104,19 @@ export const config: Options.Testrunner = {
   // The following are supported: dot (default), spec, json, junit, ...
   // see also: https://webdriver.io/docs/configuration#reporters
   reporters: [
-    "spec",
-    [
-      "@supatest/webdriverio-reporter",
-      {
-        projectId: "proj_local_swaglabs",
-        apiKey: "sk_test_benchmark_dummy",
-        apiUrl: "http://localhost:9090",
-      },
-    ],
+    'spec',
+    ['@supatest/webdriverio-reporter', {
+      projectId: 'proj_local_swaglabs',
+      apiKey: 'sk_test_benchmark_dummy',
+      apiUrl: 'http://localhost:9090',
+    }]
   ],
 
   // Options
   // =======
   mochaOpts: {
-    ui: "bdd",
-    timeout: 60000,
+    ui: 'bdd',
+    timeout: 60000
   },
 
   // ==================

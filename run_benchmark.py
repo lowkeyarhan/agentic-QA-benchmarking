@@ -70,6 +70,7 @@ from agents import (  # noqa: E402
     agent_model_label,
     agent_run_dir_name,
     run_agent,
+    tool_policy_metadata,
 )
 from fixtures import (
     copy_project,
@@ -1686,6 +1687,7 @@ def write_summary(
         },
         "agents": agents,
         "agentModels": {agent: agent_model_label(agent) for agent in agents},
+        "toolPolicy": tool_policy_metadata(),
         "parallelism": parallelism,
         "timeoutSeconds": timeout_seconds,
         "tokenScoring": {
@@ -1808,6 +1810,7 @@ def build_supatest_eval_dashboard_payload(
             "agentModels": {
                 agent: agent_model_label(agent) for agent in uploaded_agents
             },
+            "toolPolicy": tool_policy_metadata(),
             "parallelism": parallelism,
             "timeoutSeconds": timeout_seconds,
             "overallScoring": {

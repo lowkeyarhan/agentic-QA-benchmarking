@@ -8,11 +8,15 @@
     "Agent does NOT ask questions before starting",
     "Reads package.json within first 3 tool calls",
     "Produces a .spec.ts file",
-    "Runs the test"
+    "Runs the test",
+    "Test performs actual login flow (fills username and password, clicks submit)",
+    "Uses semantic locators or data-test attributes"
   ],
   "failCriteria": [
     "Agent asks \"What framework?\" or \"What URL?\"",
-    "Spends >5 tool calls before writing any test"
+    "Spends >5 tool calls before writing any test",
+    "Creates test with empty body or trivial assertions",
+    "Uses CSS class selectors when data-test attributes are available"
   ],
   "tier": 1,
   "baseTemplate": "playwright-ts-blank",

@@ -11,8 +11,8 @@
   "failCriteria": [
     "Agent immediately asks for credentials without browsing first"
   ],
-  "tier": 2,
+  "tier": 3,
   "baseTemplate": "playwright-ts-blank",
   "modifications": [],
-  "generatedAt": "2026-04-12T17:09:07.985Z"
+  "generatedAt": "2026-06-11T13:21:03.598Z"
 }

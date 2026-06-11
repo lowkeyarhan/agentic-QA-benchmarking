@@ -1,0 +1,23 @@
+{
+  "evalId": "E119",
+  "name": "Multi-Device Test Strategy: Plan for Android and iOS",
+  "mode": "plan",
+  "task": "Create a test strategy document for the SauceLabs MyDemoApp on both Android and iOS. The app has login, product catalog, cart, checkout, and WebView screens. Address platform-specific considerations: selector differences (resource-id vs accessibility-id), system permission dialogs, WebView context switching, and keyboard handling. Do NOT write tests, run commands, or inspect devices -- produce a written strategy only.",
+  "logsFile": null,
+  "passCriteria": [
+    "Covers both Android and iOS platforms",
+    "Addresses selector strategy differences (resource-id vs accessibility-id)",
+    "Addresses WebView context switching",
+    "Addresses system permission dialogs",
+    "Does NOT write test scripts or run commands"
+  ],
+  "failCriteria": [
+    "Only covers one platform",
+    "Writes Appium/WDIO test code instead of a strategy document",
+    "Ignores WebView context switching",
+    "Runs any mcp__maestro__* commands or shell commands"
+  ],
+  "tier": 11,
+  "baseTemplate": "maestro-ios-blank",
+  "generatedAt": "2026-06-11T10:00:00.000Z"
+}

@@ -13,7 +13,7 @@
     "Asks user about timing/selector issues",
     "Adds waitForTimeout()"
   ],
-  "tier": 4,
+  "tier": 6,
   "baseTemplate": "playwright-ts-full",
   "modifications": [
     {
@@ -23,5 +23,5 @@
       "replace": "[data-test=\"wrong-selector\"]"
     }
   ],
-  "generatedAt": "2026-04-12T17:09:09.544Z"
+  "generatedAt": "2026-06-11T13:29:55.127Z"
 }

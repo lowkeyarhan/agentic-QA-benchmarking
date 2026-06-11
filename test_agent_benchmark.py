@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
+from pathlib import Path
 from types import SimpleNamespace
 
 import agents
@@ -93,7 +95,9 @@ def test_run_agent_records_monotonic_elapsed_duration(tmp_path, monkeypatch) -> 
     monotonic_values = iter([10.0, 12.5])
     monkeypatch.setenv("BENCHMARK_FAKE_CMD", "fake-agent {task}")
     monkeypatch.setattr(agents.time, "monotonic", lambda: next(monotonic_values))
-    monkeypatch.setattr(agents.subprocess, "Popen", lambda *args, **kwargs: FakeProcess())
+    monkeypatch.setattr(
+        agents.subprocess, "Popen", lambda *args, **kwargs: FakeProcess()
+    )
 
     result = agents.run_agent("fake", fixture, project_dir, output_dir)
 
@@ -110,6 +114,49 @@ def test_local_mobile_tool_paths_are_added_when_present(tmp_path, monkeypatch) -
     path = with_local_tool_paths(os.pathsep.join(["/usr/bin", "/bin"]))
 
     assert path.split(os.pathsep)[0] == str(maestro_bin)
+
+
+def write_executable(path) -> None:
+    path.write_text("#!/bin/sh\nexit 0\n")
+    path.chmod(0o755)
+
+
+def test_agent_environment_hides_host_rtk_without_hiding_neighbor_tools(
+    tmp_path, monkeypatch
+) -> None:
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    write_executable(bin_dir / "rtk")
+    write_executable(bin_dir / "codex")
+    write_executable(bin_dir / "npm")
+    monkeypatch.setenv("PATH", str(bin_dir))
+    monkeypatch.delenv("BENCHMARK_HIDE_HOST_TOOLS", raising=False)
+
+    env = agent_environment("codex")
+
+    assert shutil.which("rtk", path=env["PATH"]) is None
+    assert (
+        Path(shutil.which("codex", path=env["PATH"]) or "").resolve()
+        == (bin_dir / "codex").resolve()
+    )
+    assert (
+        Path(shutil.which("npm", path=env["PATH"]) or "").resolve()
+        == (bin_dir / "npm").resolve()
+    )
+
+
+def test_agent_environment_can_disable_host_tool_hiding_for_local_debugging(
+    tmp_path, monkeypatch
+) -> None:
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    write_executable(bin_dir / "rtk")
+    monkeypatch.setenv("PATH", str(bin_dir))
+    monkeypatch.setenv("BENCHMARK_HIDE_HOST_TOOLS", "none")
+
+    env = agent_environment("cursor")
+
+    assert shutil.which("rtk", path=env["PATH"]) == str(bin_dir / "rtk")
 
 
 def test_agent_command_env_name_supports_future_agent_names() -> None:
@@ -670,6 +717,8 @@ def test_write_summary_emits_only_three_result_files(tmp_path) -> None:
     scores = (tmp_path / "scores.md").read_text()
     assert "supatest [premium]" in scores
     assert summary["agentModels"]["supatest"] == "premium"
+    assert summary["toolPolicy"]["hiddenHostTools"] == ["rtk"]
+    assert run["toolPolicy"] == summary["toolPolicy"]
     assert summary["summary"]["byAgent"]["supatest"]["pass"] == 1
     assert (
         summary["summary"]["byAgent"]["supatest"]["tokenUsage"]["scorePercent"] == 0.0
@@ -773,13 +822,17 @@ def test_write_summary_includes_relative_token_efficiency_and_overall_score(
     run = json.loads((tmp_path / "run.json").read_text())
     scores = (tmp_path / "scores.md").read_text()
 
-    assert "| Agent | QA Avg | Token Avg | Token Usage | Time Avg | Time | Overall Score |" in scores
+    assert (
+        "| Agent | QA Avg | Token Avg | Token Usage | Time Avg | Time | Overall Score |"
+        in scores
+    )
     assert (
         "| supatest [premium] | 100.0 | 100.0 | 1.0k | 100.0 | 123ms | 100.0 | 1 | 0 | 0 |"
         in scores
     )
     assert (
-        "| cursor [auto] | 100.0 | 50.0 | 2.0k | 100.0 | 123ms | 92.5 | 1 | 0 | 0 |" in scores
+        "| cursor [auto] | 100.0 | 50.0 | 2.0k | 100.0 | 123ms | 92.5 | 1 | 0 | 0 |"
+        in scores
     )
     assert "Checks Pass" not in scores
     assert "Checks Fail" not in scores
@@ -854,8 +907,7 @@ def test_time_efficiency_baseline_ignores_fast_failed_runs(monkeypatch) -> None:
     assert results[0]["time"]["scorePercent"] == 100.0
     assert results[1]["time"]["scorePercent"] == 0.0
     assert (
-        results[1]["time"]["scoreBasis"]
-        == "qa-capped-relative-passing-time-baseline"
+        results[1]["time"]["scoreBasis"] == "qa-capped-relative-passing-time-baseline"
     )
     assert results[2]["time"]["scorePercent"] == 50.0
 
@@ -995,7 +1047,9 @@ def test_supatest_eval_dashboard_upload_posts_bearer_payload(monkeypatch) -> Non
     }
     cursor_result = {**result, "agent": "cursor:auto", "durationMs": 3000}
     monkeypatch.setenv("BENCHMARK_SUPATEST_EVAL_DASHBOARD_API_KEY", "sk_test_123")
-    monkeypatch.setenv("BENCHMARK_SUPATEST_EVAL_DASHBOARD_URL", "https://evals.example.com")
+    monkeypatch.setenv(
+        "BENCHMARK_SUPATEST_EVAL_DASHBOARD_URL", "https://evals.example.com"
+    )
     monkeypatch.setenv("BENCHMARK_SUPATEST_EVAL_DASHBOARD_RUN_NAME", "Run {run_id}")
     monkeypatch.setenv("BENCHMARK_SUPATEST_EVAL_DASHBOARD_TIMEOUT_SECONDS", "7")
     monkeypatch.setattr(run_benchmark.urllib.request, "urlopen", fake_urlopen)

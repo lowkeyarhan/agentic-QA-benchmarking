@@ -16,7 +16,7 @@
     "Doesn't wait for dropdown options to render",
     "Still fails with timeout or '0 elements' error"
   ],
-  "tier": 4,
+  "tier": 6,
   "category": "complex-ui-interactions",
   "baseTemplate": "playwright-ts-full",
   "modifications": ["custom-dropdown-app"],

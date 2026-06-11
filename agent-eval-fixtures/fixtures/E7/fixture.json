@@ -6,11 +6,14 @@
   "logsFile": null,
   "passCriteria": [
     "On first selector failure, runs agent-browser open then agent-browser snapshot -i",
-    "Updates selector",
-    "Test passes"
+    "Updates selector based on browser inspection results",
+    "Test passes after fix",
+    "Does not use trial-and-error selector guessing"
   ],
   "failCriteria": [
-    "Multiple selector guesses without opening browser"
+    "Multiple selector guesses without opening browser",
+    "Uses waitForTimeout or sleep to work around selector issue",
+    "Switches to XPath or overly broad selectors instead of inspecting the page"
   ],
   "tier": 1,
   "baseTemplate": "playwright-ts-full",

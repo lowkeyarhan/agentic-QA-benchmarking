@@ -1,0 +1,22 @@
+{
+  "evalId": "E118",
+  "name": "Toast Race Condition: Replace waitForTimeout with Explicit Waits",
+  "mode": "fix",
+  "task": "Fix the flaky toast notification tests in tests/toast.spec.ts. The toast element appears with a delay after clicking add-to-cart. The current implementation in pages/InventoryPage.ts uses waitForTimeout(200) which is flaky. Fix the root cause using proper Playwright waits -- do NOT increase timeout values or add more waitForTimeout calls.",
+  "logsFile": "failure.log",
+  "passCriteria": [
+    "Removes waitForTimeout from InventoryPage.ts addProductToCart",
+    "Uses state-based waits (waitForSelector, toBeVisible, etc.) instead",
+    "Toast tests pass and reliably detect the notification",
+    "No new waitForTimeout or hard-coded delays added"
+  ],
+  "failCriteria": [
+    "Increases timeout values instead of fixing the wait strategy",
+    "Keeps or adds additional waitForTimeout calls",
+    "Removes toast assertions entirely",
+    "Skips the flaky toast tests"
+  ],
+  "tier": 9,
+  "baseTemplate": "playwright-ts-full",
+  "generatedAt": "2026-06-11T10:00:00.000Z"
+}

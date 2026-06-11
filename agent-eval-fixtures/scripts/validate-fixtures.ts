@@ -49,6 +49,9 @@ async function validateFixture(evalId: string, baseDir: string): Promise<Validat
     'mobile-root-cause-stub',
     'mobile-efficient-debug-stub',
     'mobile-nondestructive-fix-stub',
+    'mobile-run-strategy-stub',
+    'mobile-device-pin-stub',
+    'mobile-suite-next-steps-stub',
   ]);
   const requiresPackageJson = !stubTemplates.has(baseTemplate ?? '');
   if (requiresPackageJson) {
