@@ -1849,6 +1849,7 @@ def supatest_eval_dashboard_result_payload(result: dict) -> dict:
     eval_id = result.get("evalId", "")
     display_name = agent_display_name(agent)
     score = dashboard_result_score(result)
+    score_details = supatest_eval_dashboard_score_details(result)
     return {
         "evalId": f"{eval_id}:{agent_run_dir_name(agent)}",
         "evalName": f"{eval_id} / {display_name}",
@@ -1864,7 +1865,7 @@ def supatest_eval_dashboard_result_payload(result: dict) -> dict:
         "result": dashboard_result_label(result),
         "score": score,
         "durationMs": int(result.get("durationMs") or 0),
-        "logs": str(result.get("reason") or "")[:4000],
+        "logs": supatest_eval_dashboard_logs(result, score_details)[:4000],
         "metadata": {
             "benchmarkRunId": result.get("runId"),
             "caseId": result.get("caseId"),
@@ -1875,6 +1876,7 @@ def supatest_eval_dashboard_result_payload(result: dict) -> dict:
             "overallScorePercent": result.get("overallScorePercent"),
             "scoreSource": result.get("scoreSource"),
             "overallScoreSource": result.get("overallScoreSource"),
+            "scoreDetails": score_details,
             "tokenUsage": result.get("tokenUsage") or empty_token_usage(),
             "time": result.get("time") or empty_time_score(result.get("durationMs")),
             "exitCode": result.get("exitCode"),
@@ -1885,6 +1887,117 @@ def supatest_eval_dashboard_result_payload(result: dict) -> dict:
             "transcriptPath": result.get("transcriptPath"),
         },
     }
+
+
+def supatest_eval_dashboard_score_details(result: dict) -> dict:
+    token_usage = result.get("tokenUsage") or empty_token_usage()
+    time_score = result.get("time") or empty_time_score(result.get("durationMs"))
+    weights = overall_score_weights()
+    return {
+        "overall": {
+            "score": result.get("overallScore"),
+            "scorePercent": result.get("overallScorePercent"),
+            "source": result.get("overallScoreSource"),
+        },
+        "qa": {
+            "score": result.get("score"),
+            "scorePercent": result.get("scorePercent"),
+            "result": result.get("result"),
+            "source": result.get("scoreSource"),
+            "passedChecks": result.get("passedChecks"),
+            "failedChecks": result.get("failedChecks"),
+        },
+        "tokenUsage": {
+            "score": token_usage.get("score"),
+            "scorePercent": token_usage.get("scorePercent"),
+            "scoreBasis": token_usage.get("scoreBasis"),
+            "totalTokens": token_usage.get("totalTokens"),
+            "inputTokens": token_usage.get("inputTokens"),
+            "outputTokens": token_usage.get("outputTokens"),
+            "cachedInputTokens": token_usage.get("cachedInputTokens"),
+            "estimatedCostUsd": token_usage.get("estimatedCostUsd"),
+            "source": token_usage.get("source"),
+            "warnings": token_usage.get("warnings") or [],
+        },
+        "time": {
+            "score": time_score.get("score"),
+            "scorePercent": time_score.get("scorePercent"),
+            "scoreBasis": time_score.get("scoreBasis"),
+            "durationMs": time_score.get("durationMs") or result.get("durationMs"),
+        },
+        "weights": {
+            "qa": weights["qa"],
+            "tokenUsage": weights["tokenUsage"],
+            "time": weights["time"],
+        },
+    }
+
+
+def supatest_eval_dashboard_logs(result: dict, score_details: dict) -> str:
+    overall = score_details["overall"]
+    qa = score_details["qa"]
+    token_usage = score_details["tokenUsage"]
+    time_score = score_details["time"]
+    weights = score_details["weights"]
+    passed = format_optional_number(qa.get("passedChecks"))
+    failed = format_optional_number(qa.get("failedChecks"))
+    lines = [
+        "Detailed score",
+        (
+            "Overall: "
+            f"{format_percent(overall.get('scorePercent'))} "
+            f"(source: {overall.get('source') or 'n/a'})"
+        ),
+        (
+            "QA: "
+            f"{format_percent(qa.get('scorePercent'))} "
+            f"{qa.get('result') or 'n/a'} "
+            f"({passed}p/{failed}f, source: {qa.get('source') or 'n/a'})"
+        ),
+        (
+            "Token: "
+            f"{format_percent(token_usage.get('scorePercent'))} "
+            f"({format_token_count(token_usage.get('totalTokens'))} total tokens, "
+            f"input {format_token_count(token_usage.get('inputTokens'))}, "
+            f"output {format_token_count(token_usage.get('outputTokens'))}, "
+            f"cached {format_token_count(token_usage.get('cachedInputTokens'))}, "
+            f"cost {format_cost_usd(token_usage.get('estimatedCostUsd'))}, "
+            f"basis: {token_usage.get('scoreBasis') or 'n/a'})"
+        ),
+        (
+            "Time: "
+            f"{format_percent(time_score.get('scorePercent'))} "
+            f"({format_duration_ms(time_score.get('durationMs'))}, "
+            f"basis: {time_score.get('scoreBasis') or 'n/a'})"
+        ),
+        (
+            "Weights: "
+            f"QA {format_weight(weights['qa'])}, "
+            f"token {format_weight(weights['tokenUsage'])}, "
+            f"time {format_weight(weights['time'])}"
+        ),
+    ]
+    reason = str(result.get("reason") or "").strip()
+    if reason:
+        lines.extend(["", "Judge reason", reason])
+    return "\n".join(lines)
+
+
+def format_percent(value) -> str:
+    if value is None:
+        return "n/a"
+    return f"{format_compact_number(value)}%"
+
+
+def format_weight(value) -> str:
+    return f"{format_compact_number(float(value) * 100)}%"
+
+
+def format_compact_number(value) -> str:
+    number = float(value)
+    if number.is_integer():
+        return str(int(number))
+    return f"{number:.1f}".rstrip("0").rstrip(".")
 
 
 def dashboard_result_score(result: dict) -> float:
