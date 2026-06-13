@@ -55,11 +55,35 @@ def available_eval_ids(fixtures_root: Path = FIXTURES_ROOT) -> list[str]:
 
 
 def selected_eval_ids() -> list[str]:
-    return window_eval_ids(
-        resolve_eval_ids(os.getenv("BENCHMARK_EVAL_IDS", "suite:qa-production")),
+    return select_eval_ids(
+        os.getenv("BENCHMARK_EVAL_IDS", "suite:qa-production"),
+        os.getenv("BENCHMARK_EXTRA_EVAL_IDS"),
         os.getenv("BENCHMARK_EVAL_LIMIT"),
         os.getenv("BENCHMARK_EVAL_OFFSET"),
     )
+
+
+def select_eval_ids(
+    raw_eval_ids: str | list[str],
+    raw_extra_eval_ids: str | list[str] | None = None,
+    raw_limit: str | None = None,
+    raw_offset: str | None = None,
+) -> list[str]:
+    base_eval_ids = window_eval_ids(
+        resolve_eval_ids(raw_eval_ids),
+        raw_limit,
+        raw_offset,
+    )
+    extra_eval_ids = resolve_optional_eval_ids(raw_extra_eval_ids)
+    return list(dict.fromkeys([*base_eval_ids, *extra_eval_ids]))
+
+
+def resolve_optional_eval_ids(raw: str | list[str] | None) -> list[str]:
+    if raw is None:
+        return []
+    if isinstance(raw, str) and not raw.strip():
+        return []
+    return resolve_eval_ids(raw)
 
 
 def resolve_eval_ids(raw: str | list[str]) -> list[str]:

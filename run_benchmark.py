@@ -121,8 +121,7 @@ from benchmark_tokens import (  # noqa: E402
 from fixtures import (
     copy_project,
     load_fixture,
-    resolve_eval_ids,
-    window_eval_ids,
+    selected_eval_ids,
 )  # noqa: E402
 from qa_bench import (  # noqa: E402
     build_metadata as build_qa_bench_metadata,
@@ -165,12 +164,7 @@ class PendingResult:
 
 def main() -> int:
     run_id = os.getenv("BENCHMARK_RUN_ID", time.strftime("%Y%m%d-%H%M%S"))
-    requested_eval_ids = os.getenv("BENCHMARK_EVAL_IDS", DEFAULT_EVAL_IDS)
-    eval_ids = window_eval_ids(
-        resolve_eval_ids(requested_eval_ids),
-        os.getenv("BENCHMARK_EVAL_LIMIT"),
-        os.getenv("BENCHMARK_EVAL_OFFSET"),
-    )
+    eval_ids = selected_eval_ids()
     agents = csv_env("BENCHMARK_AGENTS", DEFAULT_AGENTS)
     parallelism = int(os.getenv("BENCHMARK_PARALLELISM", str(DEFAULT_PARALLELISM)))
     os.environ.setdefault(
@@ -622,9 +616,11 @@ def build_reproducibility_metadata(
         },
         "evalRunner": {
             "benchmarkSuite": qa_bench_suite_metadata(
-                os.getenv("BENCHMARK_EVAL_IDS", DEFAULT_EVAL_IDS), eval_ids
+                requested_eval_ids_label(), eval_ids
             ),
             "evalIds": eval_ids,
+            "baseEvalIds": os.getenv("BENCHMARK_EVAL_IDS", DEFAULT_EVAL_IDS),
+            "extraEvalIds": os.getenv("BENCHMARK_EXTRA_EVAL_IDS", "") or None,
             "fixtureHashes": {
                 eval_id: fixture_content_hash(eval_id) for eval_id in eval_ids
             },
@@ -811,7 +807,7 @@ def write_summary(
     ordered_results = order_results(eval_ids, agents, results)
     generated_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     weights = overall_score_weights()
-    requested_eval_ids = os.getenv("BENCHMARK_EVAL_IDS", DEFAULT_EVAL_IDS)
+    requested_eval_ids = requested_eval_ids_label()
     reproducibility = build_reproducibility_metadata(
         run_id, eval_ids, agents, parallelism, timeout_seconds
     )
@@ -827,11 +823,7 @@ def write_summary(
         "runId": run_id,
         "generatedAt": generated_at,
         "evalIds": eval_ids,
-        "evalSelection": {
-            "requested": requested_eval_ids,
-            "limit": os.getenv("BENCHMARK_EVAL_LIMIT", "all") or "all",
-            "offset": int(os.getenv("BENCHMARK_EVAL_OFFSET", "0") or "0"),
-        },
+        "evalSelection": eval_selection_metadata(),
         "agents": agents,
         "agentModels": {agent: agent_model_label(agent) for agent in agents},
         "toolPolicy": tool_policy_metadata(),
@@ -948,7 +940,7 @@ def build_supatest_eval_dashboard_payload(
         run_id, eval_ids, agents, parallelism, timeout_seconds
     )
     diagnostics = build_diagnostics_summary(ordered_results)
-    requested_eval_ids = os.getenv("BENCHMARK_EVAL_IDS", DEFAULT_EVAL_IDS)
+    requested_eval_ids = requested_eval_ids_label()
     qa_bench_metadata = build_qa_bench_metadata(
         requested_eval_ids,
         eval_ids,
@@ -961,6 +953,7 @@ def build_supatest_eval_dashboard_payload(
         "runMetadata": {
             "benchmarkRunId": run_id,
             "evalIds": eval_ids,
+            "evalSelection": eval_selection_metadata(),
             "agents": uploaded_agents,
             "benchmarkAgents": agents,
             "agentModels": {
@@ -1720,6 +1713,24 @@ def csv_env(name: str, default: list[str]) -> list[str]:
     if not raw:
         return default
     return [item.strip() for item in raw.split(",") if item.strip()]
+
+
+def requested_eval_ids_label() -> str:
+    base = os.getenv("BENCHMARK_EVAL_IDS", DEFAULT_EVAL_IDS)
+    extra = (os.getenv("BENCHMARK_EXTRA_EVAL_IDS", "") or "").strip()
+    if not extra:
+        return base
+    return f"{base} + {extra}"
+
+
+def eval_selection_metadata() -> dict:
+    return {
+        "requested": requested_eval_ids_label(),
+        "base": os.getenv("BENCHMARK_EVAL_IDS", DEFAULT_EVAL_IDS),
+        "extra": os.getenv("BENCHMARK_EXTRA_EVAL_IDS", "") or None,
+        "limit": os.getenv("BENCHMARK_EVAL_LIMIT", "all") or "all",
+        "offset": int(os.getenv("BENCHMARK_EVAL_OFFSET", "0") or "0"),
+    }
 
 
 def benchmark_path(value: str | None, default: Path) -> Path:

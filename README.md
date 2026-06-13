@@ -240,6 +240,7 @@ in fixed-size batches:
 
 ```bash
 BENCHMARK_EVAL_IDS=suite:qa-production
+BENCHMARK_EXTRA_EVAL_IDS=E2,E6  # append one-off evals without replacing the suite
 BENCHMARK_EVAL_LIMIT=5      # use 10, 20, 50, or all for larger runs
 BENCHMARK_EVAL_OFFSET=0     # next 5: 5, next 10: 10, etc.
 ```
@@ -300,6 +301,15 @@ clearly.
 Use a comma-separated `BENCHMARK_EVAL_IDS` value for a targeted debug subset.
 For reusable QA comparisons, prefer one of the named suites above so run
 metadata can identify the benchmark scope.
+
+Use `BENCHMARK_EXTRA_EVAL_IDS` when you want to keep the base suite/subset but
+manually add specific evals for a run. Extras support comma-separated eval IDs
+or `suite:<name>`, are deduped, and are appended after `BENCHMARK_EVAL_LIMIT`
+and `BENCHMARK_EVAL_OFFSET` are applied.
+
+```bash
+BENCHMARK_ENV_FILE_OVERRIDE=0 BENCHMARK_EVAL_IDS=suite:qa-smoke BENCHMARK_EXTRA_EVAL_IDS=E2,E6 ./run_benchmark.py
+```
 
 Example targeted debug subset:
 

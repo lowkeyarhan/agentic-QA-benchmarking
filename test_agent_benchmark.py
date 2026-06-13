@@ -29,6 +29,8 @@ from fixtures import (
     copy_project,
     load_fixture,
     resolve_eval_ids,
+    select_eval_ids,
+    selected_eval_ids,
     window_eval_ids,
 )
 from qa_bench import (
@@ -404,6 +406,38 @@ def test_resolve_eval_ids_supports_named_qa_bench_suites() -> None:
     eval_ids = resolve_eval_ids("suite:qa-smoke")
 
     assert eval_ids == ["E25", "E31", "E43", "E48", "E50", "E65", "E101", "E118"]
+
+
+def test_select_eval_ids_appends_extra_eval_ids_after_windowing() -> None:
+    eval_ids = select_eval_ids("E1,E2,E3", "E4,E2", "2", "1")
+
+    assert eval_ids == ["E2", "E3", "E4"]
+
+
+def test_selected_eval_ids_reads_extra_eval_ids_from_env(monkeypatch) -> None:
+    monkeypatch.setenv("BENCHMARK_EVAL_IDS", "E1")
+    monkeypatch.setenv("BENCHMARK_EXTRA_EVAL_IDS", "E2,E1")
+    monkeypatch.setenv("BENCHMARK_EVAL_LIMIT", "all")
+    monkeypatch.setenv("BENCHMARK_EVAL_OFFSET", "0")
+
+    assert selected_eval_ids() == ["E1", "E2"]
+
+
+def test_reproducibility_metadata_records_extra_eval_ids(monkeypatch) -> None:
+    monkeypatch.setenv("BENCHMARK_EVAL_IDS", "suite:qa-smoke")
+    monkeypatch.setenv("BENCHMARK_EXTRA_EVAL_IDS", "E2,E6")
+
+    metadata = run_benchmark.build_reproducibility_metadata(
+        "extra-evals",
+        ["E25", "E31", "E2", "E6"],
+        ["supatest"],
+        1,
+        600,
+    )
+
+    assert metadata["evalRunner"]["baseEvalIds"] == "suite:qa-smoke"
+    assert metadata["evalRunner"]["extraEvalIds"] == "E2,E6"
+    assert metadata["evalRunner"]["benchmarkSuite"]["id"] == "custom-qa"
 
 
 def test_qa_bench_suite_names_are_vendor_neutral() -> None:
