@@ -16,6 +16,16 @@
     "Wrong framework syntax"
   ],
   "tier": 1,
+  "qaBench": {
+    "capability": "project-discovery",
+    "metricIds": [
+      "relevance",
+      "coverage",
+      "maintainability",
+      "selector_strategy"
+    ],
+    "difficulty": "low"
+  },
   "baseTemplate": "playwright-ts-full",
   "modifications": [
     {

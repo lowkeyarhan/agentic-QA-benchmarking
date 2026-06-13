@@ -22,6 +22,16 @@
     "Uses toBeTruthy() on a locator without waiting"
   ],
   "tier": 1,
+  "qaBench": {
+    "capability": "test-authoring",
+    "metricIds": [
+      "relevance",
+      "coverage",
+      "assertion_quality",
+      "test_integrity"
+    ],
+    "difficulty": "low"
+  },
   "category": "test-integrity",
   "baseTemplate": "playwright-ts-blank",
   "modifications": [],

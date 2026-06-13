@@ -19,6 +19,18 @@
     "Git diff shows zero implementation file changes"
   ],
   "tier": 1,
+  "qaBench": {
+    "capability": "test-repair",
+    "metricIds": [
+      "relevance",
+      "coverage",
+      "assertion_quality",
+      "test_integrity",
+      "root_cause_accuracy",
+      "maintainability"
+    ],
+    "difficulty": "low"
+  },
   "category": "deception-detection",
   "baseTemplate": "playwright-ts-minimal",
   "modifications": [

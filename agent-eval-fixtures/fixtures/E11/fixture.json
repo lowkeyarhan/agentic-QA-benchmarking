@@ -14,6 +14,17 @@
     "Wrong format for framework"
   ],
   "tier": 1,
+  "qaBench": {
+    "capability": "metadata-governance",
+    "metricIds": [
+      "relevance",
+      "coverage",
+      "metadata_quality",
+      "maintainability",
+      "test_integrity"
+    ],
+    "difficulty": "low"
+  },
   "baseTemplate": "playwright-ts-full",
   "modifications": [],
   "generatedAt": "2026-04-12T17:09:08.271Z"

@@ -31,7 +31,13 @@ from fixtures import (
     resolve_eval_ids,
     window_eval_ids,
 )
-from qa_bench import available_suite_names
+from qa_bench import (
+    QA_BENCH_CAPABILITIES,
+    QA_BENCH_METRICS,
+    available_suite_names,
+    difficulty_for_tier,
+    eval_metadata,
+)
 import run_benchmark
 from run_benchmark import (
     BatchJudgeCaseScore,
@@ -403,6 +409,40 @@ def test_resolve_eval_ids_supports_named_qa_bench_suites() -> None:
 def test_qa_bench_suite_names_are_vendor_neutral() -> None:
     assert "qa-lifecycle-extended" in available_suite_names()
     assert all("supatest" not in suite for suite in available_suite_names())
+
+
+def test_documented_tier_difficulty_mapping() -> None:
+    assert difficulty_for_tier(1) == "low"
+    assert difficulty_for_tier(2) == "low"
+    assert difficulty_for_tier(3) == "medium"
+    assert difficulty_for_tier(4) == "medium"
+    assert difficulty_for_tier(5) == "high"
+    assert difficulty_for_tier(6) == "high"
+    assert difficulty_for_tier(7) == "ultra"
+    assert difficulty_for_tier(9) == "ultra"
+    assert difficulty_for_tier(10) == "max"
+    assert difficulty_for_tier(11) == "max"
+
+
+def test_low_fixtures_have_explicit_qa_bench_metadata() -> None:
+    fixtures = [load_fixture(eval_id) for eval_id in available_eval_ids()]
+    low_fixtures = [fixture for fixture in fixtures if fixture.tier in {1, 2}]
+
+    assert len(low_fixtures) == 20
+    for fixture in low_fixtures:
+        eval_id = fixture.eval_id
+        explicit = fixture.qa_bench
+        metadata = eval_metadata(fixture)
+
+        assert explicit is not None, eval_id
+        assert explicit["difficulty"] == "low", eval_id
+        assert explicit["capability"] in QA_BENCH_CAPABILITIES, eval_id
+        assert explicit["metricIds"], eval_id
+        assert set(explicit["metricIds"]) <= set(QA_BENCH_METRICS), eval_id
+        assert metadata["metadataSource"] == "fixture", eval_id
+        assert metadata["difficulty"] == "low", eval_id
+        assert metadata["capability"] == explicit["capability"], eval_id
+        assert metadata["metricIds"] == explicit["metricIds"], eval_id
 
 
 def test_copy_project_does_not_mount_fixture_root_answer_files(tmp_path) -> None:

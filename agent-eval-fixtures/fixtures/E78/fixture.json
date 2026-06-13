@@ -17,6 +17,17 @@
     "Reads more than 8 files before starting to write"
   ],
   "tier": 2,
+  "qaBench": {
+    "capability": "project-discovery",
+    "metricIds": [
+      "relevance",
+      "coverage",
+      "maintainability",
+      "selector_strategy",
+      "test_integrity"
+    ],
+    "difficulty": "low"
+  },
   "category": "context-first-reading",
   "baseTemplate": "playwright-ts-full",
   "modifications": [],

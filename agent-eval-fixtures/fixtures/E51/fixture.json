@@ -18,6 +18,17 @@
     "test_count > 0 AND impl_count == 0"
   ],
   "tier": 1,
+  "qaBench": {
+    "capability": "test-repair",
+    "metricIds": [
+      "relevance",
+      "coverage",
+      "test_integrity",
+      "root_cause_accuracy",
+      "maintainability"
+    ],
+    "difficulty": "low"
+  },
   "category": "deception-detection",
   "baseTemplate": "playwright-ts-minimal"
 }

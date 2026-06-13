@@ -6,15 +6,31 @@ from collections import Counter
 from .definitions import QA_BENCH_CAPABILITIES, QA_BENCH_METRICS, QA_BENCH_VERSION
 
 
+DIFFICULTY_WEIGHTS = {
+    "low": 1.0,
+    "medium": 1.15,
+    "high": 1.3,
+    "ultra": 1.5,
+    "max": 1.75,
+}
+VALID_DIFFICULTIES = {*DIFFICULTY_WEIGHTS, "unknown"}
+
+
 def eval_metadata(fixture) -> dict:
-    capability = capability_for_fixture(fixture)
-    metric_ids = metric_ids_for_fixture(fixture, capability)
+    explicit = explicit_qa_bench_metadata(fixture)
+    capability = str(explicit.get("capability") or capability_for_fixture(fixture))
+    validate_capability(capability, fixture)
+    metric_ids = explicit_metric_ids(explicit, fixture) or metric_ids_for_fixture(
+        fixture, capability
+    )
     tier = getattr(fixture, "tier", None)
+    difficulty = str(explicit.get("difficulty") or difficulty_for_tier(tier))
+    validate_difficulty(difficulty, fixture)
     return {
         "version": QA_BENCH_VERSION,
         "evalId": getattr(fixture, "eval_id", None),
         "mode": getattr(fixture, "mode", None),
-        "difficulty": difficulty_for_tier(tier),
+        "difficulty": difficulty,
         "tier": tier,
         "capability": capability,
         "capabilityLabel": QA_BENCH_CAPABILITIES[capability]["label"],
@@ -28,6 +44,7 @@ def eval_metadata(fixture) -> dict:
             for metric_id in metric_ids
         ],
         "weight": eval_weight_for_fixture(fixture),
+        "metadataSource": "fixture" if explicit else "inferred",
     }
 
 
@@ -149,26 +166,26 @@ def metric_ids_for_fixture(fixture, capability: str) -> list[str]:
 def difficulty_for_tier(tier: int | None) -> str:
     if tier is None:
         return "unknown"
-    if tier <= 3:
+    if tier <= 2:
         return "low"
-    if tier <= 6:
+    if tier <= 4:
         return "medium"
-    if tier <= 10:
+    if tier <= 6:
         return "high"
-    if tier <= 15:
+    if tier <= 9:
         return "ultra"
     return "max"
 
 
 def eval_weight_for_fixture(fixture) -> float:
-    difficulty = difficulty_for_tier(getattr(fixture, "tier", None))
-    return {
-        "low": 1.0,
-        "medium": 1.15,
-        "high": 1.3,
-        "ultra": 1.5,
-        "max": 1.75,
-    }.get(difficulty, 1.0)
+    explicit = explicit_qa_bench_metadata(fixture)
+    if explicit.get("weight") is not None:
+        return float(explicit["weight"])
+    difficulty = str(
+        explicit.get("difficulty")
+        or difficulty_for_tier(getattr(fixture, "tier", None))
+    )
+    return DIFFICULTY_WEIGHTS.get(difficulty, 1.0)
 
 
 def fixture_search_text(fixture) -> str:
@@ -184,3 +201,48 @@ def fixture_search_text(fixture) -> str:
 
 def contains_any(text: str, needles: list[str]) -> bool:
     return any(needle in text for needle in needles)
+
+
+def explicit_qa_bench_metadata(fixture) -> dict:
+    raw = getattr(fixture, "qa_bench", None) or {}
+    if not isinstance(raw, dict):
+        raise ValueError(
+            f"Fixture {getattr(fixture, 'eval_id', '<unknown>')} qaBench metadata "
+            "must be an object."
+        )
+    return raw
+
+
+def explicit_metric_ids(explicit: dict, fixture) -> list[str] | None:
+    raw = explicit.get("metricIds")
+    if raw is None:
+        return None
+    if not isinstance(raw, list) or not all(isinstance(item, str) for item in raw):
+        raise ValueError(
+            f"Fixture {getattr(fixture, 'eval_id', '<unknown>')} qaBench.metricIds "
+            "must be a list of metric id strings."
+        )
+    metric_ids = list(dict.fromkeys(raw))
+    unknown = sorted(set(metric_ids) - set(QA_BENCH_METRICS))
+    if unknown:
+        raise ValueError(
+            f"Fixture {getattr(fixture, 'eval_id', '<unknown>')} has unknown "
+            f"QA Bench metric id(s): {', '.join(unknown)}"
+        )
+    return metric_ids
+
+
+def validate_capability(capability: str, fixture) -> None:
+    if capability not in QA_BENCH_CAPABILITIES:
+        raise ValueError(
+            f"Fixture {getattr(fixture, 'eval_id', '<unknown>')} has unknown "
+            f"QA Bench capability: {capability}"
+        )
+
+
+def validate_difficulty(difficulty: str, fixture) -> None:
+    if difficulty not in VALID_DIFFICULTIES:
+        raise ValueError(
+            f"Fixture {getattr(fixture, 'eval_id', '<unknown>')} has unknown "
+            f"QA Bench difficulty: {difficulty}"
+        )

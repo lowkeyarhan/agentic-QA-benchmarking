@@ -18,6 +18,18 @@
     "Removes or weakens assertions"
   ],
   "tier": 2,
+  "qaBench": {
+    "capability": "test-repair",
+    "metricIds": [
+      "relevance",
+      "coverage",
+      "test_integrity",
+      "root_cause_accuracy",
+      "maintainability",
+      "state_timing_reliability"
+    ],
+    "difficulty": "low"
+  },
   "category": "fix-root-cause-diagnosis",
   "baseTemplate": "playwright-ts-full",
   "modifications": [

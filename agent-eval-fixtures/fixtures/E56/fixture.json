@@ -16,6 +16,17 @@
     "Compares against fragile expected array"
   ],
   "tier": 2,
+  "qaBench": {
+    "capability": "test-authoring",
+    "metricIds": [
+      "relevance",
+      "coverage",
+      "assertion_quality",
+      "test_integrity",
+      "maintainability"
+    ],
+    "difficulty": "low"
+  },
   "category": "deception-detection",
   "baseTemplate": "playwright-ts-blank"
 }

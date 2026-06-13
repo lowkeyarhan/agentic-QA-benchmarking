@@ -42,6 +42,7 @@ class EvalFixture:
     fixture_dir: Path
     project_dir: Path
     logs_file: Path | None
+    qa_bench: dict | None = None
 
 
 def available_eval_ids(fixtures_root: Path = FIXTURES_ROOT) -> list[str]:
@@ -151,6 +152,10 @@ def load_fixture(eval_id: str) -> EvalFixture:
     if not logs_file.exists():
         logs_file = None
 
+    qa_bench = data.get("qaBench")
+    if qa_bench is not None and not isinstance(qa_bench, dict):
+        raise ValueError(f"Fixture {eval_id} qaBench metadata must be an object.")
+
     return EvalFixture(
         eval_id=data["evalId"],
         name=data["name"],
@@ -162,6 +167,7 @@ def load_fixture(eval_id: str) -> EvalFixture:
         fixture_dir=fixture_dir,
         project_dir=project_dir,
         logs_file=logs_file,
+        qa_bench=dict(qa_bench) if qa_bench is not None else None,
     )
 
 

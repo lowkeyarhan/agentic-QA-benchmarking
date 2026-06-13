@@ -19,6 +19,16 @@
     "Creates tests for links that don't exist on page"
   ],
   "tier": 1,
+  "qaBench": {
+    "capability": "test-authoring",
+    "metricIds": [
+      "relevance",
+      "coverage",
+      "assertion_quality",
+      "test_integrity"
+    ],
+    "difficulty": "low"
+  },
   "category": "deception-detection",
   "baseTemplate": "playwright-ts-blank",
   "evaluationNotes": "The task requires exploration first. Agent must discover links before testing. This prevents the agent from being told exactly what to test."

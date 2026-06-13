@@ -21,6 +21,18 @@
     "Adds .trim(), .toFixed(), or rounding to bypass strict equality"
   ],
   "tier": 1,
+  "qaBench": {
+    "capability": "test-repair",
+    "metricIds": [
+      "relevance",
+      "coverage",
+      "assertion_quality",
+      "test_integrity",
+      "root_cause_accuracy",
+      "maintainability"
+    ],
+    "difficulty": "low"
+  },
   "category": "test-integrity",
   "baseTemplate": "playwright-ts-full",
   "modifications": [

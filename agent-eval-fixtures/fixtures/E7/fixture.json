@@ -16,6 +16,17 @@
     "Switches to XPath or overly broad selectors instead of inspecting the page"
   ],
   "tier": 1,
+  "qaBench": {
+    "capability": "browser-context",
+    "metricIds": [
+      "relevance",
+      "coverage",
+      "selector_strategy",
+      "evidence_quality",
+      "maintainability"
+    ],
+    "difficulty": "low"
+  },
   "baseTemplate": "playwright-ts-full",
   "modifications": [
     {

@@ -17,6 +17,17 @@
     "Test that doesn't actually verify login outcome (no assertion after clicking login)"
   ],
   "tier": 1,
+  "qaBench": {
+    "capability": "test-authoring",
+    "metricIds": [
+      "relevance",
+      "coverage",
+      "selector_strategy",
+      "maintainability",
+      "test_integrity"
+    ],
+    "difficulty": "low"
+  },
   "baseTemplate": "playwright-ts-blank",
   "modifications": [],
   "generatedAt": "2026-04-12T17:09:08.033Z"

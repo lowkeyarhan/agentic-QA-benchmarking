@@ -19,6 +19,18 @@
     "Uses CSS class selectors when data-test attributes are available"
   ],
   "tier": 1,
+  "qaBench": {
+    "capability": "test-authoring",
+    "metricIds": [
+      "relevance",
+      "coverage",
+      "assertion_quality",
+      "selector_strategy",
+      "maintainability",
+      "test_integrity"
+    ],
+    "difficulty": "low"
+  },
   "baseTemplate": "playwright-ts-blank",
   "modifications": [],
   "generatedAt": "2026-04-12T17:09:07.932Z"
