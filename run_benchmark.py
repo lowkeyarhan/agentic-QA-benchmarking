@@ -84,6 +84,8 @@ from benchmark_artifacts import (  # noqa: E402
 from benchmark_judge import (  # noqa: E402
     BatchJudgeCaseScore,
     BatchJudgeResponse,
+    JudgeCriterionScore,
+    JudgeMetricScore,
     apply_overall_scores,
     apply_score,
     apply_time_efficiency_scores,
@@ -532,6 +534,7 @@ def apply_failure_taxonomies(results: list[dict]) -> None:
 def failure_taxonomy_for_result(result: dict, fixture=None) -> list[str]:
     taxonomy: list[str] = []
     telemetry = result.get("telemetry") or {}
+    judge_diagnostics = result.get("judgeDiagnostics") or {}
     artifact_checks = result.get("artifactChecks") or {}
     artifact_warnings = (
         result.get("artifactWarnings") or artifact_checks.get("warnings") or []
@@ -570,6 +573,9 @@ def failure_taxonomy_for_result(result: dict, fixture=None) -> list[str]:
         taxonomy.append("grader-fail")
     if (result.get("tokenUsage") or {}).get("source") is None:
         taxonomy.append("missing-token-usage")
+    taxonomy.extend(judge_diagnostics.get("failureTaxonomy") or [])
+    if judge_diagnostics.get("deterministicCaps"):
+        taxonomy.append("deterministic-cap")
 
     if telemetry.get("deniedPolicyCount"):
         taxonomy.append("policy-denial")
@@ -1181,6 +1187,7 @@ def supatest_eval_dashboard_result_payload(result: dict) -> dict:
             "time": result.get("time") or empty_time_score(result.get("durationMs")),
             "telemetry": result.get("telemetry") or empty_eval_telemetry(),
             "qaBench": result.get("qaBench") or {},
+            "judgeDiagnostics": result.get("judgeDiagnostics") or {},
             "failureTaxonomy": result.get("failureTaxonomy") or [],
             "fixtureHash": result.get("fixtureHash"),
             "exitCode": result.get("exitCode"),
@@ -1231,6 +1238,7 @@ def supatest_eval_dashboard_score_details(result: dict) -> dict:
             "durationMs": time_score.get("durationMs") or result.get("durationMs"),
         },
         "qaBench": result.get("qaBench") or {},
+        "judgeDiagnostics": result.get("judgeDiagnostics") or {},
         "weights": {
             "qa": weights["qa"],
             "tokenUsage": weights["tokenUsage"],
@@ -1244,6 +1252,7 @@ def supatest_eval_dashboard_logs(result: dict, score_details: dict) -> str:
     token_usage = score_details["tokenUsage"]
     time_score = score_details["time"]
     qa_bench = score_details.get("qaBench") or {}
+    judge_diagnostics = score_details.get("judgeDiagnostics") or {}
     weights = score_details["weights"]
     passed = format_optional_number(qa.get("passedChecks"))
     failed = format_optional_number(qa.get("failedChecks"))
@@ -1288,6 +1297,22 @@ def supatest_eval_dashboard_logs(result: dict, score_details: dict) -> str:
             f"token {format_weight(weights['tokenUsage'])}"
         ),
     ]
+    if judge_diagnostics:
+        confidence = judge_diagnostics.get("confidence")
+        taxonomy = ", ".join(judge_diagnostics.get("failureTaxonomy") or [])
+        cap = judge_diagnostics.get("deterministicCaps") or {}
+        lines.append(
+            "Judge diagnostics: "
+            f"confidence {format_optional_number(round(confidence, 2) if confidence is not None else None)}, "
+            f"taxonomy {taxonomy or 'n/a'}"
+        )
+        if cap:
+            lines.append(
+                "Deterministic cap: "
+                f"{format_optional_number(cap.get('originalScore'))} -> "
+                f"{format_optional_number(cap.get('cappedScore'))} "
+                f"({', '.join(cap.get('reasons') or [])})"
+            )
     reason = str(result.get("reason") or "").strip()
     if reason:
         lines.extend(["", "Judge reason", reason])
@@ -1452,6 +1477,7 @@ def summarize_result(result: dict | None) -> dict | None:
         "time": result.get("time") or empty_time_score(result.get("durationMs")),
         "telemetry": result.get("telemetry") or empty_eval_telemetry(),
         "qaBench": result.get("qaBench") or {},
+        "judgeDiagnostics": result.get("judgeDiagnostics") or {},
         "failureTaxonomy": result.get("failureTaxonomy") or [],
     }
 

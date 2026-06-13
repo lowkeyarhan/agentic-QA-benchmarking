@@ -36,6 +36,7 @@ import run_benchmark
 from run_benchmark import (
     BatchJudgeCaseScore,
     BatchJudgeResponse,
+    JudgeMetricScore,
     PreflightIssue,
     build_token_usage,
     build_artifact_checks,
@@ -1579,10 +1580,20 @@ def test_batch_scoring_uses_one_judge_call_and_check_counts(monkeypatch) -> None
                             passedChecks=2,
                             failedChecks=0,
                             reason="All required evidence is present.",
-                            metricScores={
-                                "relevance": 1.0,
-                                "coverage": 0.8,
-                            },
+                            metricScores=[
+                                JudgeMetricScore(
+                                    metricId="relevance",
+                                    score=1.0,
+                                    reason="Specific to the requested behavior.",
+                                ),
+                                JudgeMetricScore(
+                                    metricId="coverage",
+                                    score=0.8,
+                                    reason="Covers the main path.",
+                                ),
+                            ],
+                            confidence=0.91,
+                            evidence=["changedDiff shows a test edit"],
                         )
                     ]
                 ),
@@ -1634,6 +1645,9 @@ def test_batch_scoring_uses_one_judge_call_and_check_counts(monkeypatch) -> None
     assert scored["failedChecks"] == 0
     assert scored["qaBench"]["metricScores"] == {"relevance": 1.0, "coverage": 0.8}
     assert scored["qaBench"]["metricScoreSource"] == "batch-judge"
+    assert scored["qaBench"]["metricReasons"]["coverage"] == "Covers the main path."
+    assert scored["judgeDiagnostics"]["confidence"] == 0.91
+    assert scored["judgeDiagnostics"]["evidence"] == ["changedDiff shows a test edit"]
     assert run_benchmark.format_cell(scored) == "90% (2p/0f) pass"
 
 
@@ -1672,6 +1686,78 @@ def test_batch_judge_prompt_treats_plan_mode_transcript_as_deliverable() -> None
 
     assert "Plan-mode cases are read-only" in prompt
     assert "do not require changed files" in prompt
+    assert "enterprise QA benchmark judge" in prompt
+    assert "objective evidence" in prompt
+
+
+def test_batch_judge_schema_avoids_metric_score_map_additional_properties() -> None:
+    schema = BatchJudgeResponse.model_json_schema()
+    metric_schema = schema["$defs"]["BatchJudgeCaseScore"]["properties"][
+        "metricScores"
+    ]
+
+    assert "additionalProperties" not in json.dumps(metric_schema)
+
+
+def test_deterministic_artifact_cap_prevents_inflated_judge_score(
+    monkeypatch,
+) -> None:
+    class InflatedJudge:
+        def generate(self, _prompt, schema):
+            assert schema is BatchJudgeResponse
+            return (
+                BatchJudgeResponse(
+                    results=[
+                        BatchJudgeCaseScore(
+                            resultId="r001",
+                            score=1.0,
+                            result="pass",
+                            passedChecks=2,
+                            failedChecks=0,
+                            reason="Looks good.",
+                        )
+                    ]
+                ),
+                0,
+            )
+
+    monkeypatch.setattr(run_benchmark, "make_judge_model", lambda: InflatedJudge())
+    result = {
+        "runId": "verify",
+        "caseId": "case-001",
+        "evalId": "E25",
+        "evalName": "Batch Tests Before Running",
+        "agent": "supatest",
+        "mode": "build",
+        "exitCode": 0,
+        "timedOut": False,
+        "durationMs": 123,
+        "projectDir": "runs/verify/case-001/supatest/project",
+        "transcriptPath": "runs/verify/case-001/supatest/transcript.log",
+        "changedFiles": [],
+        "artifactWarnings": ["expected-artifact-change-missing"],
+        "artifactChecks": {"warnings": ["expected-artifact-change-missing"]},
+        "passCriteria": ["adds a relevant test"],
+        "failCriteria": [],
+    }
+    pending = run_benchmark.PendingResult(
+        result,
+        LLMTestCase(
+            input="Add a QA test",
+            actual_output="Exit code: 0\nTimed out: False\nNo changed files.",
+            expected_output="Pass criteria:\n- adds a relevant test",
+        ),
+    )
+
+    scored = run_benchmark.score_pending_results("verify", [pending])[0]
+
+    assert scored["scorePercent"] == 39
+    assert scored["result"] == "fail"
+    assert scored["scoreSource"] == "batch-judge+deterministic-cap"
+    assert scored["failedChecks"] == 1
+    assert scored["judgeDiagnostics"]["deterministicCaps"]["reasons"] == [
+        "expected artifact change missing"
+    ]
 
 
 def test_batch_scoring_can_chunk_large_runs(monkeypatch) -> None:

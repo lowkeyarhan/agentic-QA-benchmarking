@@ -24,7 +24,24 @@ class BatchJudgeCaseScore(BaseModel):
     passedChecks: int
     failedChecks: int
     reason: str
-    metricScores: dict[str, float] | None = None
+    metricScores: list["JudgeMetricScore"] | None = None
+    criterionScores: list["JudgeCriterionScore"] | None = None
+    failureTaxonomy: list[str] | None = None
+    evidence: list[str] | None = None
+    confidence: float | None = None
+    auditNotes: str | None = None
+
+
+class JudgeMetricScore(BaseModel):
+    metricId: str
+    score: float
+    reason: str | None = None
+
+
+class JudgeCriterionScore(BaseModel):
+    criterion: str
+    status: Literal["satisfied", "partial", "failed", "not_applicable"]
+    reason: str
 
 
 class BatchJudgeResponse(BaseModel):
@@ -238,8 +255,31 @@ def parse_batch_judge_response(response) -> BatchJudgeResponse:
     if isinstance(response, BatchJudgeResponse):
         return response
     if isinstance(response, dict):
-        return BatchJudgeResponse.model_validate(response)
-    return BatchJudgeResponse.model_validate_json(str(response))
+        return BatchJudgeResponse.model_validate(normalize_batch_response_payload(response))
+    parsed = json.loads(str(response))
+    return BatchJudgeResponse.model_validate(normalize_batch_response_payload(parsed))
+
+
+def normalize_batch_response_payload(value):
+    if not isinstance(value, dict):
+        return value
+    results = value.get("results")
+    if not isinstance(results, list):
+        return value
+    normalized_results = []
+    for item in results:
+        if not isinstance(item, dict):
+            normalized_results.append(item)
+            continue
+        normalized = dict(item)
+        metric_scores = normalized.get("metricScores")
+        if isinstance(metric_scores, dict):
+            normalized["metricScores"] = [
+                {"metricId": metric_id, "score": score}
+                for metric_id, score in metric_scores.items()
+            ]
+        normalized_results.append(normalized)
+    return {**value, "results": normalized_results}
 
 
 def build_batch_judge_prompt(
@@ -269,27 +309,46 @@ def build_batch_judge_prompt(
             "passedChecks": "Number of pass criteria materially satisfied.",
             "failedChecks": "Number of fail criteria triggered. Use 0 when no fail criterion was triggered.",
             "metricScores": (
-                "When qaBench.metricIds are present, include metricScores with "
-                "one 0.0 to 1.0 score for every listed metric id. These are "
+                "When qaBench.metricIds are present, return one metricScores array "
+                "item per metric id using {metricId, score, reason}. These are "
                 "diagnostic QA dimension scores, not replacements for the overall score."
+            ),
+            "criterionScores": (
+                "Return criterionScores for the most important pass/fail criteria "
+                "using status satisfied, partial, failed, or not_applicable."
+            ),
+            "confidence": "0.0 to 1.0 confidence in the score based on available evidence.",
+            "failureTaxonomy": (
+                "Optional diagnostic labels such as missing-artifact, missing-verification, "
+                "weak-assertion, irrelevant-change, assertion-weakened, fabricated-evidence, "
+                "wrong-route, env-auth, timeout, or app-bug."
             ),
         },
         "cases": cases,
     }
 
     return (
-        "You are an impartial QA benchmark judge. Score every case in the JSON payload. "
+        "You are an impartial enterprise QA benchmark judge. Score every case in the JSON payload. "
         "Use only the task, criteria, changed files, excerpts, and transcript evidence. "
         "Do not reward or penalize any agent name, vendor, model, speed, or cost. "
+        "Prefer objective evidence over claims. If the transcript claims success but changedDiff, "
+        "artifactChecks, or evidence contradict it, score the objective evidence. "
         "A non-zero wrapper exit code is not automatic failure if evidence proves completion. "
         "Plan-mode cases are read-only: do not require changed files, and judge the "
         "delivered plan or recommendation from transcript evidence unless the criteria "
         "explicitly require a file. "
+        "Build/fix/test-feature cases generally require relevant artifacts and verification "
+        "unless criteria explicitly say authoring-only or no-run. "
         "Penalize missing evidence, fabricated selectors, stale evidence, forbidden commands, "
         "irrelevant edits, destructive rewrites, trivial assertions such as expect(true), "
         "assertion weakening, over-mocking the behavior under test, and unsupported claims. "
+        "Reward QA-specific strengths only when evidenced: strong assertions, preserved intent, "
+        "stable selectors, state-based waits, root-cause diagnosis, framework conventions, "
+        "manual-test preservation, and useful evidence/reporting. "
         "For each case, return metricScores for the provided qaBench.metricIds when present. "
         "Metric scores must be based on the same evidence and criteria as the overall score. "
+        "Return concise evidence snippets or references in evidence, not long quotes. "
+        "Return criterionScores and confidence whenever possible. "
         "Return exactly one result for every case resultId and no extra resultIds. "
         "Use result labels consistent with the score thresholds. "
         "Keep reasons short and evidence-based.\n\n" + json.dumps(payload, indent=2)
@@ -374,6 +433,8 @@ def apply_batch_judgement(
             result_override=normalized_result,
         )
         apply_qa_bench_metric_scores(result, scored.metricScores)
+        apply_judge_diagnostics(result, scored)
+        apply_deterministic_score_caps(result)
 
     for result_id, result_index in expected_ids.items():
         if result_id not in seen_ids:
@@ -387,18 +448,17 @@ def apply_batch_judgement(
         result.pop("_judgeResultId", None)
 
 
-def apply_qa_bench_metric_scores(
-    result: dict, raw_scores: dict[str, float] | None
-) -> None:
+def apply_qa_bench_metric_scores(result: dict, raw_scores) -> None:
     qa_bench = result.get("qaBench") or {}
     metric_ids = qa_bench.get("metricIds") or []
     if not metric_ids:
         return
 
+    raw_score_map = normalize_metric_scores(raw_scores)
     normalized = {}
     for metric_id in metric_ids:
-        if raw_scores and metric_id in raw_scores:
-            raw_value = raw_scores[metric_id]
+        if raw_score_map and metric_id in raw_score_map:
+            raw_value = raw_score_map[metric_id]["score"]
         else:
             raw_value = result.get("score")
         if raw_value is None:
@@ -410,7 +470,107 @@ def apply_qa_bench_metric_scores(
         qa_bench["metricScoreSource"] = (
             "batch-judge" if raw_scores else "overall-score-fallback"
         )
+        if raw_score_map:
+            qa_bench["metricReasons"] = {
+                metric_id: item.get("reason")
+                for metric_id, item in raw_score_map.items()
+                if item.get("reason")
+            }
         result["qaBench"] = qa_bench
+
+
+def normalize_metric_scores(raw_scores) -> dict[str, dict] | None:
+    if not raw_scores:
+        return None
+    if isinstance(raw_scores, dict):
+        return {
+            str(metric_id): {"score": score, "reason": None}
+            for metric_id, score in raw_scores.items()
+        }
+    normalized: dict[str, dict] = {}
+    for item in raw_scores:
+        if isinstance(item, JudgeMetricScore):
+            metric_id = item.metricId
+            score = item.score
+            reason = item.reason
+        elif isinstance(item, dict):
+            metric_id = item.get("metricId") or item.get("metric_id")
+            score = item.get("score")
+            reason = item.get("reason")
+        else:
+            continue
+        if metric_id is None or score is None:
+            continue
+        normalized[str(metric_id)] = {"score": score, "reason": reason}
+    return normalized or None
+
+
+def apply_judge_diagnostics(result: dict, scored: BatchJudgeCaseScore) -> None:
+    diagnostics = {
+        "confidence": clamp_optional_score(scored.confidence),
+        "failureTaxonomy": scored.failureTaxonomy or [],
+        "evidence": scored.evidence or [],
+        "auditNotes": scored.auditNotes,
+        "criterionScores": [
+            criterion.model_dump()
+            if isinstance(criterion, JudgeCriterionScore)
+            else dict(criterion)
+            for criterion in (scored.criterionScores or [])
+        ],
+    }
+    result["judgeDiagnostics"] = diagnostics
+
+
+def apply_deterministic_score_caps(result: dict) -> None:
+    cap, cap_reasons = deterministic_score_cap(result)
+    if cap is None or result.get("score") is None or float(result["score"]) <= cap:
+        return
+
+    original_score = float(result["score"])
+    result["score"] = cap
+    result["scorePercent"] = round(cap * 100)
+    result["result"] = result_label(cap, bool(result.get("timedOut")))
+    result["scoreSource"] = f"{result.get('scoreSource') or 'judge'}+deterministic-cap"
+    if result.get("failedChecks") is not None:
+        result["failedChecks"] = max(1, int(result.get("failedChecks") or 0))
+
+    diagnostics = result.setdefault("judgeDiagnostics", {})
+    diagnostics["deterministicCaps"] = {
+        "originalScore": original_score,
+        "cappedScore": cap,
+        "reasons": cap_reasons,
+    }
+    reason_suffix = " Deterministic cap applied: " + ", ".join(cap_reasons) + "."
+    result["reason"] = (str(result.get("reason") or "").rstrip() + reason_suffix).strip()
+
+
+def deterministic_score_cap(result: dict) -> tuple[float | None, list[str]]:
+    artifact_checks = result.get("artifactChecks") or {}
+    warnings = set(result.get("artifactWarnings") or artifact_checks.get("warnings") or [])
+    cap = None
+    reasons: list[str] = []
+
+    if "expected-artifact-change-missing" in warnings:
+        cap = min_cap(cap, 0.39)
+        reasons.append("expected artifact change missing")
+    if "only-noisy-files-changed" in warnings:
+        cap = min_cap(cap, 0.39)
+        reasons.append("only noisy files changed")
+    if "verification-command-not-observed" in warnings:
+        cap = min_cap(cap, 0.69)
+        reasons.append("verification command not observed")
+
+    return cap, reasons
+
+
+def min_cap(current: float | None, candidate: float) -> float:
+    return candidate if current is None else min(current, candidate)
+
+
+def clamp_optional_score(value: float | None) -> float | None:
+    if value is None:
+        return None
+    return max(0.0, min(1.0, float(value)))
 
 
 def apply_score(
