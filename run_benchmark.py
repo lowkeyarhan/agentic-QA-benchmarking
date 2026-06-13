@@ -81,6 +81,13 @@ from fixtures import (
     window_eval_ids,
 )  # noqa: E402
 from pydantic import BaseModel  # noqa: E402
+from qa_bench import (  # noqa: E402
+    build_metadata as build_qa_bench_metadata,
+    ensure_result_metadata as ensure_qa_bench_result_metadata,
+    eval_metadata as qa_bench_eval_metadata,
+    format_score_tables as format_qa_bench_score_tables,
+    suite_metadata as qa_bench_suite_metadata,
+)
 from scoring import (
     apply_token_efficiency_scores,
     configured_token_baseline_threshold_percent,
@@ -92,7 +99,7 @@ from scoring import (
 
 
 # Edit these defaults directly, or override with benchmark/.env.
-DEFAULT_EVAL_IDS = "all"
+DEFAULT_EVAL_IDS = "suite:qa-production"
 DEFAULT_AGENTS = ["supatest", "cursor", "codex", "gemini"]
 DEFAULT_PARALLELISM = 3
 DEFAULT_AGENT_TIMEOUT_SECONDS = 600
@@ -129,6 +136,7 @@ class BatchJudgeCaseScore(BaseModel):
     passedChecks: int
     failedChecks: int
     reason: str
+    metricScores: dict[str, float] | None = None
 
 
 class BatchJudgeResponse(BaseModel):
@@ -509,6 +517,7 @@ def run_one_case(
         "tokenUsage": token_usage,
         "telemetry": telemetry,
         "fixtureHash": fixture_content_hash(fixture.eval_id),
+        "qaBench": qa_bench_eval_metadata(fixture),
         "passCriteria": fixture.pass_criteria,
         "failCriteria": fixture.fail_criteria,
     }
@@ -1873,6 +1882,11 @@ def build_batch_judge_prompt(
             "fail": "score < 0.40",
             "passedChecks": "Number of pass criteria materially satisfied.",
             "failedChecks": "Number of fail criteria triggered. Use 0 when no fail criterion was triggered.",
+            "metricScores": (
+                "When qaBench.metricIds are present, include metricScores with "
+                "one 0.0 to 1.0 score for every listed metric id. These are "
+                "diagnostic QA dimension scores, not replacements for the overall score."
+            ),
         },
         "cases": cases,
     }
@@ -1888,6 +1902,8 @@ def build_batch_judge_prompt(
         "Penalize missing evidence, fabricated selectors, stale evidence, forbidden commands, "
         "irrelevant edits, destructive rewrites, trivial assertions such as expect(true), "
         "assertion weakening, over-mocking the behavior under test, and unsupported claims. "
+        "For each case, return metricScores for the provided qaBench.metricIds when present. "
+        "Metric scores must be based on the same evidence and criteria as the overall score. "
         "Return exactly one result for every case resultId and no extra resultIds. "
         "Use result labels consistent with the score thresholds. "
         "Keep reasons short and evidence-based.\n\n" + json.dumps(payload, indent=2)
@@ -1913,6 +1929,7 @@ def batch_case_payload(
         "changedFiles": result.get("changedFiles") or [],
         "changedDiff": truncate_text(str(result.get("changedDiff") or ""), diff_budget),
         "artifactChecks": result.get("artifactChecks") or {},
+        "qaBench": result.get("qaBench") or {},
         "task": truncate_text(str(getattr(test_case, "input", "")), task_budget),
         "criteria": truncate_text(
             str(getattr(test_case, "expected_output", "")), criteria_budget
@@ -1970,6 +1987,7 @@ def apply_batch_judgement(
             failed_checks=max(0, int(scored.failedChecks)),
             result_override=normalized_result,
         )
+        apply_qa_bench_metric_scores(result, scored.metricScores)
 
     for result_id, result_index in expected_ids.items():
         if result_id not in seen_ids:
@@ -1981,6 +1999,32 @@ def apply_batch_judgement(
 
     for result in results:
         result.pop("_judgeResultId", None)
+
+
+def apply_qa_bench_metric_scores(
+    result: dict, raw_scores: dict[str, float] | None
+) -> None:
+    qa_bench = result.get("qaBench") or {}
+    metric_ids = qa_bench.get("metricIds") or []
+    if not metric_ids:
+        return
+
+    normalized = {}
+    for metric_id in metric_ids:
+        if raw_scores and metric_id in raw_scores:
+            raw_value = raw_scores[metric_id]
+        else:
+            raw_value = result.get("score")
+        if raw_value is None:
+            continue
+        normalized[metric_id] = max(0.0, min(1.0, float(raw_value)))
+
+    if normalized:
+        qa_bench["metricScores"] = normalized
+        qa_bench["metricScoreSource"] = (
+            "batch-judge" if raw_scores else "overall-score-fallback"
+        )
+        result["qaBench"] = qa_bench
 
 
 def apply_score(
@@ -2018,6 +2062,11 @@ def mark_unscored(result: dict, reason: str, score_source: str) -> None:
 def write_error_result(
     run_id: str, eval_id: str, agent: str, case_id: str, error: Exception
 ) -> dict:
+    qa_bench = None
+    try:
+        qa_bench = qa_bench_eval_metadata(load_fixture(eval_id))
+    except Exception:
+        qa_bench = None
     return {
         "runId": run_id,
         "caseId": case_id,
@@ -2035,6 +2084,7 @@ def write_error_result(
         "durationMs": 0,
         "tokenUsage": empty_token_usage(),
         "telemetry": empty_eval_telemetry(),
+        "qaBench": qa_bench,
         "failureTaxonomy": ["agent-error"],
         "traceback": traceback.format_exc(),
     }
@@ -2072,6 +2122,7 @@ def write_blocked_result(
         "tokenUsage": empty_token_usage(),
         "telemetry": empty_eval_telemetry(),
         "fixtureHash": fixture_content_hash(fixture.eval_id),
+        "qaBench": qa_bench_eval_metadata(fixture),
         "projectDir": None,
         "transcriptPath": None,
         "changedFiles": [],
@@ -2175,6 +2226,9 @@ def build_reproducibility_metadata(
             "executable": sys.executable,
         },
         "evalRunner": {
+            "benchmarkSuite": qa_bench_suite_metadata(
+                os.getenv("BENCHMARK_EVAL_IDS", DEFAULT_EVAL_IDS), eval_ids
+            ),
             "evalIds": eval_ids,
             "fixtureHashes": {
                 eval_id: fixture_content_hash(eval_id) for eval_id in eval_ids
@@ -2255,10 +2309,14 @@ def benchmark_environment_mode() -> str:
 
 
 def supatest_eval_telemetry_enabled() -> bool:
-    raw = os.getenv(
-        "BENCHMARK_SUPATEST_EVAL_TELEMETRY",
-        os.getenv("SUPATEST_EVAL_TELEMETRY", "1"),
-    ).strip().lower()
+    raw = (
+        os.getenv(
+            "BENCHMARK_SUPATEST_EVAL_TELEMETRY",
+            os.getenv("SUPATEST_EVAL_TELEMETRY", "1"),
+        )
+        .strip()
+        .lower()
+    )
     return raw not in {"0", "false", "no", "off"}
 
 
@@ -2331,6 +2389,7 @@ def write_summary(
     apply_time_efficiency_scores(results)
     apply_overall_scores(results)
     apply_failure_taxonomies(results)
+    ensure_qa_bench_result_metadata(results, load_fixture)
     by_key = {(item["evalId"], item["agent"]): item for item in results}
     lines = [
         "| Eval | " + " | ".join(agent_display_name(agent) for agent in agents) + " |",
@@ -2350,21 +2409,31 @@ def write_summary(
             build_agent_score_summary_rows(agents, results)
         ).splitlines()
     )
+    lines.append("")
+    lines.append(format_qa_bench_score_tables(agents, results, agent_display_name))
 
     (results_dir / "scores.md").write_text("\n".join(lines) + "\n")
     ordered_results = order_results(eval_ids, agents, results)
     generated_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     weights = overall_score_weights()
+    requested_eval_ids = os.getenv("BENCHMARK_EVAL_IDS", DEFAULT_EVAL_IDS)
     reproducibility = build_reproducibility_metadata(
         run_id, eval_ids, agents, parallelism, timeout_seconds
     )
     diagnostics = build_diagnostics_summary(ordered_results)
+    qa_bench_metadata = build_qa_bench_metadata(
+        requested_eval_ids,
+        eval_ids,
+        agents,
+        ordered_results,
+        [load_fixture(eval_id) for eval_id in eval_ids],
+    )
     metadata = {
         "runId": run_id,
         "generatedAt": generated_at,
         "evalIds": eval_ids,
         "evalSelection": {
-            "requested": os.getenv("BENCHMARK_EVAL_IDS", DEFAULT_EVAL_IDS),
+            "requested": requested_eval_ids,
             "limit": os.getenv("BENCHMARK_EVAL_LIMIT", "all") or "all",
             "offset": int(os.getenv("BENCHMARK_EVAL_OFFSET", "0") or "0"),
         },
@@ -2373,6 +2442,7 @@ def write_summary(
         "toolPolicy": tool_policy_metadata(),
         "reproducibility": reproducibility,
         "diagnostics": diagnostics,
+        "qaBench": qa_bench_metadata,
         "parallelism": parallelism,
         "timeoutSeconds": timeout_seconds,
         "tokenScoring": {
@@ -2472,6 +2542,7 @@ def build_supatest_eval_dashboard_payload(
 ) -> dict:
     ensure_supatest_dashboard_overall_scores(results)
     apply_failure_taxonomies(results)
+    ensure_qa_bench_result_metadata(results, load_fixture)
     ordered_results = order_results(eval_ids, agents, results)
     summary_rows = build_agent_score_summary_rows(agents, ordered_results)
     uploaded_rows = [row for row in summary_rows if row["total"] > row["blocked"]]
@@ -2482,6 +2553,14 @@ def build_supatest_eval_dashboard_payload(
         run_id, eval_ids, agents, parallelism, timeout_seconds
     )
     diagnostics = build_diagnostics_summary(ordered_results)
+    requested_eval_ids = os.getenv("BENCHMARK_EVAL_IDS", DEFAULT_EVAL_IDS)
+    qa_bench_metadata = build_qa_bench_metadata(
+        requested_eval_ids,
+        eval_ids,
+        agents,
+        ordered_results,
+        [load_fixture(eval_id) for eval_id in eval_ids],
+    )
     return {
         "runName": supatest_eval_dashboard_run_name(run_id),
         "runMetadata": {
@@ -2495,6 +2574,7 @@ def build_supatest_eval_dashboard_payload(
             "toolPolicy": tool_policy_metadata(),
             "reproducibility": reproducibility,
             "diagnostics": diagnostics,
+            "qaBench": qa_bench_metadata,
             "parallelism": parallelism,
             "timeoutSeconds": timeout_seconds,
             "overallScoring": {
@@ -2691,6 +2771,7 @@ def supatest_eval_dashboard_result_payload(result: dict) -> dict:
             "agentDisplayName": display_name,
             "agentModel": agent_model_label(agent),
             "mode": result.get("mode"),
+            "qaBench": result.get("qaBench") or {},
         },
         "result": dashboard_result_label(result),
         "score": score,
@@ -2710,6 +2791,7 @@ def supatest_eval_dashboard_result_payload(result: dict) -> dict:
             "tokenUsage": result.get("tokenUsage") or empty_token_usage(),
             "time": result.get("time") or empty_time_score(result.get("durationMs")),
             "telemetry": result.get("telemetry") or empty_eval_telemetry(),
+            "qaBench": result.get("qaBench") or {},
             "failureTaxonomy": result.get("failureTaxonomy") or [],
             "fixtureHash": result.get("fixtureHash"),
             "exitCode": result.get("exitCode"),
@@ -2748,9 +2830,7 @@ def supatest_eval_dashboard_score_details(result: dict) -> dict:
             "inputTokens": token_usage.get("inputTokens"),
             "outputTokens": token_usage.get("outputTokens"),
             "cachedInputTokens": token_usage.get("cachedInputTokens"),
-            "cacheCreationInputTokens": token_usage.get(
-                "cacheCreationInputTokens"
-            ),
+            "cacheCreationInputTokens": token_usage.get("cacheCreationInputTokens"),
             "estimatedCostUsd": token_usage.get("estimatedCostUsd"),
             "source": token_usage.get("source"),
             "warnings": token_usage.get("warnings") or [],
@@ -2761,6 +2841,7 @@ def supatest_eval_dashboard_score_details(result: dict) -> dict:
             "scoreBasis": time_score.get("scoreBasis"),
             "durationMs": time_score.get("durationMs") or result.get("durationMs"),
         },
+        "qaBench": result.get("qaBench") or {},
         "weights": {
             "qa": weights["qa"],
             "tokenUsage": weights["tokenUsage"],
@@ -2773,11 +2854,17 @@ def supatest_eval_dashboard_logs(result: dict, score_details: dict) -> str:
     qa = score_details["qa"]
     token_usage = score_details["tokenUsage"]
     time_score = score_details["time"]
+    qa_bench = score_details.get("qaBench") or {}
     weights = score_details["weights"]
     passed = format_optional_number(qa.get("passedChecks"))
     failed = format_optional_number(qa.get("failedChecks"))
     lines = [
         "Detailed score",
+        (
+            "QA Bench: "
+            f"{qa_bench.get('capabilityLabel') or qa_bench.get('capability') or 'n/a'} "
+            f"({', '.join(qa_bench.get('metricIds') or []) or 'no metrics'})"
+        ),
         (
             "Overall: "
             f"{format_percent(overall.get('scorePercent'))} "
@@ -2975,6 +3062,7 @@ def summarize_result(result: dict | None) -> dict | None:
         "tokenUsage": result.get("tokenUsage") or empty_token_usage(),
         "time": result.get("time") or empty_time_score(result.get("durationMs")),
         "telemetry": result.get("telemetry") or empty_eval_telemetry(),
+        "qaBench": result.get("qaBench") or {},
         "failureTaxonomy": result.get("failureTaxonomy") or [],
     }
 
@@ -3075,9 +3163,7 @@ def summarize_token_usage(results: list[dict]) -> dict:
         "cacheCreationInputTokens": (
             sum(
                 int(
-                    (result.get("tokenUsage") or {}).get(
-                        "cacheCreationInputTokens"
-                    )
+                    (result.get("tokenUsage") or {}).get("cacheCreationInputTokens")
                     or 0
                 )
                 for result in known

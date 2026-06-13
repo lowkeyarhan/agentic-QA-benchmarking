@@ -1,6 +1,11 @@
-# Agent Benchmark
+# QA Bench
 
-Portable benchmark harness for comparing Supatest, Cursor Agent, Codex, and Gemini CLI against copied Supatest eval fixtures.
+Portable QA benchmark harness for comparing Supatest, Cursor Agent, Codex, Gemini CLI, and other coding agents on real test-quality work.
+
+QA Bench is scoped to the QA lifecycle rather than generic coding tasks. It
+measures whether agents can author tests, repair failing tests, classify root
+causes, use logs and runtime evidence, preserve test intent, follow project
+conventions, handle mobile/browser context, and report test health clearly.
 
 This folder is intended to be self-contained. You can move `benchmark/` to Desktop or another machine and run it there, as long as the required CLIs are installed and logged in:
 
@@ -10,6 +15,34 @@ cursor-agent
 codex
 gemini
 ```
+
+## QA Bench Suites
+
+Use `BENCHMARK_EVAL_IDS=suite:<name>` to select a production QA suite without
+editing fixture content:
+
+| Suite | Purpose |
+| --- | --- |
+| `suite:qa-production` | Every available QA lifecycle fixture. This is the default production benchmark. |
+| `suite:qa-core` | Balanced representative suite for vendor comparisons. |
+| `suite:qa-smoke` | Fast sanity suite across authoring, repair, planning, runtime evidence, and mobile QA. |
+| `suite:qa-lifecycle-extended` | Broad lifecycle suite covering advanced QA tasks across web, mobile, repair, reporting, evidence, and metadata workflows. |
+
+Each eval is tagged in `summary.json`, `run.json`, and dashboard metadata with a
+QA capability such as `test-authoring`, `test-repair`,
+`root-cause-debugging`, `feature-validation`, `reporting-and-evidence`,
+`metadata-governance`, `project-discovery`, `browser-context`, or `mobile-qa`.
+
+Each eval also carries QA metric IDs, including `relevance`, `coverage`,
+`assertion_quality`, `test_integrity`, `maintainability`, `selector_strategy`,
+`state_timing_reliability`, `root_cause_accuracy`, `evidence_quality`,
+`reporting_quality`, `metadata_quality`, `manual_workflow`,
+`framework_adaptation`, `ci_log_analysis`, and `mobile_context`.
+
+The judge returns the existing overall QA pass/partial/fail score plus optional
+dimension scores for those metric IDs. If a judge omits metric scores, the
+runner falls back to the case QA score for metric aggregation so outputs remain
+backward-compatible.
 
 ## Layout
 
@@ -180,10 +213,10 @@ DEEPEVAL_OPENAI_MODEL=gpt-5-nano
 OpenAI API access is usage-billed separately from ChatGPT plans; use a key with
 available API credits or billing enabled.
 
-The default run executes every fixture present under `agent-eval-fixtures/fixtures`:
+The default run executes the QA Bench production suite:
 
 ```text
-Evals: all
+Evals: suite:qa-production
 Agents: supatest [premium], cursor [auto], codex [default], gemini [gemini-3.1-flash-lite]
 Parallelism: 3
 Timeout: 600s per agent run
@@ -206,7 +239,7 @@ Use `BENCHMARK_EVAL_LIMIT` and `BENCHMARK_EVAL_OFFSET` to run the fixture suite
 in fixed-size batches:
 
 ```bash
-BENCHMARK_EVAL_IDS=all
+BENCHMARK_EVAL_IDS=suite:qa-production
 BENCHMARK_EVAL_LIMIT=5      # use 10, 20, 50, or all for larger runs
 BENCHMARK_EVAL_OFFSET=0     # next 5: 5, next 10: 10, etc.
 ```
@@ -214,11 +247,11 @@ BENCHMARK_EVAL_OFFSET=0     # next 5: 5, next 10: 10, etc.
 Examples:
 
 ```bash
-BENCHMARK_ENV_FILE_OVERRIDE=0 BENCHMARK_EVAL_IDS=all BENCHMARK_EVAL_LIMIT=5 BENCHMARK_EVAL_OFFSET=0 ./run_benchmark.py
-BENCHMARK_ENV_FILE_OVERRIDE=0 BENCHMARK_EVAL_IDS=all BENCHMARK_EVAL_LIMIT=10 BENCHMARK_EVAL_OFFSET=0 ./run_benchmark.py
-BENCHMARK_ENV_FILE_OVERRIDE=0 BENCHMARK_EVAL_IDS=all BENCHMARK_EVAL_LIMIT=20 BENCHMARK_EVAL_OFFSET=0 ./run_benchmark.py
-BENCHMARK_ENV_FILE_OVERRIDE=0 BENCHMARK_EVAL_IDS=all BENCHMARK_EVAL_LIMIT=50 BENCHMARK_EVAL_OFFSET=0 ./run_benchmark.py
-BENCHMARK_ENV_FILE_OVERRIDE=0 BENCHMARK_EVAL_IDS=all BENCHMARK_EVAL_LIMIT=all BENCHMARK_EVAL_OFFSET=0 ./run_benchmark.py
+BENCHMARK_ENV_FILE_OVERRIDE=0 BENCHMARK_EVAL_IDS=suite:qa-smoke BENCHMARK_EVAL_LIMIT=all ./run_benchmark.py
+BENCHMARK_ENV_FILE_OVERRIDE=0 BENCHMARK_EVAL_IDS=suite:qa-core BENCHMARK_EVAL_LIMIT=all ./run_benchmark.py
+BENCHMARK_ENV_FILE_OVERRIDE=0 BENCHMARK_EVAL_IDS=suite:qa-production BENCHMARK_EVAL_LIMIT=20 BENCHMARK_EVAL_OFFSET=0 ./run_benchmark.py
+BENCHMARK_ENV_FILE_OVERRIDE=0 BENCHMARK_EVAL_IDS=suite:qa-production BENCHMARK_EVAL_LIMIT=50 BENCHMARK_EVAL_OFFSET=0 ./run_benchmark.py
+BENCHMARK_ENV_FILE_OVERRIDE=0 BENCHMARK_EVAL_IDS=suite:qa-production BENCHMARK_EVAL_LIMIT=all BENCHMARK_EVAL_OFFSET=0 ./run_benchmark.py
 ```
 
 You can run model variants directly from `.env` by putting the model after a
@@ -264,9 +297,11 @@ Use `qa` when measuring task ability under a common QA frame. Use `raw` or
 `minimal` when you want product-specific agent behavior to show through more
 clearly.
 
-Use a comma-separated `BENCHMARK_EVAL_IDS` value for a smaller smoke or hard
-suite. This seven-task subset is useful when you want a quick complex pass
-without running the full fixture set:
+Use a comma-separated `BENCHMARK_EVAL_IDS` value for a targeted debug subset.
+For reusable QA comparisons, prefer one of the named suites above so run
+metadata can identify the benchmark scope.
+
+Example targeted debug subset:
 
 | Eval | Coverage                                                                      |
 | ---- | ----------------------------------------------------------------------------- |
@@ -279,8 +314,9 @@ without running the full fixture set:
 | E101 | Prod regression: translate Maestro/iOS hierarchy evidence into WDIO selectors |
 
 Edit `.env` to change the evals, agents, models, prompt profile, parallelism,
-timeouts, or judge budget. Use `BENCHMARK_EVAL_IDS=all` to include every
-available fixture.
+timeouts, or judge budget. Use `BENCHMARK_EVAL_IDS=suite:qa-production` for the
+full QA Bench production run, or `BENCHMARK_EVAL_IDS=all` when you explicitly
+want every available fixture without suite labeling.
 
 ## Output
 
@@ -305,6 +341,12 @@ Each result in `run.json` also includes deterministic `artifactChecks` and
 `artifactWarnings`, independent of the LLM judge. These record whether the agent
 actually changed test files, implementation/page files, markdown outputs, noisy
 files only, Supatest memory, verification commands, and rate-limit evidence.
+
+Each run also includes a top-level `qaBench` object in `summary.json` and
+`run.json`. It records the suite name, QA Bench version, per-eval capability,
+metric IDs, metric definitions, capability definitions, and aggregate scores by
+agent/capability/metric/difficulty/mode. `scores.md` mirrors the most important
+parts as QA Bench capability, metric, and difficulty tables.
 
 Each result also includes `telemetry` when the agent emits structured JSON or
 NDJSON events. The parser summarizes model/provider hints, turns, SDK duration,

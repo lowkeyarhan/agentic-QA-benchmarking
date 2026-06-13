@@ -7,6 +7,12 @@ import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
+from qa_bench import (
+    available_suite_names,
+    is_suite_token,
+    resolve_suite_eval_ids,
+)
+
 
 BENCHMARK_ROOT = Path(__file__).resolve().parent
 
@@ -49,7 +55,7 @@ def available_eval_ids(fixtures_root: Path = FIXTURES_ROOT) -> list[str]:
 
 def selected_eval_ids() -> list[str]:
     return window_eval_ids(
-        resolve_eval_ids(os.getenv("BENCHMARK_EVAL_IDS", "all")),
+        resolve_eval_ids(os.getenv("BENCHMARK_EVAL_IDS", "suite:qa-production")),
         os.getenv("BENCHMARK_EVAL_LIMIT"),
         os.getenv("BENCHMARK_EVAL_OFFSET"),
     )
@@ -61,15 +67,25 @@ def resolve_eval_ids(raw: str | list[str]) -> list[str]:
     if not requested or any(item.lower() == "all" for item in requested):
         return available_eval_ids()
 
-    available = set(available_eval_ids())
-    missing = [eval_id for eval_id in requested if eval_id not in available]
+    available_list = available_eval_ids()
+    resolved: list[str] = []
+    for item in requested:
+        if is_suite_token(item):
+            resolved.extend(resolve_suite_eval_ids(item, available_list))
+        else:
+            resolved.append(item)
+
+    available = set(available_list)
+    missing = [eval_id for eval_id in resolved if eval_id not in available]
     if missing:
         raise ValueError(
             "Unknown eval id(s): "
             + ", ".join(missing)
-            + ". Use BENCHMARK_EVAL_IDS=all to run every available fixture."
+            + ". Use BENCHMARK_EVAL_IDS=all to run every available fixture, "
+            + "or BENCHMARK_EVAL_IDS=suite:<name>. Available suites: "
+            + ", ".join(available_suite_names())
         )
-    return requested
+    return list(dict.fromkeys(resolved))
 
 
 def window_eval_ids(

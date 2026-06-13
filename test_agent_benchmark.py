@@ -31,6 +31,7 @@ from fixtures import (
     resolve_eval_ids,
     window_eval_ids,
 )
+from qa_bench import available_suite_names
 import run_benchmark
 from run_benchmark import (
     BatchJudgeCaseScore,
@@ -75,7 +76,9 @@ def test_agent_environment_hides_benchmark_and_judge_vars(monkeypatch) -> None:
     assert env["NODE_ENV"] == "development"
 
 
-def test_supatest_agent_environment_enables_eval_telemetry_by_default(monkeypatch) -> None:
+def test_supatest_agent_environment_enables_eval_telemetry_by_default(
+    monkeypatch,
+) -> None:
     monkeypatch.delenv("BENCHMARK_SUPATEST_EVAL_TELEMETRY", raising=False)
     monkeypatch.delenv("SUPATEST_EVAL_TELEMETRY", raising=False)
 
@@ -388,6 +391,17 @@ def test_resolve_eval_ids_all_uses_every_available_fixture() -> None:
     assert eval_ids == available_eval_ids()
     assert "E18" in eval_ids
     assert "E101" in eval_ids
+
+
+def test_resolve_eval_ids_supports_named_qa_bench_suites() -> None:
+    eval_ids = resolve_eval_ids("suite:qa-smoke")
+
+    assert eval_ids == ["E25", "E31", "E43", "E48", "E50", "E65", "E101", "E118"]
+
+
+def test_qa_bench_suite_names_are_vendor_neutral() -> None:
+    assert "qa-lifecycle-extended" in available_suite_names()
+    assert all("supatest" not in suite for suite in available_suite_names())
 
 
 def test_copy_project_does_not_mount_fixture_root_answer_files(tmp_path) -> None:
@@ -714,9 +728,7 @@ def test_eval_telemetry_parser_reads_nested_supatest_and_cursor_tool_shapes(
                         "subtype": "started",
                         "tool_call": {
                             "shellToolCall": {
-                                "args": {
-                                    "command": "rg waitForTimeout pages tests"
-                                }
+                                "args": {"command": "rg waitForTimeout pages tests"}
                             }
                         },
                     }
@@ -726,9 +738,7 @@ def test_eval_telemetry_parser_reads_nested_supatest_and_cursor_tool_shapes(
                         "type": "tool_call",
                         "subtype": "completed",
                         "tool_call": {
-                            "editToolCall": {
-                                "args": {"path": "pages/InventoryPage.ts"}
-                            }
+                            "editToolCall": {"args": {"path": "pages/InventoryPage.ts"}}
                         },
                     }
                 ),
@@ -888,7 +898,8 @@ def test_judge_model_can_use_openai_provider(monkeypatch) -> None:
     assert created["temperature"] == 0
 
 
-def test_write_summary_emits_only_three_result_files(tmp_path) -> None:
+def test_write_summary_emits_only_three_result_files(tmp_path, monkeypatch) -> None:
+    monkeypatch.delenv("BENCHMARK_EVAL_IDS", raising=False)
     result = {
         "runId": "verify",
         "caseId": "case-001",
@@ -922,10 +933,20 @@ def test_write_summary_emits_only_three_result_files(tmp_path) -> None:
     run = json.loads((tmp_path / "run.json").read_text())
     scores = (tmp_path / "scores.md").read_text()
     assert "supatest [premium]" in scores
+    assert "QA Bench Capability Scores" in scores
+    assert "QA Bench Metric Scores" in scores
     assert summary["agentModels"]["supatest"] == "premium"
     assert summary["toolPolicy"]["hiddenHostTools"] == ["rtk"]
     assert run["toolPolicy"] == summary["toolPolicy"]
+    assert summary["qaBench"]["version"] == "qa-bench-v1"
+    assert summary["qaBench"]["evals"]["E25"]["capability"] == "test-authoring"
+    assert "coverage" in summary["qaBench"]["evals"]["E25"]["metricIds"]
+    assert "byMetric" in summary["qaBench"]["summary"]["byAgent"]["supatest"]
     assert summary["reproducibility"]["benchmarkRunId"] == "verify"
+    assert (
+        summary["reproducibility"]["evalRunner"]["benchmarkSuite"]["id"]
+        == "qa-production"
+    )
     assert summary["reproducibility"]["evalRunner"]["fixtureHashes"]["E25"]
     assert summary["diagnostics"]["failureTaxonomy"]["missing-token-usage"] == 1
     assert run["diagnostics"] == summary["diagnostics"]
@@ -939,6 +960,10 @@ def test_write_summary_emits_only_three_result_files(tmp_path) -> None:
     assert run["runsByEval"]["E25"]["supatest"]["tokenUsage"]["scorePercent"] == 0.0
     assert run["runsByEval"]["E25"]["supatest"]["time"]["scorePercent"] == 100.0
     assert run["runsByEval"]["E25"]["supatest"]["overallScorePercent"] == 70.0
+    assert (
+        run["runsByEval"]["E25"]["supatest"]["qaBench"]["capability"]
+        == "test-authoring"
+    )
     assert run["runsByEval"]["E25"]["supatest"]["failureTaxonomy"] == [
         "missing-token-usage"
     ]
@@ -1043,8 +1068,7 @@ def test_write_summary_includes_relative_token_efficiency_and_overall_score(
         in scores
     )
     assert (
-        "| cursor [auto] | 100.0 | 50.0 | 2.0k | 0 | 0 | 85.0 | 1 | 0 | 0 |"
-        in scores
+        "| cursor [auto] | 100.0 | 50.0 | 2.0k | 0 | 0 | 85.0 | 1 | 0 | 0 |" in scores
     )
     assert "Checks Pass" not in scores
     assert "Checks Fail" not in scores
@@ -1195,6 +1219,14 @@ def test_supatest_eval_dashboard_payload_uses_agent_summary_scores() -> None:
     ]
     assert payload["runMetadata"]["reproducibility"]["benchmarkRunId"] == "verify"
     assert "diagnostics" in payload["runMetadata"]
+    assert payload["runMetadata"]["qaBench"]["version"] == "qa-bench-v1"
+    assert payload["runMetadata"]["qaBench"]["evals"]["E25"]["capability"] == (
+        "test-authoring"
+    )
+    assert (
+        "byCapability"
+        in payload["runMetadata"]["qaBench"]["summary"]["byAgent"]["supatest:premium"]
+    )
     assert (
         "Agent | QA Avg | Token Avg" in payload["runMetadata"]["scoreSummaryMarkdown"]
     )
@@ -1547,6 +1579,10 @@ def test_batch_scoring_uses_one_judge_call_and_check_counts(monkeypatch) -> None
                             passedChecks=2,
                             failedChecks=0,
                             reason="All required evidence is present.",
+                            metricScores={
+                                "relevance": 1.0,
+                                "coverage": 0.8,
+                            },
                         )
                     ]
                 ),
@@ -1573,6 +1609,10 @@ def test_batch_scoring_uses_one_judge_call_and_check_counts(monkeypatch) -> None
             "-expect(locator).toBeVisible()\n"
             "+expect(true).toBe(true)\n"
         ),
+        "qaBench": {
+            "metricIds": ["relevance", "coverage"],
+            "weight": 1.0,
+        },
         "passCriteria": ["does A", "does B"],
         "failCriteria": [],
     }
@@ -1592,6 +1632,8 @@ def test_batch_scoring_uses_one_judge_call_and_check_counts(monkeypatch) -> None
     assert scored["scoreSource"] == "batch-judge"
     assert scored["passedChecks"] == 2
     assert scored["failedChecks"] == 0
+    assert scored["qaBench"]["metricScores"] == {"relevance": 1.0, "coverage": 0.8}
+    assert scored["qaBench"]["metricScoreSource"] == "batch-judge"
     assert run_benchmark.format_cell(scored) == "90% (2p/0f) pass"
 
 
