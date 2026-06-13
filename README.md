@@ -306,6 +306,27 @@ Each result in `run.json` also includes deterministic `artifactChecks` and
 actually changed test files, implementation/page files, markdown outputs, noisy
 files only, Supatest memory, verification commands, and rate-limit evidence.
 
+Each result also includes `telemetry` when the agent emits structured JSON or
+NDJSON events. The parser summarizes model/provider hints, turns, SDK duration,
+token/cost counters, tool counts, first tool, first shell command, command
+categories, policy denials, and whether the run wrote files, ran tests, used a
+browser/runtime tool, or asked the user. Malformed JSON lines are counted but do
+not fail the benchmark run. Supatest benchmark launches set
+`SUPATEST_EVAL_TELEMETRY=1` by default; set
+`BENCHMARK_SUPATEST_EVAL_TELEMETRY=0` to disable that diagnostic stream.
+
+Each result includes a `failureTaxonomy` array. These labels are heuristic and
+diagnostic rather than score replacements; examples include `timeout`,
+`agent-error`, `judge-error`, `missing-artifact`, `missing-verification`,
+`grader-fail`, `over-tooling`, `wrong-route`, `env-auth`, and
+`missing-token-usage`.
+
+Run-level `summary.json` and `run.json` include `reproducibility` metadata with
+the benchmark git SHA/branch/dirty state, fixture content hashes, selected agent
+models, timeout/parallelism, prompt profile, judge batch size, and environment
+mode. They also include aggregate `diagnostics` for failure taxonomy counts and
+per-agent tool/first-action summaries.
+
 Each result also includes `tokenUsage` when the agent transcript or usage
 sidecar exposes token data. Known token usage is scored separately from task
 correctness: within each eval, the lowest known token total receives a token
@@ -377,6 +398,8 @@ The `scores.md` aggregate table includes:
 - `QA Avg` - average judge score for correctness
 - `Token Avg` - average relative token-efficiency score
 - `Token Usage` - summed known total tokens
+- `Cache Read` - summed known cached input tokens read by the provider
+- `Cache Create` - summed known cache creation input tokens
 - `Overall Score` - weighted combined score for ranking agents
 - `Pass`, `Partial`, `Fail` - result distribution for each agent
 

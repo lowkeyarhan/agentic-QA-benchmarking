@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
-import json
 import difflib
+import hashlib
+import json
 import os
 import re
 import shutil
@@ -12,6 +13,7 @@ import time
 import traceback
 import urllib.error
 import urllib.request
+from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -95,6 +97,16 @@ DEFAULT_AGENTS = ["supatest", "cursor", "codex", "gemini"]
 DEFAULT_PARALLELISM = 3
 DEFAULT_AGENT_TIMEOUT_SECONDS = 600
 DEFAULT_OVERALL_QA_WEIGHT = 0.7
+FIXTURE_HASH_SKIP_DIRS = {
+    ".git",
+    "node_modules",
+    "dist",
+    "build",
+    "coverage",
+    "playwright-report",
+    "test-results",
+    ".turbo",
+}
 
 
 @dataclass(frozen=True)
@@ -472,6 +484,9 @@ def run_one_case(
     run = run_agent(agent, fixture, project_dir, case_run_dir)
     artifact_checks = build_artifact_checks(fixture, run)
     token_usage = build_token_usage(agent, run.transcript_path, case_run_dir)
+    telemetry = build_eval_telemetry(
+        agent, run.transcript_path, case_run_dir, run.duration_ms
+    )
     changed_diff = build_changed_diff(
         fixture.project_dir, project_dir, run.changed_files
     )
@@ -492,6 +507,8 @@ def run_one_case(
         "artifactChecks": artifact_checks,
         "artifactWarnings": artifact_checks["warnings"],
         "tokenUsage": token_usage,
+        "telemetry": telemetry,
+        "fixtureHash": fixture_content_hash(fixture.eval_id),
         "passCriteria": fixture.pass_criteria,
         "failCriteria": fixture.fail_criteria,
     }
@@ -605,11 +622,467 @@ def build_artifact_checks(fixture, run) -> dict:
     }
 
 
+def empty_eval_telemetry() -> dict:
+    return {
+        "taskKind": None,
+        "harnessProfile": None,
+        "selectedModel": None,
+        "resolvedModel": None,
+        "provider": None,
+        "turns": None,
+        "sdkDurationMs": None,
+        "costUsd": None,
+        "inputTokens": None,
+        "outputTokens": None,
+        "cacheReadTokens": None,
+        "cacheCreationTokens": None,
+        "totalTokens": None,
+        "toolCounts": {},
+        "commandCategories": {},
+        "firstTool": None,
+        "firstShellCommand": None,
+        "didWrite": False,
+        "didRunTests": False,
+        "didUseBrowser": False,
+        "didAskUser": False,
+        "deniedPolicyCount": 0,
+        "eventCount": 0,
+        "eventTypes": {},
+        "malformedJsonLines": 0,
+    }
+
+
+def build_eval_telemetry(
+    agent: str,
+    transcript_path: Path,
+    case_run_dir: Path,
+    duration_ms: int | None = None,
+) -> dict:
+    telemetry = empty_eval_telemetry()
+    telemetry["selectedModel"] = agent_model_label(agent)
+    if duration_ms is not None:
+        telemetry["wallDurationMs"] = duration_ms
+
+    parsed_sources = []
+    for source_name, path in telemetry_candidate_paths(transcript_path, case_run_dir):
+        if not path.exists() or not path.is_file():
+            continue
+        try:
+            text = path.read_text(errors="replace")
+        except OSError:
+            continue
+        if len(text) > 2_000_000:
+            text = text[-2_000_000:]
+        events, malformed_count = parse_structured_events(text)
+        if not events and malformed_count == 0:
+            continue
+        parsed_sources.append(source_name)
+        telemetry["malformedJsonLines"] += malformed_count
+        for event in events:
+            merge_telemetry_event(telemetry, event)
+
+    if parsed_sources:
+        telemetry["source"] = ", ".join(dict.fromkeys(parsed_sources))
+    else:
+        telemetry["source"] = None
+    return telemetry
+
+
+def telemetry_candidate_paths(
+    transcript_path: Path, case_run_dir: Path
+) -> list[tuple[str, Path]]:
+    return [
+        ("transcript", transcript_path),
+        ("run-telemetry-json", case_run_dir / "telemetry.json"),
+        ("run-telemetry-jsonl", case_run_dir / "telemetry.jsonl"),
+        ("run-usage-jsonl", case_run_dir / "usage.jsonl"),
+        ("run-supatest-telemetry-json", case_run_dir / ".supatest" / "telemetry.json"),
+        (
+            "run-supatest-telemetry-jsonl",
+            case_run_dir / ".supatest" / "telemetry.jsonl",
+        ),
+        ("project-telemetry-json", case_run_dir / "project" / "telemetry.json"),
+        ("project-telemetry-jsonl", case_run_dir / "project" / "telemetry.jsonl"),
+        (
+            "project-supatest-telemetry-json",
+            case_run_dir / "project" / ".supatest" / "telemetry.json",
+        ),
+        (
+            "project-supatest-telemetry-jsonl",
+            case_run_dir / "project" / ".supatest" / "telemetry.jsonl",
+        ),
+    ]
+
+
+def parse_structured_events(text: str) -> tuple[list[object], int]:
+    stripped = text.strip()
+    if not stripped:
+        return [], 0
+
+    if stripped.startswith(("{", "[")):
+        try:
+            parsed = json.loads(stripped)
+        except json.JSONDecodeError:
+            pass
+        else:
+            return normalize_event_container(parsed), 0
+
+    events: list[object] = []
+    malformed = 0
+    for line in text.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        if not line.startswith(("{", "[")):
+            continue
+        try:
+            parsed = json.loads(line)
+        except json.JSONDecodeError:
+            malformed += 1
+            continue
+        events.extend(normalize_event_container(parsed))
+    return events, malformed
+
+
+def normalize_event_container(value) -> list[object]:
+    if isinstance(value, list):
+        return value
+    if isinstance(value, dict):
+        for key in ("events", "messages", "items"):
+            nested = value.get(key)
+            if isinstance(nested, list):
+                return nested
+        return [value]
+    return []
+
+
+def merge_telemetry_event(telemetry: dict, event) -> None:
+    if not isinstance(event, dict):
+        return
+
+    telemetry["eventCount"] += 1
+    event_type = normalized_event_type(event)
+    if event_type:
+        event_types = telemetry.setdefault("eventTypes", {})
+        event_types[event_type] = int(event_types.get(event_type, 0)) + 1
+
+    assign_first_string(
+        telemetry, "taskKind", first_nested_string(event, "taskKind", "task_kind")
+    )
+    assign_first_string(
+        telemetry,
+        "harnessProfile",
+        first_nested_string(event, "harnessProfile", "harness_profile"),
+    )
+    assign_first_string(telemetry, "provider", first_nested_string(event, "provider"))
+    assign_model_fields(telemetry, event, event_type)
+    assign_numeric_telemetry_fields(telemetry, event)
+
+    for nested_event in nested_tool_use_events(event):
+        merge_telemetry_event(telemetry, nested_event)
+
+    if is_policy_denial_event(event, event_type):
+        telemetry["deniedPolicyCount"] = (
+            int(telemetry.get("deniedPolicyCount") or 0) + 1
+        )
+
+    if is_ask_user_event(event, event_type):
+        telemetry["didAskUser"] = True
+
+    if not is_tool_use_event(event, event_type):
+        return
+
+    tool_name = extract_tool_name(event) or "unknown"
+    tool_counts = telemetry.setdefault("toolCounts", {})
+    tool_counts[tool_name] = int(tool_counts.get(tool_name, 0)) + 1
+    if not telemetry.get("firstTool"):
+        telemetry["firstTool"] = tool_name
+
+    normalized_tool = normalize_usage_key(tool_name)
+    if normalized_tool in {
+        "write",
+        "edit",
+        "multiedit",
+        "applypatch",
+        "strreplaceeditor",
+    }:
+        telemetry["didWrite"] = True
+    if "browser" in normalized_tool or "playwright" in normalized_tool:
+        telemetry["didUseBrowser"] = True
+    if "ask" in normalized_tool and "user" in normalized_tool:
+        telemetry["didAskUser"] = True
+
+    command = extract_shell_command(event)
+    if command:
+        if not telemetry.get("firstShellCommand"):
+            telemetry["firstShellCommand"] = safe_command_excerpt(command)
+        category = categorize_shell_command(command)
+        if category:
+            command_categories = telemetry.setdefault("commandCategories", {})
+            command_categories[category] = int(command_categories.get(category, 0)) + 1
+        if command_runs_tests(command):
+            telemetry["didRunTests"] = True
+        if command_uses_browser(command):
+            telemetry["didUseBrowser"] = True
+        if command_writes_files(command):
+            telemetry["didWrite"] = True
+
+
+def nested_tool_use_events(event: dict) -> list[dict]:
+    message = event.get("message")
+    if not isinstance(message, dict):
+        return []
+    content = message.get("content")
+    if not isinstance(content, list):
+        return []
+    return [
+        item
+        for item in content
+        if isinstance(item, dict)
+        and str(item.get("type") or "").lower()
+        in {"tool_use", "tool-call", "tool_call"}
+    ]
+
+
+def normalized_event_type(event: dict) -> str | None:
+    for key in ("type", "event", "kind"):
+        value = event.get(key)
+        if isinstance(value, str) and value.strip():
+            subtype = event.get("subtype")
+            if isinstance(subtype, str) and subtype.strip():
+                return f"{value.strip()}/{subtype.strip()}".lower()
+            return value.strip().lower()
+    return None
+
+
+def assign_first_string(telemetry: dict, key: str, value: str | None) -> None:
+    if value and not telemetry.get(key):
+        telemetry[key] = value
+
+
+def assign_model_fields(telemetry: dict, event: dict, event_type: str | None) -> None:
+    selected = first_nested_string(event, "selectedModel", "selected_model")
+    resolved = first_nested_string(event, "resolvedModel", "resolved_model")
+    model = first_nested_string(event, "model")
+
+    if selected and not telemetry.get("selectedModel"):
+        telemetry["selectedModel"] = selected
+    if resolved and not telemetry.get("resolvedModel"):
+        telemetry["resolvedModel"] = resolved
+    if model:
+        if event_type and ("result" in event_type or "final" in event_type):
+            assign_first_string(telemetry, "resolvedModel", model)
+        else:
+            assign_first_string(telemetry, "selectedModel", model)
+
+
+def assign_numeric_telemetry_fields(telemetry: dict, event: dict) -> None:
+    numeric_mappings = {
+        "turns": ("turns", "numTurns", "num_turns", "turnCount", "turn_count"),
+        "sdkDurationMs": (
+            "durationMs",
+            "duration_ms",
+            "sdkDurationMs",
+            "sdk_duration_ms",
+        ),
+        "costUsd": ("costUsd", "cost_usd", "totalCostUsd", "total_cost_usd"),
+        "cacheReadTokens": ("cacheReadInputTokens", "cache_read_input_tokens"),
+        "cacheCreationTokens": (
+            "cacheCreationInputTokens",
+            "cache_creation_input_tokens",
+        ),
+        "contextSeedBytes": ("contextSeedBytes", "context_seed_bytes"),
+        "filesModifiedCount": ("filesModifiedCount", "files_modified_count"),
+    }
+    for target, keys in numeric_mappings.items():
+        value = first_nested_number(event, *keys)
+        if value is None:
+            continue
+        set_max_usage_value(
+            telemetry, target, int(value) if float(value).is_integer() else float(value)
+        )
+
+    usage = parse_token_usage_json(event)
+    token_mappings = {
+        "inputTokens": "inputTokens",
+        "outputTokens": "outputTokens",
+        "totalTokens": "totalTokens",
+    }
+    for telemetry_key, usage_key in token_mappings.items():
+        value = usage.get(usage_key)
+        if value is not None:
+            set_max_usage_value(telemetry, telemetry_key, value)
+
+
+def first_nested_string(value, *keys: str) -> str | None:
+    normalized_keys = {normalize_usage_key(key) for key in keys}
+    for found in walk_nested_values(value, normalized_keys):
+        if isinstance(found, str) and found.strip():
+            return found.strip()
+    return None
+
+
+def first_nested_number(value, *keys: str) -> float | None:
+    normalized_keys = {normalize_usage_key(key) for key in keys}
+    for found in walk_nested_values(value, normalized_keys):
+        number = parse_numeric_value(found)
+        if number is not None:
+            return number
+    return None
+
+
+def walk_nested_values(value, normalized_keys: set[str]):
+    if isinstance(value, dict):
+        for raw_key, raw_value in value.items():
+            if normalize_usage_key(str(raw_key)) in normalized_keys:
+                yield raw_value
+            yield from walk_nested_values(raw_value, normalized_keys)
+    elif isinstance(value, list):
+        for item in value:
+            yield from walk_nested_values(item, normalized_keys)
+
+
+def is_policy_denial_event(event: dict, event_type: str | None) -> bool:
+    haystack = " ".join(
+        str(value)
+        for key, value in event.items()
+        if key.lower() in {"type", "event", "kind", "message", "reason", "code"}
+    ).lower()
+    return bool(
+        (event_type and "policy" in event_type and "den" in event_type)
+        or ("policy" in haystack and ("denied" in haystack or "denial" in haystack))
+    )
+
+
+def is_ask_user_event(event: dict, event_type: str | None) -> bool:
+    if event_type and ("ask" in event_type or "question" in event_type):
+        return True
+    tool_name = extract_tool_name(event)
+    return bool(tool_name and "ask" in normalize_usage_key(tool_name))
+
+
+def is_tool_use_event(event: dict, event_type: str | None) -> bool:
+    if event_type and any(
+        marker in event_type
+        for marker in ("tool_use", "tool-call", "toolcall", "tool_call")
+    ):
+        return True
+    if (
+        event_type
+        and "tool" in event_type
+        and not any(marker in event_type for marker in ("result", "response", "output"))
+    ):
+        return True
+    return extract_tool_name(event) is not None and (
+        "input" in event or "arguments" in event or "args" in event
+    )
+
+
+def extract_tool_name(event: dict) -> str | None:
+    for key in ("toolName", "tool_name", "name", "tool"):
+        value = event.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    for key, tool_name in (
+        ("shellToolCall", "Bash"),
+        ("editToolCall", "Edit"),
+        ("readFileToolCall", "Read"),
+        ("readLintsToolCall", "ReadLints"),
+        ("listDirToolCall", "LS"),
+        ("grepToolCall", "Grep"),
+    ):
+        if key in event:
+            return tool_name
+    for key in ("toolCall", "tool_call", "call"):
+        value = event.get(key)
+        if isinstance(value, dict):
+            nested = extract_tool_name(value)
+            if nested:
+                return nested
+    for value in event.values():
+        if isinstance(value, dict):
+            nested = extract_tool_name(value)
+            if nested:
+                return nested
+    return None
+
+
+def extract_shell_command(event: dict) -> str | None:
+    tool_name = normalize_usage_key(extract_tool_name(event) or "")
+    command = first_nested_string(event, "command", "cmd")
+    if command and (
+        tool_name in {"bash", "shell", "terminal", "command", "runcommand"}
+        or "bash" in tool_name
+        or "shell" in tool_name
+    ):
+        return command
+    return command if looks_like_shell_command(command or "") else None
+
+
+def looks_like_shell_command(command: str) -> bool:
+    return bool(
+        re.match(
+            r"^\s*(git|rg|grep|find|ls|pwd|cat|sed|awk|npm|pnpm|yarn|npx|pytest|python|tsx|node|maestro|wdio|playwright|cypress)\b",
+            command,
+        )
+    )
+
+
+def safe_command_excerpt(command: str, max_chars: int = 240) -> str:
+    redacted = redact_configured_secrets(command)
+    redacted = re.sub(r"Bearer\s+[A-Za-z0-9._~+/=-]+", "Bearer <redacted>", redacted)
+    redacted = re.sub(r"\bcli_[A-Za-z0-9._~+/=-]{16,}", "<redacted-token>", redacted)
+    redacted = re.sub(r"\bsk[-_][A-Za-z0-9._~+/=-]{16,}", "<redacted-token>", redacted)
+    return truncate_text(redacted.strip(), max_chars).replace("\n", " ")
+
+
+def categorize_shell_command(command: str) -> str | None:
+    lower = command.strip().lower()
+    if command_runs_tests(command):
+        return "test"
+    if re.match(r"^(git\s+diff|git\s+show|git\s+status)\b", lower):
+        return "git-read"
+    if re.match(r"^(rg|grep|find)\b", lower):
+        return "search"
+    if re.match(r"^(ls|pwd|cat|sed|awk)\b", lower):
+        return "read"
+    if re.match(r"^(npm|pnpm|yarn)\s+(install|add|i)\b", lower):
+        return "dependency-install"
+    if "maestro" in lower:
+        return "mobile-runtime"
+    return "other"
+
+
+def command_runs_tests(command: str) -> bool:
+    return bool(
+        re.search(
+            r"\b(npx\s+playwright|playwright\s+test|npm\s+(test|run)|pnpm\s+(test|run)|yarn\s+(test|run)|vitest|cypress|wdio|maestro\s+test|pytest)\b",
+            command.lower(),
+        )
+    )
+
+
+def command_uses_browser(command: str) -> bool:
+    lower = command.lower()
+    return "browser" in lower or "playwright open" in lower or "cypress open" in lower
+
+
+def command_writes_files(command: str) -> bool:
+    lower = command.lower()
+    return bool(
+        re.search(
+            r"(^|\s)(touch|tee|apply_patch|mv|cp|npm\s+install|pnpm\s+add)\b", lower
+        )
+        or re.search(r"(^|\s)(>|>>)\s*[^&\s]", command)
+    )
+
+
 def empty_token_usage() -> dict:
     return {
         "inputTokens": None,
         "outputTokens": None,
         "cachedInputTokens": None,
+        "cacheCreationInputTokens": None,
         "totalTokens": None,
         "estimatedCostUsd": None,
         "score": None,
@@ -821,11 +1294,21 @@ def assign_json_usage_value(
     } or (in_usage and key in {"completion", "output", "response"}):
         set_max_usage_value(usage, "outputTokens", int(number))
     elif key in {
+        "cachereadinputtokens",
+        "cachereadinputtoken",
+        "cache_read_input_tokens",
+    }:
+        set_max_usage_value(usage, "cachedInputTokens", int(number))
+    elif key in {
+        "cachecreationinputtokens",
+        "cachecreationinputtoken",
+        "cache_creation_input_tokens",
+    }:
+        set_max_usage_value(usage, "cacheCreationInputTokens", int(number))
+    elif key in {
         "cachedtokens",
         "cachedinputtokens",
         "cacheinputtokens",
-        "cachereadinputtokens",
-        "cachecreationinputtokens",
         "cachedprompttokens",
         "cachedcontenttokens",
         "cachedcontenttokencount",
@@ -939,6 +1422,11 @@ def token_usage_field_for_label(label: str) -> str | None:
     }:
         return "outputTokens"
     if normalized in {
+        "cachecreationinput",
+        "cachecreationinputtokens",
+    }:
+        return "cacheCreationInputTokens"
+    if normalized in {
         "cached",
         "cachedtokens",
         "cachedinput",
@@ -946,8 +1434,6 @@ def token_usage_field_for_label(label: str) -> str | None:
         "cachedcontent",
         "cachereadinput",
         "cachereadinputtokens",
-        "cachecreationinput",
-        "cachecreationinputtokens",
         "cachedcontenttokencount",
     }:
         return "cachedInputTokens"
@@ -985,6 +1471,7 @@ def merge_token_usage(target: dict, source: dict | None) -> bool:
         "inputTokens",
         "outputTokens",
         "cachedInputTokens",
+        "cacheCreationInputTokens",
         "totalTokens",
         "estimatedCostUsd",
     ):
@@ -1019,6 +1506,7 @@ def estimate_token_cost_usd(agent: str, usage: dict) -> float | None:
         ("inputTokens", "INPUT"),
         ("outputTokens", "OUTPUT"),
         ("cachedInputTokens", "CACHED_INPUT"),
+        ("cacheCreationInputTokens", "CACHE_CREATION_INPUT"),
     ):
         rate = token_price_rate(agent, rate_field)
         tokens = usage.get(usage_field)
@@ -1136,8 +1624,7 @@ def apply_overall_scores(results: list[dict]) -> None:
             continue
 
         overall_percent = (
-            float(qa_score) * weights["qa"]
-            + float(token_score) * weights["tokenUsage"]
+            float(qa_score) * weights["qa"] + float(token_score) * weights["tokenUsage"]
         )
         result["overallScorePercent"] = round(overall_percent, 1)
         result["overallScore"] = round(overall_percent / 100, 4)
@@ -1547,6 +2034,8 @@ def write_error_result(
         "timedOut": False,
         "durationMs": 0,
         "tokenUsage": empty_token_usage(),
+        "telemetry": empty_eval_telemetry(),
+        "failureTaxonomy": ["agent-error"],
         "traceback": traceback.format_exc(),
     }
 
@@ -1581,11 +2070,250 @@ def write_blocked_result(
         "timedOut": False,
         "durationMs": 0,
         "tokenUsage": empty_token_usage(),
+        "telemetry": empty_eval_telemetry(),
+        "fixtureHash": fixture_content_hash(fixture.eval_id),
         "projectDir": None,
         "transcriptPath": None,
         "changedFiles": [],
         "passCriteria": fixture.pass_criteria,
         "failCriteria": fixture.fail_criteria,
+    }
+
+
+def apply_failure_taxonomies(results: list[dict]) -> None:
+    for result in results:
+        try:
+            fixture = load_fixture(result["evalId"])
+        except Exception:
+            fixture = None
+        result["failureTaxonomy"] = failure_taxonomy_for_result(result, fixture)
+
+
+def failure_taxonomy_for_result(result: dict, fixture=None) -> list[str]:
+    taxonomy: list[str] = []
+    telemetry = result.get("telemetry") or {}
+    artifact_checks = result.get("artifactChecks") or {}
+    artifact_warnings = (
+        result.get("artifactWarnings") or artifact_checks.get("warnings") or []
+    )
+    reason = str(result.get("reason") or "").lower()
+    score_source = str(result.get("scoreSource") or "")
+    mode = str(result.get("mode") or getattr(fixture, "mode", "") or "")
+
+    if result.get("timedOut"):
+        taxonomy.append("timeout")
+        if (result.get("changedFiles") or []) or (
+            artifact_checks.get("changedRelevantFiles") or []
+        ):
+            taxonomy.append("timeout-with-artifacts")
+        else:
+            taxonomy.append("timeout-no-artifacts")
+        if token_total(result.get("tokenUsage")) is not None:
+            taxonomy.append("timeout-with-token-usage")
+    if score_source in {"harness-error"}:
+        taxonomy.append("agent-error")
+    if score_source in {"judge-error"}:
+        taxonomy.append("judge-error")
+    if score_source == "preflight":
+        taxonomy.append("env-preflight")
+    if result.get("exitCode") not in {None, 0} and result.get("result") == "fail":
+        taxonomy.append("agent-error")
+    if "rate-limit-observed" in artifact_warnings or "rate limit" in reason:
+        taxonomy.append("env-auth")
+    if "verification-command-not-observed" in artifact_warnings:
+        taxonomy.append("missing-verification")
+    if "expected-artifact-change-missing" in artifact_warnings:
+        taxonomy.append("missing-artifact")
+    if "only-noisy-files-changed" in artifact_warnings:
+        taxonomy.append("noisy-artifacts-only")
+    if result.get("failedChecks"):
+        taxonomy.append("grader-fail")
+    if (result.get("tokenUsage") or {}).get("source") is None:
+        taxonomy.append("missing-token-usage")
+
+    if telemetry.get("deniedPolicyCount"):
+        taxonomy.append("policy-denial")
+    if telemetry.get("didAskUser"):
+        taxonomy.append("asked-user")
+
+    over_tooling = bool(
+        telemetry.get("didUseBrowser")
+        or (mode == "plan" and telemetry.get("didRunTests"))
+        or (mode == "plan" and telemetry.get("didWrite"))
+    )
+    if over_tooling:
+        taxonomy.append("over-tooling")
+    if mode == "plan" and (
+        telemetry.get("didRunTests")
+        or telemetry.get("didUseBrowser")
+        or telemetry.get("didWrite")
+    ):
+        taxonomy.append("wrong-route")
+
+    if fixture is not None and expects_artifact_change(fixture):
+        changed_relevant = artifact_checks.get("changedRelevantFiles") or []
+        if result.get("result") == "fail" and not changed_relevant:
+            taxonomy.append("missed-artifact")
+
+    return sorted(dict.fromkeys(taxonomy))
+
+
+def build_reproducibility_metadata(
+    run_id: str,
+    eval_ids: list[str],
+    agents: list[str],
+    parallelism: int,
+    timeout_seconds: int,
+) -> dict:
+    return {
+        "benchmarkRunId": run_id,
+        "benchmarkRoot": str(BENCHMARK_ROOT),
+        "generatedBy": "run_benchmark.py",
+        "git": git_metadata(BENCHMARK_ROOT),
+        "python": {
+            "version": sys.version.split()[0],
+            "executable": sys.executable,
+        },
+        "evalRunner": {
+            "evalIds": eval_ids,
+            "fixtureHashes": {
+                eval_id: fixture_content_hash(eval_id) for eval_id in eval_ids
+            },
+            "parallelism": parallelism,
+            "timeoutSeconds": timeout_seconds,
+            "maxIterations": os.getenv("BENCHMARK_MAX_ITERATIONS"),
+            "judgeBatchSize": os.getenv("BENCHMARK_JUDGE_BATCH_SIZE", "") or None,
+            "promptProfile": os.getenv("BENCHMARK_PROMPT_PROFILE", "qa"),
+            "environmentMode": benchmark_environment_mode(),
+            "telemetryExpected": supatest_eval_telemetry_enabled(),
+            "supatestMachineMode": os.getenv("BENCHMARK_SUPATEST_MACHINE_MODE", "1"),
+        },
+        "agents": {
+            agent: {
+                "family": agent_family(agent),
+                "selectedModel": agent_model_label(agent),
+            }
+            for agent in agents
+        },
+    }
+
+
+def git_metadata(root: Path) -> dict:
+    return {
+        "sha": git_output(root, "rev-parse", "HEAD"),
+        "shortSha": git_output(root, "rev-parse", "--short", "HEAD"),
+        "branch": git_output(root, "rev-parse", "--abbrev-ref", "HEAD"),
+        "dirty": bool(git_output(root, "status", "--porcelain")),
+    }
+
+
+def git_output(root: Path, *args: str) -> str | None:
+    try:
+        completed = subprocess.run(
+            ["git", *args],
+            cwd=root,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            timeout=5,
+        )
+    except Exception:
+        return None
+    if completed.returncode != 0:
+        return None
+    return completed.stdout.strip() or None
+
+
+def fixture_content_hash(eval_id: str) -> str | None:
+    fixture_dir = BENCHMARK_ROOT / "agent-eval-fixtures" / "fixtures" / eval_id
+    if not fixture_dir.exists():
+        return None
+
+    digest = hashlib.sha256()
+    for path in sorted(fixture_dir.rglob("*")):
+        if not path.is_file() or should_skip_fixture_hash(path, fixture_dir):
+            continue
+        relative = path.relative_to(fixture_dir).as_posix()
+        digest.update(relative.encode())
+        digest.update(b"\0")
+        digest.update(path.read_bytes())
+        digest.update(b"\0")
+    return digest.hexdigest()
+
+
+def should_skip_fixture_hash(path: Path, root: Path) -> bool:
+    relative_parts = path.relative_to(root).parts
+    return any(part in FIXTURE_HASH_SKIP_DIRS for part in relative_parts)
+
+
+def benchmark_environment_mode() -> str:
+    if os.getenv("BENCHMARK_OFFLINE") == "1":
+        return "offline"
+    if os.getenv("CI"):
+        return "ci"
+    return "local"
+
+
+def supatest_eval_telemetry_enabled() -> bool:
+    raw = os.getenv(
+        "BENCHMARK_SUPATEST_EVAL_TELEMETRY",
+        os.getenv("SUPATEST_EVAL_TELEMETRY", "1"),
+    ).strip().lower()
+    return raw not in {"0", "false", "no", "off"}
+
+
+def build_diagnostics_summary(results: list[dict]) -> dict:
+    taxonomy = Counter(
+        item for result in results for item in (result.get("failureTaxonomy") or [])
+    )
+    by_agent = {}
+    for agent in sorted(
+        {str(result.get("agent")) for result in results if result.get("agent")}
+    ):
+        agent_results = [result for result in results if result.get("agent") == agent]
+        by_agent[agent] = summarize_agent_diagnostics(agent_results)
+
+    return {
+        "failureTaxonomy": dict(sorted(taxonomy.items())),
+        "byAgent": by_agent,
+    }
+
+
+def summarize_agent_diagnostics(results: list[dict]) -> dict:
+    tool_counts: Counter[str] = Counter()
+    command_categories: Counter[str] = Counter()
+    first_tools: Counter[str] = Counter()
+    turns: list[int] = []
+    for result in results:
+        telemetry = result.get("telemetry") or {}
+        tool_counts.update(telemetry.get("toolCounts") or {})
+        command_categories.update(telemetry.get("commandCategories") or {})
+        if telemetry.get("firstTool"):
+            first_tools[str(telemetry["firstTool"])] += 1
+        if telemetry.get("turns") is not None:
+            turns.append(int(telemetry["turns"]))
+
+    return {
+        "toolCounts": dict(sorted(tool_counts.items())),
+        "commandCategories": dict(sorted(command_categories.items())),
+        "firstTools": dict(sorted(first_tools.items())),
+        "averageTurns": round(sum(turns) / len(turns), 1) if turns else None,
+        "didWrite": sum(
+            1 for result in results if (result.get("telemetry") or {}).get("didWrite")
+        ),
+        "didRunTests": sum(
+            1
+            for result in results
+            if (result.get("telemetry") or {}).get("didRunTests")
+        ),
+        "didUseBrowser": sum(
+            1
+            for result in results
+            if (result.get("telemetry") or {}).get("didUseBrowser")
+        ),
+        "didAskUser": sum(
+            1 for result in results if (result.get("telemetry") or {}).get("didAskUser")
+        ),
     }
 
 
@@ -1602,6 +2330,7 @@ def write_summary(
     apply_token_efficiency_scores(results)
     apply_time_efficiency_scores(results)
     apply_overall_scores(results)
+    apply_failure_taxonomies(results)
     by_key = {(item["evalId"], item["agent"]): item for item in results}
     lines = [
         "| Eval | " + " | ".join(agent_display_name(agent) for agent in agents) + " |",
@@ -1626,6 +2355,10 @@ def write_summary(
     ordered_results = order_results(eval_ids, agents, results)
     generated_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     weights = overall_score_weights()
+    reproducibility = build_reproducibility_metadata(
+        run_id, eval_ids, agents, parallelism, timeout_seconds
+    )
+    diagnostics = build_diagnostics_summary(ordered_results)
     metadata = {
         "runId": run_id,
         "generatedAt": generated_at,
@@ -1638,6 +2371,8 @@ def write_summary(
         "agents": agents,
         "agentModels": {agent: agent_model_label(agent) for agent in agents},
         "toolPolicy": tool_policy_metadata(),
+        "reproducibility": reproducibility,
+        "diagnostics": diagnostics,
         "parallelism": parallelism,
         "timeoutSeconds": timeout_seconds,
         "tokenScoring": {
@@ -1736,12 +2471,17 @@ def build_supatest_eval_dashboard_payload(
     results: list[dict],
 ) -> dict:
     ensure_supatest_dashboard_overall_scores(results)
+    apply_failure_taxonomies(results)
     ordered_results = order_results(eval_ids, agents, results)
     summary_rows = build_agent_score_summary_rows(agents, ordered_results)
     uploaded_rows = [row for row in summary_rows if row["total"] > row["blocked"]]
     uploaded_agents = [row["agent"] for row in uploaded_rows]
     score_summary_markdown = format_agent_score_summary_table(summary_rows)
     weights = overall_score_weights()
+    reproducibility = build_reproducibility_metadata(
+        run_id, eval_ids, agents, parallelism, timeout_seconds
+    )
+    diagnostics = build_diagnostics_summary(ordered_results)
     return {
         "runName": supatest_eval_dashboard_run_name(run_id),
         "runMetadata": {
@@ -1753,6 +2493,8 @@ def build_supatest_eval_dashboard_payload(
                 agent: agent_model_label(agent) for agent in uploaded_agents
             },
             "toolPolicy": tool_policy_metadata(),
+            "reproducibility": reproducibility,
+            "diagnostics": diagnostics,
             "parallelism": parallelism,
             "timeoutSeconds": timeout_seconds,
             "overallScoring": {
@@ -1766,6 +2508,8 @@ def build_supatest_eval_dashboard_payload(
                     "QA Avg",
                     "Token Avg",
                     "Token Usage",
+                    "Cache Read",
+                    "Cache Create",
                     "Overall Score",
                     "Pass",
                     "Partial",
@@ -1790,8 +2534,7 @@ def build_supatest_eval_dashboard_payload(
 
 def ensure_supatest_dashboard_overall_scores(results: list[dict]) -> None:
     needs_overall_score = any(
-        result.get("result") != "blocked"
-        and result.get("overallScorePercent") is None
+        result.get("result") != "blocked" and result.get("overallScorePercent") is None
         for result in results
     )
     if not needs_overall_score:
@@ -1802,7 +2545,9 @@ def ensure_supatest_dashboard_overall_scores(results: list[dict]) -> None:
     apply_overall_scores(results)
 
 
-def build_agent_score_summary_rows(agents: list[str], results: list[dict]) -> list[dict]:
+def build_agent_score_summary_rows(
+    agents: list[str], results: list[dict]
+) -> list[dict]:
     rows = []
     for agent in agents:
         agent_results = [item for item in results if item.get("agent") == agent]
@@ -1838,6 +2583,14 @@ def build_agent_score_summary_rows(agents: list[str], results: list[dict]) -> li
                 "tokenAvg": token_summary["scorePercent"],
                 "tokenUsage": token_summary["totalTokens"],
                 "tokenUsageText": format_token_count(token_summary["totalTokens"]),
+                "cacheReadTokens": token_summary["cachedInputTokens"],
+                "cacheReadTokensText": format_token_count(
+                    token_summary["cachedInputTokens"]
+                ),
+                "cacheCreationTokens": token_summary["cacheCreationInputTokens"],
+                "cacheCreationTokensText": format_token_count(
+                    token_summary["cacheCreationInputTokens"]
+                ),
                 "timeMs": time_summary["averageDurationMs"],
                 "overallScore": overall_summary["scorePercent"],
                 "pass": pass_count,
@@ -1851,8 +2604,8 @@ def build_agent_score_summary_rows(agents: list[str], results: list[dict]) -> li
 
 def format_agent_score_summary_table(rows: list[dict]) -> str:
     lines = [
-        "| Agent | QA Avg | Token Avg | Token Usage | Overall Score | Pass | Partial | Fail |",
-        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+        "| Agent | QA Avg | Token Avg | Token Usage | Cache Read | Cache Create | Overall Score | Pass | Partial | Fail |",
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
     for row in rows:
         lines.append(
@@ -1860,6 +2613,8 @@ def format_agent_score_summary_table(rows: list[dict]) -> str:
             f"{format_optional_number(row['qaAvg'])} | "
             f"{format_optional_number(row['tokenAvg'])} | "
             f"{row['tokenUsageText']} | "
+            f"{row['cacheReadTokensText']} | "
+            f"{row['cacheCreationTokensText']} | "
             f"{format_optional_number(row['overallScore'])} | "
             f"{row['pass']} | {row['partial']} | {row['fail']} |"
         )
@@ -1901,6 +2656,8 @@ def agent_score_summary_description(row: dict) -> str:
         f"QA Avg {format_optional_number(row['qaAvg'])} | "
         f"Token Avg {format_optional_number(row['tokenAvg'])} | "
         f"Token Usage {row['tokenUsageText']} | "
+        f"Cache Read {row['cacheReadTokensText']} | "
+        f"Cache Create {row['cacheCreationTokensText']} | "
         f"Overall Score {format_optional_number(row['overallScore'])} | "
         f"Pass {row['pass']} | Partial {row['partial']} | Fail {row['fail']}"
     )
@@ -1952,6 +2709,9 @@ def supatest_eval_dashboard_result_payload(result: dict) -> dict:
             "scoreDetails": score_details,
             "tokenUsage": result.get("tokenUsage") or empty_token_usage(),
             "time": result.get("time") or empty_time_score(result.get("durationMs")),
+            "telemetry": result.get("telemetry") or empty_eval_telemetry(),
+            "failureTaxonomy": result.get("failureTaxonomy") or [],
+            "fixtureHash": result.get("fixtureHash"),
             "exitCode": result.get("exitCode"),
             "timedOut": result.get("timedOut"),
             "changedFiles": result.get("changedFiles") or [],
@@ -1988,6 +2748,9 @@ def supatest_eval_dashboard_score_details(result: dict) -> dict:
             "inputTokens": token_usage.get("inputTokens"),
             "outputTokens": token_usage.get("outputTokens"),
             "cachedInputTokens": token_usage.get("cachedInputTokens"),
+            "cacheCreationInputTokens": token_usage.get(
+                "cacheCreationInputTokens"
+            ),
             "estimatedCostUsd": token_usage.get("estimatedCostUsd"),
             "source": token_usage.get("source"),
             "warnings": token_usage.get("warnings") or [],
@@ -2032,7 +2795,8 @@ def supatest_eval_dashboard_logs(result: dict, score_details: dict) -> str:
             f"({format_token_count(token_usage.get('totalTokens'))} total tokens, "
             f"input {format_token_count(token_usage.get('inputTokens'))}, "
             f"output {format_token_count(token_usage.get('outputTokens'))}, "
-            f"cached {format_token_count(token_usage.get('cachedInputTokens'))}, "
+            f"cache read {format_token_count(token_usage.get('cachedInputTokens'))}, "
+            f"cache create {format_token_count(token_usage.get('cacheCreationInputTokens'))}, "
             f"cost {format_cost_usd(token_usage.get('estimatedCostUsd'))}, "
             f"basis: {token_usage.get('scoreBasis') or 'n/a'})"
         ),
@@ -2210,6 +2974,8 @@ def summarize_result(result: dict | None) -> dict | None:
         "artifactWarnings": result.get("artifactWarnings") or [],
         "tokenUsage": result.get("tokenUsage") or empty_token_usage(),
         "time": result.get("time") or empty_time_score(result.get("durationMs")),
+        "telemetry": result.get("telemetry") or empty_eval_telemetry(),
+        "failureTaxonomy": result.get("failureTaxonomy") or [],
     }
 
 
@@ -2251,6 +3017,7 @@ def summarize_token_usage(results: list[dict]) -> dict:
             "inputTokens": None,
             "outputTokens": None,
             "cachedInputTokens": None,
+            "cacheCreationInputTokens": None,
             "estimatedCostUsd": None,
         }
 
@@ -2300,6 +3067,19 @@ def summarize_token_usage(results: list[dict]) -> dict:
         "cachedInputTokens": (
             sum(
                 int((result.get("tokenUsage") or {}).get("cachedInputTokens") or 0)
+                for result in known
+            )
+            if known
+            else None
+        ),
+        "cacheCreationInputTokens": (
+            sum(
+                int(
+                    (result.get("tokenUsage") or {}).get(
+                        "cacheCreationInputTokens"
+                    )
+                    or 0
+                )
                 for result in known
             )
             if known

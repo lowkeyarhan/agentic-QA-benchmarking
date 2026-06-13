@@ -75,6 +75,23 @@ def test_agent_environment_hides_benchmark_and_judge_vars(monkeypatch) -> None:
     assert env["NODE_ENV"] == "development"
 
 
+def test_supatest_agent_environment_enables_eval_telemetry_by_default(monkeypatch) -> None:
+    monkeypatch.delenv("BENCHMARK_SUPATEST_EVAL_TELEMETRY", raising=False)
+    monkeypatch.delenv("SUPATEST_EVAL_TELEMETRY", raising=False)
+
+    env = agent_environment("supatest")
+
+    assert env["SUPATEST_EVAL_TELEMETRY"] == "1"
+
+
+def test_supatest_agent_environment_can_disable_eval_telemetry(monkeypatch) -> None:
+    monkeypatch.setenv("BENCHMARK_SUPATEST_EVAL_TELEMETRY", "0")
+
+    env = agent_environment("supatest")
+
+    assert env["SUPATEST_EVAL_TELEMETRY"] == "0"
+
+
 def test_run_agent_records_monotonic_elapsed_duration(tmp_path, monkeypatch) -> None:
     project_dir = tmp_path / "project"
     project_dir.mkdir()
@@ -530,6 +547,7 @@ def test_build_token_usage_reads_supatest_stream_json_result(tmp_path) -> None:
                             "input_tokens": 1000,
                             "output_tokens": 200,
                             "cache_read_input_tokens": 300,
+                            "cache_creation_input_tokens": 50,
                         },
                     }
                 ),
@@ -542,6 +560,7 @@ def test_build_token_usage_reads_supatest_stream_json_result(tmp_path) -> None:
     assert usage["inputTokens"] == 1000
     assert usage["outputTokens"] == 200
     assert usage["cachedInputTokens"] == 300
+    assert usage["cacheCreationInputTokens"] == 50
     assert usage["totalTokens"] == 1200
     assert usage["estimatedCostUsd"] == 0.0123
     assert usage["source"] == "transcript"
@@ -571,6 +590,193 @@ def test_build_token_usage_reads_json_and_estimates_cost(tmp_path, monkeypatch) 
     assert usage["totalTokens"] == 1200
     assert usage["estimatedCostUsd"] == 0.004
     assert usage["source"] == "run-usage-json"
+
+
+def test_eval_telemetry_parser_reads_stream_json_tools_and_usage(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.setenv("BENCHMARK_SUPATEST_MODEL", "premium")
+    transcript = tmp_path / "transcript.log"
+    transcript.write_text(
+        "\n".join(
+            [
+                json.dumps(
+                    {
+                        "type": "system",
+                        "subtype": "init",
+                        "model": "premium",
+                        "provider": "anthropic",
+                        "taskKind": "qa-code-verification",
+                        "harnessProfile": "qa-code-verification:premium",
+                    }
+                ),
+                json.dumps(
+                    {
+                        "type": "tool_use",
+                        "name": "Bash",
+                        "input": {"command": "git diff --name-only"},
+                    }
+                ),
+                json.dumps(
+                    {
+                        "type": "tool_use",
+                        "name": "Bash",
+                        "input": {"command": "npx playwright test tests/cart.spec.ts"},
+                    }
+                ),
+                json.dumps(
+                    {
+                        "type": "tool_use",
+                        "name": "Edit",
+                        "input": {"file_path": "tests/cart.spec.ts"},
+                    }
+                ),
+                json.dumps({"type": "policy_denial", "reason": "Write denied"}),
+                json.dumps(
+                    {
+                        "type": "result",
+                        "duration_ms": 1234,
+                        "num_turns": 3,
+                        "total_cost_usd": 0.01,
+                        "usage": {
+                            "input_tokens": 1000,
+                            "output_tokens": 250,
+                            "cache_read_input_tokens": 400,
+                            "cache_creation_input_tokens": 50,
+                            "total_tokens": 1250,
+                        },
+                    }
+                ),
+                "{not json",
+            ]
+        )
+    )
+
+    telemetry = run_benchmark.build_eval_telemetry(
+        "supatest", transcript, tmp_path, duration_ms=1500
+    )
+
+    assert telemetry["taskKind"] == "qa-code-verification"
+    assert telemetry["harnessProfile"] == "qa-code-verification:premium"
+    assert telemetry["selectedModel"] == "premium"
+    assert telemetry["provider"] == "anthropic"
+    assert telemetry["turns"] == 3
+    assert telemetry["sdkDurationMs"] == 1234
+    assert telemetry["wallDurationMs"] == 1500
+    assert telemetry["costUsd"] == 0.01
+    assert telemetry["inputTokens"] == 1000
+    assert telemetry["outputTokens"] == 250
+    assert telemetry["cacheReadTokens"] == 400
+    assert telemetry["cacheCreationTokens"] == 50
+    assert telemetry["totalTokens"] == 1250
+    assert telemetry["toolCounts"] == {"Bash": 2, "Edit": 1}
+    assert telemetry["commandCategories"] == {"git-read": 1, "test": 1}
+    assert telemetry["firstTool"] == "Bash"
+    assert telemetry["firstShellCommand"] == "git diff --name-only"
+    assert telemetry["didRunTests"] is True
+    assert telemetry["didWrite"] is True
+    assert telemetry["deniedPolicyCount"] == 1
+    assert telemetry["malformedJsonLines"] == 1
+
+
+def test_eval_telemetry_parser_reads_nested_supatest_and_cursor_tool_shapes(
+    tmp_path,
+) -> None:
+    transcript = tmp_path / "transcript.log"
+    transcript.write_text(
+        "\n".join(
+            [
+                json.dumps(
+                    {
+                        "type": "assistant",
+                        "message": {
+                            "role": "assistant",
+                            "content": [
+                                {
+                                    "type": "tool_use",
+                                    "name": "Read",
+                                    "input": {"file_path": "tests/toast.spec.ts"},
+                                },
+                                {
+                                    "type": "tool_use",
+                                    "name": "Bash",
+                                    "input": {
+                                        "command": "npm test -- tests/toast.spec.ts"
+                                    },
+                                },
+                            ],
+                        },
+                    }
+                ),
+                json.dumps(
+                    {
+                        "type": "tool_call",
+                        "subtype": "started",
+                        "tool_call": {
+                            "shellToolCall": {
+                                "args": {
+                                    "command": "rg waitForTimeout pages tests"
+                                }
+                            }
+                        },
+                    }
+                ),
+                json.dumps(
+                    {
+                        "type": "tool_call",
+                        "subtype": "completed",
+                        "tool_call": {
+                            "editToolCall": {
+                                "args": {"path": "pages/InventoryPage.ts"}
+                            }
+                        },
+                    }
+                ),
+            ]
+        )
+    )
+
+    telemetry = run_benchmark.build_eval_telemetry("supatest", transcript, tmp_path)
+
+    assert telemetry["toolCounts"] == {"Read": 1, "Bash": 2, "Edit": 1}
+    assert telemetry["firstTool"] == "Read"
+    assert telemetry["firstShellCommand"] == "npm test -- tests/toast.spec.ts"
+    assert telemetry["commandCategories"] == {"search": 1, "test": 1}
+    assert telemetry["didRunTests"] is True
+    assert telemetry["didWrite"] is True
+
+
+def test_failure_taxonomy_flags_plan_overtooling_and_missing_artifact() -> None:
+    fixture = SimpleNamespace(
+        mode="plan",
+        task="Create a read-only QA plan.",
+        pass_criteria=["Plan includes affected flows"],
+        fail_criteria=[],
+    )
+    result = {
+        "mode": "plan",
+        "result": "fail",
+        "exitCode": 1,
+        "scoreSource": "batch-judge",
+        "failedChecks": 1,
+        "artifactWarnings": ["expected-artifact-change-missing"],
+        "tokenUsage": run_benchmark.empty_token_usage(),
+        "telemetry": {
+            **run_benchmark.empty_eval_telemetry(),
+            "didRunTests": True,
+            "didUseBrowser": True,
+            "didWrite": True,
+        },
+    }
+
+    taxonomy = run_benchmark.failure_taxonomy_for_result(result, fixture)
+
+    assert "agent-error" in taxonomy
+    assert "grader-fail" in taxonomy
+    assert "missing-artifact" in taxonomy
+    assert "missing-token-usage" in taxonomy
+    assert "over-tooling" in taxonomy
+    assert "wrong-route" in taxonomy
 
 
 def test_make_test_case_anonymizes_agent_identity_paths_and_tokens(tmp_path) -> None:
@@ -719,6 +925,10 @@ def test_write_summary_emits_only_three_result_files(tmp_path) -> None:
     assert summary["agentModels"]["supatest"] == "premium"
     assert summary["toolPolicy"]["hiddenHostTools"] == ["rtk"]
     assert run["toolPolicy"] == summary["toolPolicy"]
+    assert summary["reproducibility"]["benchmarkRunId"] == "verify"
+    assert summary["reproducibility"]["evalRunner"]["fixtureHashes"]["E25"]
+    assert summary["diagnostics"]["failureTaxonomy"]["missing-token-usage"] == 1
+    assert run["diagnostics"] == summary["diagnostics"]
     assert summary["summary"]["byAgent"]["supatest"]["pass"] == 1
     assert (
         summary["summary"]["byAgent"]["supatest"]["tokenUsage"]["scorePercent"] == 0.0
@@ -729,6 +939,9 @@ def test_write_summary_emits_only_three_result_files(tmp_path) -> None:
     assert run["runsByEval"]["E25"]["supatest"]["tokenUsage"]["scorePercent"] == 0.0
     assert run["runsByEval"]["E25"]["supatest"]["time"]["scorePercent"] == 100.0
     assert run["runsByEval"]["E25"]["supatest"]["overallScorePercent"] == 70.0
+    assert run["runsByEval"]["E25"]["supatest"]["failureTaxonomy"] == [
+        "missing-token-usage"
+    ]
 
 
 def test_write_summary_creates_missing_results_dir(tmp_path) -> None:
@@ -822,20 +1035,22 @@ def test_write_summary_includes_relative_token_efficiency_and_overall_score(
     scores = (tmp_path / "scores.md").read_text()
 
     assert (
-        "| Agent | QA Avg | Token Avg | Token Usage | Overall Score |"
+        "| Agent | QA Avg | Token Avg | Token Usage | Cache Read | Cache Create | Overall Score |"
         in scores
     )
     assert (
-        "| supatest [premium] | 100.0 | 100.0 | 1.0k | 100.0 | 1 | 0 | 0 |"
+        "| supatest [premium] | 100.0 | 100.0 | 1.0k | 0 | 0 | 100.0 | 1 | 0 | 0 |"
         in scores
     )
     assert (
-        "| cursor [auto] | 100.0 | 50.0 | 2.0k | 85.0 | 1 | 0 | 0 |"
+        "| cursor [auto] | 100.0 | 50.0 | 2.0k | 0 | 0 | 85.0 | 1 | 0 | 0 |"
         in scores
     )
     assert "Checks Pass" not in scores
     assert "Checks Fail" not in scores
     assert "| Token Usage |" in scores
+    assert "| Cache Read |" in scores
+    assert "| Cache Create |" in scores
     assert "Cost USD" not in scores
     assert "$0.0100" not in scores
     assert summary["overallScoring"]["qaWeight"] == 0.7
@@ -978,9 +1193,11 @@ def test_supatest_eval_dashboard_payload_uses_agent_summary_scores() -> None:
         "supatest:premium",
         "cursor:auto",
     ]
-    assert "Agent | QA Avg | Token Avg" in payload["runMetadata"][
-        "scoreSummaryMarkdown"
-    ]
+    assert payload["runMetadata"]["reproducibility"]["benchmarkRunId"] == "verify"
+    assert "diagnostics" in payload["runMetadata"]
+    assert (
+        "Agent | QA Avg | Token Avg" in payload["runMetadata"]["scoreSummaryMarkdown"]
+    )
     assert payload["runMetadata"]["scoreSummary"]["rows"][0]["overallScore"] == 98.5
     assert payload["runMetadata"]["scoreSummary"]["rows"][1]["agent"] == "cursor:auto"
     assert len(payload["results"]) == 2
@@ -991,15 +1208,19 @@ def test_supatest_eval_dashboard_payload_uses_agent_summary_scores() -> None:
     assert uploaded["evalCategory"] == "Agent Summary"
     assert uploaded["score"] == 98.5
     assert uploaded["durationMs"] == 1234
-    assert "| supatest [premium] | 100.0 | 95.0 | 1.0k | 98.5 | 1 | 0 | 0 |" in uploaded[
-        "logs"
-    ]
-    assert "| cursor [auto] | 100.0 | 95.0 | 1.0k | 90.0 | 1 | 0 | 0 |" in uploaded[
-        "logs"
-    ]
+    assert (
+        "| supatest [premium] | 100.0 | 95.0 | 1.0k | 0 | 0 | 98.5 | 1 | 0 | 0 |"
+        in uploaded["logs"]
+    )
+    assert (
+        "| cursor [auto] | 100.0 | 95.0 | 1.0k | 0 | 0 | 90.0 | 1 | 0 | 0 |"
+        in uploaded["logs"]
+    )
     assert uploaded["metadata"]["scoreSummary"]["agent"] == "supatest:premium"
     assert uploaded["metadata"]["scoreSummary"]["overallScore"] == 98.5
     assert uploaded["metadata"]["scoreSummary"]["tokenUsageText"] == "1.0k"
+    assert uploaded["metadata"]["scoreSummary"]["cacheReadTokensText"] == "0"
+    assert uploaded["metadata"]["scoreSummary"]["cacheCreationTokensText"] == "0"
     assert by_eval_id["summary:cursor-auto"]["evalCategory"] == "Agent Summary"
     assert by_eval_id["summary:cursor-auto"]["score"] == 90.0
 

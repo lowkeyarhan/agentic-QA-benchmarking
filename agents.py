@@ -367,7 +367,19 @@ def agent_environment(agent: str | None = None) -> dict[str, str]:
         with_local_tool_paths(env.get("PATH", "")),
         hidden_host_tools(),
     )
+    if agent and agent_family(agent) == "supatest":
+        env["SUPATEST_EVAL_TELEMETRY"] = (
+            "1" if benchmark_supatest_eval_telemetry_enabled() else "0"
+        )
     return env
+
+
+def benchmark_supatest_eval_telemetry_enabled() -> bool:
+    raw = os.getenv(
+        "BENCHMARK_SUPATEST_EVAL_TELEMETRY",
+        os.getenv("SUPATEST_EVAL_TELEMETRY", "1"),
+    ).strip().lower()
+    return raw not in {"0", "false", "no", "off"}
 
 
 def with_local_tool_paths(path_value: str) -> str:
