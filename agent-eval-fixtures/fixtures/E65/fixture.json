@@ -21,6 +21,19 @@
     "No assets (screenshots/videos) in the report - asset capturing is mandatory for automation"
   ],
   "tier": 3,
+  "qaBench": {
+    "capability": "feature-validation",
+    "metricIds": [
+      "relevance",
+      "coverage",
+      "assertion_quality",
+      "test_integrity",
+      "evidence_quality",
+      "reporting_quality",
+      "maintainability"
+    ],
+    "difficulty": "medium"
+  },
   "baseTemplate": "playwright-ts-full",
   "modifications": [],
   "generatedAt": "2026-02-17T00:00:00.000Z"

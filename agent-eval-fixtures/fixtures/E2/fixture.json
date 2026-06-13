@@ -12,6 +12,17 @@
     "Agent immediately asks for credentials without browsing first"
   ],
   "tier": 3,
+  "qaBench": {
+    "capability": "browser-context",
+    "metricIds": [
+      "relevance",
+      "coverage",
+      "evidence_quality",
+      "selector_strategy",
+      "maintainability"
+    ],
+    "difficulty": "medium"
+  },
   "baseTemplate": "playwright-ts-blank",
   "modifications": [],
   "generatedAt": "2026-06-11T13:21:03.598Z"

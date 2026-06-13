@@ -21,6 +21,20 @@
     "No assets (screenshots/videos) in the report - asset capturing is expected for both phases"
   ],
   "tier": 4,
+  "qaBench": {
+    "capability": "feature-validation",
+    "metricIds": [
+      "relevance",
+      "coverage",
+      "assertion_quality",
+      "test_integrity",
+      "evidence_quality",
+      "reporting_quality",
+      "manual_workflow",
+      "maintainability"
+    ],
+    "difficulty": "medium"
+  },
   "baseTemplate": "playwright-ts-full",
   "modifications": [],
   "generatedAt": "2026-02-17T00:00:00.000Z"

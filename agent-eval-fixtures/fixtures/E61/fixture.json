@@ -20,6 +20,18 @@
     "Hallucinates additional work not in session context"
   ],
   "tier": 3,
+  "qaBench": {
+    "capability": "reporting-and-evidence",
+    "metricIds": [
+      "relevance",
+      "coverage",
+      "reporting_quality",
+      "root_cause_accuracy",
+      "evidence_quality",
+      "test_integrity"
+    ],
+    "difficulty": "medium"
+  },
   "baseTemplate": "playwright-ts-full",
   "modifications": [],
   "generatedAt": "2026-02-17T00:00:00.000Z"

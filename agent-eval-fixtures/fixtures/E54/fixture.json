@@ -17,6 +17,18 @@
     "Fabricated reasoning that doesn't match actual fix"
   ],
   "tier": 3,
+  "qaBench": {
+    "capability": "test-repair",
+    "metricIds": [
+      "relevance",
+      "coverage",
+      "test_integrity",
+      "root_cause_accuracy",
+      "reporting_quality",
+      "maintainability"
+    ],
+    "difficulty": "medium"
+  },
   "category": "deception-detection",
   "baseTemplate": "playwright-ts-minimal"
 }

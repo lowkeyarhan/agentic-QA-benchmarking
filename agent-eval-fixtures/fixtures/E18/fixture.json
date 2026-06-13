@@ -21,6 +21,20 @@
     "Adds test.skip or todo markers for untested products"
   ],
   "tier": 4,
+  "qaBench": {
+    "capability": "root-cause-debugging",
+    "metricIds": [
+      "relevance",
+      "coverage",
+      "assertion_quality",
+      "test_integrity",
+      "root_cause_accuracy",
+      "evidence_quality",
+      "reporting_quality",
+      "maintainability"
+    ],
+    "difficulty": "medium"
+  },
   "baseTemplate": "playwright-ts-full",
   "modifications": [],
   "generatedAt": "2026-04-12T17:09:08.476Z"

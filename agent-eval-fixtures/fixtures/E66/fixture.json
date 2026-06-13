@@ -19,6 +19,18 @@
     "Ignores the 'manual only' instruction"
   ],
   "tier": 3,
+  "qaBench": {
+    "capability": "feature-validation",
+    "metricIds": [
+      "relevance",
+      "coverage",
+      "manual_workflow",
+      "evidence_quality",
+      "reporting_quality",
+      "test_integrity"
+    ],
+    "difficulty": "medium"
+  },
   "baseTemplate": "playwright-ts-full",
   "modifications": [],
   "generatedAt": "2026-02-17T00:00:00.000Z"

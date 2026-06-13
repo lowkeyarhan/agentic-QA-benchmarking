@@ -424,23 +424,27 @@ def test_documented_tier_difficulty_mapping() -> None:
     assert difficulty_for_tier(11) == "max"
 
 
-def test_low_fixtures_have_explicit_qa_bench_metadata() -> None:
+def test_low_and_medium_fixtures_have_explicit_qa_bench_metadata() -> None:
     fixtures = [load_fixture(eval_id) for eval_id in available_eval_ids()]
-    low_fixtures = [fixture for fixture in fixtures if fixture.tier in {1, 2}]
+    covered_fixtures = [
+        fixture
+        for fixture in fixtures
+        if difficulty_for_tier(fixture.tier) in {"low", "medium"}
+    ]
 
-    assert len(low_fixtures) == 20
-    for fixture in low_fixtures:
+    assert len(covered_fixtures) == 40
+    for fixture in covered_fixtures:
         eval_id = fixture.eval_id
         explicit = fixture.qa_bench
         metadata = eval_metadata(fixture)
 
         assert explicit is not None, eval_id
-        assert explicit["difficulty"] == "low", eval_id
+        assert explicit["difficulty"] == difficulty_for_tier(fixture.tier), eval_id
         assert explicit["capability"] in QA_BENCH_CAPABILITIES, eval_id
         assert explicit["metricIds"], eval_id
         assert set(explicit["metricIds"]) <= set(QA_BENCH_METRICS), eval_id
         assert metadata["metadataSource"] == "fixture", eval_id
-        assert metadata["difficulty"] == "low", eval_id
+        assert metadata["difficulty"] == explicit["difficulty"], eval_id
         assert metadata["capability"] == explicit["capability"], eval_id
         assert metadata["metricIds"] == explicit["metricIds"], eval_id
 

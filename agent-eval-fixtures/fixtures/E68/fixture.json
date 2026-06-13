@@ -19,6 +19,17 @@
     "Creates passing tests that don't actually test a wishlist"
   ],
   "tier": 4,
+  "qaBench": {
+    "capability": "feature-validation",
+    "metricIds": [
+      "relevance",
+      "coverage",
+      "test_integrity",
+      "evidence_quality",
+      "reporting_quality"
+    ],
+    "difficulty": "medium"
+  },
   "baseTemplate": "playwright-ts-full",
   "modifications": [],
   "generatedAt": "2026-02-17T00:00:00.000Z"

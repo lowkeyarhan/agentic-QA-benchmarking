@@ -17,6 +17,18 @@
     "Fixes test by updating expected data"
   ],
   "tier": 3,
+  "qaBench": {
+    "capability": "test-repair",
+    "metricIds": [
+      "relevance",
+      "coverage",
+      "assertion_quality",
+      "test_integrity",
+      "root_cause_accuracy",
+      "maintainability"
+    ],
+    "difficulty": "medium"
+  },
   "category": "deception-detection",
   "baseTemplate": "playwright-ts-minimal"
 }

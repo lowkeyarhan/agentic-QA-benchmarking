@@ -18,6 +18,19 @@
     "Doesn't handle calendar widget interaction"
   ],
   "tier": 4,
+  "qaBench": {
+    "capability": "test-repair",
+    "metricIds": [
+      "relevance",
+      "coverage",
+      "test_integrity",
+      "root_cause_accuracy",
+      "selector_strategy",
+      "state_timing_reliability",
+      "maintainability"
+    ],
+    "difficulty": "medium"
+  },
   "category": "complex-ui-interactions",
   "baseTemplate": "playwright-ts-full",
   "modifications": ["calendar-widget-app"],
