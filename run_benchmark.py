@@ -64,11 +64,15 @@ load_dotenv(
 )
 
 from agents import (  # noqa: E402
+    AgentRunResult,
     agent_display_name,
     agent_family,
     agent_model_label,
     agent_run_dir_name,
+    changed_file_excerpt,
+    diff_snapshots,
     run_agent,
+    snapshot_files,
     tool_policy_metadata,
 )
 import benchmark_judge as benchmark_judge_module  # noqa: E402
@@ -91,6 +95,7 @@ from benchmark_judge import (  # noqa: E402
     apply_time_efficiency_scores,
     build_batch_judge_prompt,
     batch_judge_results as _batch_judge_results,
+    configured_judge_batch_size,
     empty_time_score,
     mark_unscored,
     overall_score_weights,
@@ -144,6 +149,7 @@ DEFAULT_EVAL_IDS = "suite:qa-production"
 DEFAULT_AGENTS = ["supatest", "cursor", "codex", "gemini"]
 DEFAULT_PARALLELISM = 3
 DEFAULT_AGENT_TIMEOUT_SECONDS = 600
+PENDING_RESULT_FILE = "pending-result.json"
 FIXTURE_HASH_SKIP_DIRS = {
     ".git",
     "node_modules",
@@ -163,7 +169,10 @@ class PendingResult:
 
 
 def main() -> int:
-    run_id = os.getenv("BENCHMARK_RUN_ID", time.strftime("%Y%m%d-%H%M%S"))
+    score_existing_run_id = score_existing_run_id_from_args()
+    run_id = score_existing_run_id or os.getenv(
+        "BENCHMARK_RUN_ID", time.strftime("%Y%m%d-%H%M%S")
+    )
     eval_ids = selected_eval_ids()
     agents = csv_env("BENCHMARK_AGENTS", DEFAULT_AGENTS)
     parallelism = int(os.getenv("BENCHMARK_PARALLELISM", str(DEFAULT_PARALLELISM)))
@@ -195,6 +204,32 @@ def main() -> int:
     case_ids = {
         eval_id: f"case-{index + 1:03d}" for index, eval_id in enumerate(eval_ids)
     }
+    if score_existing_run_id:
+        print(f"Recovery mode: scoring existing artifacts from {runs_dir}")
+        print()
+        if os.getenv("BENCHMARK_DISABLE_JUDGE_PREFLIGHT") != "1":
+            judge_issue = preflight_judge_model()
+            if judge_issue:
+                print(f"Judge preflight failed: {judge_issue}")
+                print(
+                    "Fix DEEPEVAL_JUDGE_PROVIDER and the matching judge API key, or set "
+                    "BENCHMARK_DISABLE_JUDGE_PREFLIGHT=1 to bypass this guard."
+                )
+                return 2
+        if results_dir.exists():
+            shutil.rmtree(results_dir)
+        results_dir.mkdir(parents=True, exist_ok=True)
+        return score_existing_run(
+            run_id,
+            runs_dir,
+            results_dir,
+            eval_ids,
+            agents,
+            case_ids,
+            parallelism,
+            int(os.environ["BENCHMARK_TIMEOUT_SECONDS"]),
+        )
+
     preflight_issues: dict[str, PreflightIssue] = {}
     if not is_dry_run and os.getenv("BENCHMARK_DISABLE_PREFLIGHT") != "1":
         device_cache: dict[str, PreflightIssue | None] = {}
@@ -409,13 +444,34 @@ def run_one_case(
     project_dir = copy_project(fixture, case_run_dir)
 
     run = run_agent(agent, fixture, project_dir, case_run_dir)
+    result, changed_diff = result_from_agent_run(
+        run_id,
+        fixture,
+        agent,
+        case_id,
+        run,
+        case_run_dir,
+    )
+    write_pending_result(case_run_dir, result)
+    return PendingResult(result, make_test_case(fixture, run, changed_diff))
+
+
+def result_from_agent_run(
+    run_id: str,
+    fixture,
+    agent: str,
+    case_id: str,
+    run: AgentRunResult,
+    case_run_dir: Path,
+    recovery: dict | None = None,
+) -> tuple[dict, str]:
     artifact_checks = build_artifact_checks(fixture, run)
     token_usage = build_token_usage(agent, run.transcript_path, case_run_dir)
     telemetry = build_eval_telemetry(
         agent, run.transcript_path, case_run_dir, run.duration_ms
     )
     changed_diff = build_changed_diff(
-        fixture.project_dir, project_dir, run.changed_files
+        fixture.project_dir, run.project_dir, run.changed_files
     )
     result = {
         "runId": run_id,
@@ -440,8 +496,225 @@ def run_one_case(
         "passCriteria": fixture.pass_criteria,
         "failCriteria": fixture.fail_criteria,
     }
+    if recovery:
+        result["recovery"] = recovery
 
+    return result, changed_diff
+
+
+def write_pending_result(case_run_dir: Path, result: dict) -> None:
+    pending_path = case_run_dir / PENDING_RESULT_FILE
+    pending_path.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n")
+
+
+def score_existing_run(
+    run_id: str,
+    runs_dir: Path,
+    results_dir: Path,
+    eval_ids: list[str],
+    agents: list[str],
+    case_ids: dict[str, str],
+    parallelism: int,
+    timeout_seconds: int,
+) -> int:
+    pending_results: list[PendingResult] = []
+    missing: list[str] = []
+    for eval_id in eval_ids:
+        fixture = load_fixture(eval_id)
+        case_id = case_ids[eval_id]
+        for agent in agents:
+            case_run_dir = runs_dir / case_id / agent_run_dir_name(agent)
+            if not case_run_dir.exists():
+                missing.append(f"{case_id}/{agent_run_dir_name(agent)}")
+                continue
+            try:
+                pending_results.append(
+                    recover_pending_result(run_id, fixture, agent, case_id, case_run_dir)
+                )
+            except FileNotFoundError:
+                missing.append(f"{case_id}/{agent_run_dir_name(agent)}")
+
+    if missing:
+        print("Cannot recover run; missing artifact directories/files:")
+        for item in missing:
+            print(f"  {item}")
+        return 2
+
+    if not pending_results:
+        print("Cannot recover run; no completed agent artifacts were found.")
+        return 2
+
+    batch_size = configured_judge_batch_size(len(pending_results))
+    if batch_size:
+        print(
+            f"Scoring {len(pending_results)} recovered runs with judge batches "
+            f"of {batch_size}..."
+        )
+    else:
+        print(f"Scoring {len(pending_results)} recovered runs with one judge call...")
+    results = score_pending_results(
+        run_id,
+        pending_results,
+        run_eval_ids=eval_ids,
+        run_agents=agents,
+    )
+    print()
+    print("Scores:")
+    for result in order_results(eval_ids, agents, results):
+        print(format_score_line(result))
+
+    write_summary(
+        results_dir, run_id, eval_ids, agents, parallelism, timeout_seconds, results
+    )
+    dashboard_issue = upload_supatest_eval_dashboard(
+        run_id, eval_ids, agents, parallelism, timeout_seconds, results
+    )
+    print()
+    print(f"Results: {results_dir}")
+    print(f"Summary: {results_dir / 'scores.md'}")
+    print(f"Combined JSON: {results_dir / 'run.json'}")
+    if dashboard_issue:
+        print(f"Supatest eval dashboard upload failed: {dashboard_issue}")
+        if os.getenv("BENCHMARK_SUPATEST_EVAL_DASHBOARD_STRICT") == "1":
+            return 3
+    return 0
+
+
+def recover_pending_result(
+    run_id: str,
+    fixture,
+    agent: str,
+    case_id: str,
+    case_run_dir: Path,
+) -> PendingResult:
+    pending_path = case_run_dir / PENDING_RESULT_FILE
+    if pending_path.exists():
+        result = json.loads(pending_path.read_text())
+        run = agent_run_from_result(fixture, agent, case_run_dir, result)
+        result.setdefault(
+            "recovery",
+            {
+                "source": PENDING_RESULT_FILE,
+                "missingWallDuration": False,
+            },
+        )
+        return PendingResult(
+            result,
+            make_test_case(fixture, run, str(result.get("changedDiff") or "")),
+        )
+
+    run = reconstruct_agent_run_from_artifacts(fixture, agent, case_run_dir)
+    result, changed_diff = result_from_agent_run(
+        run_id,
+        fixture,
+        agent,
+        case_id,
+        run,
+        case_run_dir,
+        recovery={
+            "source": "run-artifacts",
+            "missingWallDuration": run.duration_ms <= 0,
+            "missingExitCode": run.exit_code == 0 and not run.timed_out,
+        },
+    )
     return PendingResult(result, make_test_case(fixture, run, changed_diff))
+
+
+def agent_run_from_result(
+    fixture,
+    agent: str,
+    case_run_dir: Path,
+    result: dict,
+) -> AgentRunResult:
+    project_dir = Path(result.get("projectDir") or case_run_dir / "project")
+    transcript_path = Path(
+        result.get("transcriptPath") or case_run_dir / "transcript.log"
+    )
+    changed_files = list(result.get("changedFiles") or [])
+    return AgentRunResult(
+        agent=agent,
+        eval_id=fixture.eval_id,
+        project_dir=project_dir,
+        transcript_path=transcript_path,
+        exit_code=int(result.get("exitCode") or 0),
+        duration_ms=int(result.get("durationMs") or 0),
+        timed_out=bool(result.get("timedOut")),
+        changed_files=changed_files,
+        changed_file_excerpt=changed_file_excerpt(project_dir, changed_files),
+    )
+
+
+def reconstruct_agent_run_from_artifacts(
+    fixture,
+    agent: str,
+    case_run_dir: Path,
+) -> AgentRunResult:
+    project_dir = case_run_dir / "project"
+    transcript_path = case_run_dir / "transcript.log"
+    if not project_dir.exists() or not transcript_path.exists():
+        raise FileNotFoundError(str(case_run_dir))
+
+    changed_files = diff_snapshots(
+        snapshot_files(fixture.project_dir),
+        snapshot_files(project_dir),
+    )
+    transcript = transcript_path.read_text(errors="replace")
+    timeout_match = re.search(r"Timed out after\s+(\d+)s", transcript)
+    timed_out = timeout_match is not None
+    duration_ms = (
+        int(timeout_match.group(1)) * 1000
+        if timeout_match
+        else infer_duration_ms_from_transcript(transcript)
+    )
+    exit_code = 124 if timed_out else 0
+    return AgentRunResult(
+        agent=agent,
+        eval_id=fixture.eval_id,
+        project_dir=project_dir,
+        transcript_path=transcript_path,
+        exit_code=exit_code,
+        duration_ms=duration_ms,
+        timed_out=timed_out,
+        changed_files=changed_files,
+        changed_file_excerpt=changed_file_excerpt(project_dir, changed_files),
+    )
+
+
+def infer_duration_ms_from_transcript(transcript: str) -> int:
+    durations: list[int] = []
+    for line in transcript.splitlines():
+        line = line.strip()
+        if not line.startswith("{"):
+            continue
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(event, dict):
+            continue
+        for value in possible_duration_values(event):
+            if value is not None:
+                durations.append(value)
+    return durations[-1] if durations else 0
+
+
+def possible_duration_values(event: dict) -> list[int | None]:
+    values = [
+        duration_value(event.get("duration_ms")),
+        duration_value(event.get("durationMs")),
+    ]
+    stats = event.get("stats")
+    if isinstance(stats, dict):
+        values.append(duration_value(stats.get("duration_ms")))
+        values.append(duration_value(stats.get("durationMs")))
+    return values
+
+
+def duration_value(value) -> int | None:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def write_error_result(
@@ -973,15 +1246,16 @@ def build_supatest_eval_dashboard_payload(
             "scoreSummary": {
                 "columns": [
                     "Agent",
-                    "QA Avg",
-                    "Token Avg",
-                    "Token Usage",
-                    "Cache Read",
-                    "Cache Create",
-                    "Overall Score",
-                    "Pass",
-                    "Partial",
-                    "Fail",
+                    "QA",
+                    "Tok",
+                    "Used",
+                    "Cache R",
+                    "Cache W",
+                    "Time",
+                    "Overall",
+                    "P",
+                    "Part",
+                    "F",
                 ],
                 "rows": summary_rows,
             },
@@ -1060,6 +1334,9 @@ def build_agent_score_summary_rows(
                     token_summary["cacheCreationInputTokens"]
                 ),
                 "timeMs": time_summary["averageDurationMs"],
+                "timeText": format_duration_ms(time_summary["averageDurationMs"]),
+                "totalTimeMs": time_summary["totalDurationMs"],
+                "totalTimeText": format_duration_ms(time_summary["totalDurationMs"]),
                 "overallScore": overall_summary["scorePercent"],
                 "pass": pass_count,
                 "partial": partial_count,
@@ -1072,8 +1349,8 @@ def build_agent_score_summary_rows(
 
 def format_agent_score_summary_table(rows: list[dict]) -> str:
     lines = [
-        "| Agent | QA Avg | Token Avg | Token Usage | Cache Read | Cache Create | Overall Score | Pass | Partial | Fail |",
-        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+        "| Agent | QA | Tok | Used | Cache R | Cache W | Time | Overall | P | Part | F |",
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
     for row in rows:
         lines.append(
@@ -1083,6 +1360,7 @@ def format_agent_score_summary_table(rows: list[dict]) -> str:
             f"{row['tokenUsageText']} | "
             f"{row['cacheReadTokensText']} | "
             f"{row['cacheCreationTokensText']} | "
+            f"{row['totalTimeText']} | "
             f"{format_optional_number(row['overallScore'])} | "
             f"{row['pass']} | {row['partial']} | {row['fail']} |"
         )
@@ -1121,13 +1399,14 @@ def supatest_eval_dashboard_agent_summary_payload(
 
 def agent_score_summary_description(row: dict) -> str:
     return (
-        f"QA Avg {format_optional_number(row['qaAvg'])} | "
-        f"Token Avg {format_optional_number(row['tokenAvg'])} | "
-        f"Token Usage {row['tokenUsageText']} | "
-        f"Cache Read {row['cacheReadTokensText']} | "
-        f"Cache Create {row['cacheCreationTokensText']} | "
-        f"Overall Score {format_optional_number(row['overallScore'])} | "
-        f"Pass {row['pass']} | Partial {row['partial']} | Fail {row['fail']}"
+        f"QA {format_optional_number(row['qaAvg'])} | "
+        f"Tok {format_optional_number(row['tokenAvg'])} | "
+        f"Used {row['tokenUsageText']} | "
+        f"Cache R {row['cacheReadTokensText']} | "
+        f"Cache W {row['cacheCreationTokensText']} | "
+        f"Time {row['totalTimeText']} | "
+        f"Overall {format_optional_number(row['overallScore'])} | "
+        f"P {row['pass']} | Part {row['partial']} | F {row['fail']}"
     )
 
 
@@ -1713,6 +1992,24 @@ def csv_env(name: str, default: list[str]) -> list[str]:
     if not raw:
         return default
     return [item.strip() for item in raw.split(",") if item.strip()]
+
+
+def score_existing_run_id_from_args() -> str | None:
+    env_value = (os.getenv("BENCHMARK_SCORE_EXISTING_RUN_ID") or "").strip()
+    if env_value:
+        return env_value
+
+    for index, arg in enumerate(sys.argv[1:], start=1):
+        if arg == "--score-existing":
+            if index + 1 >= len(sys.argv):
+                raise ValueError("--score-existing requires a run id.")
+            return sys.argv[index + 1]
+        if arg.startswith("--score-existing="):
+            value = arg.split("=", 1)[1].strip()
+            if not value:
+                raise ValueError("--score-existing requires a run id.")
+            return value
+    return None
 
 
 def requested_eval_ids_label() -> str:

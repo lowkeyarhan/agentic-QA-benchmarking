@@ -10,6 +10,7 @@ import agents
 from deepeval.test_case import LLMTestCase
 
 from agents import (
+    AgentRunResult,
     agent_command_env_name,
     agent_display_name,
     agent_environment,
@@ -132,6 +133,75 @@ def test_run_agent_records_monotonic_elapsed_duration(tmp_path, monkeypatch) -> 
 
     assert result.duration_ms == 2500
     assert result.transcript_path.read_text() == "done\n"
+
+
+def test_run_one_case_checkpoints_pending_result(tmp_path, monkeypatch) -> None:
+    runs_dir = tmp_path / "runs"
+
+    def fake_run_agent(agent, fixture, project_dir, output_dir):
+        test_path = project_dir / "tests" / "checkpoint.spec.ts"
+        test_path.parent.mkdir(exist_ok=True)
+        test_path.write_text("import { test } from '@playwright/test';\n")
+        transcript_path = output_dir / "transcript.log"
+        transcript_path.write_text("finished\n")
+        return AgentRunResult(
+            agent=agent,
+            eval_id=fixture.eval_id,
+            project_dir=project_dir,
+            transcript_path=transcript_path,
+            exit_code=0,
+            duration_ms=1234,
+            timed_out=False,
+            changed_files=["tests/checkpoint.spec.ts"],
+            changed_file_excerpt="--- tests/checkpoint.spec.ts ---\nimport { test }",
+        )
+
+    monkeypatch.setattr(run_benchmark, "run_agent", fake_run_agent)
+
+    pending = run_benchmark.run_one_case(
+        "checkpoint-run", runs_dir, "E1", "supatest", "case-001"
+    )
+    pending_path = (
+        runs_dir
+        / "case-001"
+        / agent_run_dir_name("supatest")
+        / run_benchmark.PENDING_RESULT_FILE
+    )
+    saved = json.loads(pending_path.read_text())
+
+    assert pending.result["durationMs"] == 1234
+    assert saved["evalId"] == "E1"
+    assert saved["agent"] == "supatest"
+    assert saved["changedFiles"] == ["tests/checkpoint.spec.ts"]
+
+
+def test_score_existing_run_id_from_args(monkeypatch) -> None:
+    monkeypatch.delenv("BENCHMARK_SCORE_EXISTING_RUN_ID", raising=False)
+    monkeypatch.setattr(
+        run_benchmark.sys,
+        "argv",
+        ["run_benchmark.py", "--score-existing", "20260613-235343"],
+    )
+
+    assert run_benchmark.score_existing_run_id_from_args() == "20260613-235343"
+
+
+def test_run_benchmark_exposes_judge_batch_size_helper(monkeypatch) -> None:
+    monkeypatch.delenv("BENCHMARK_JUDGE_BATCH_SIZE", raising=False)
+
+    assert run_benchmark.configured_judge_batch_size(3) == 0
+
+
+def test_infer_duration_ms_from_structured_transcript() -> None:
+    transcript = "\n".join(
+        [
+            "plain text",
+            json.dumps({"type": "result", "duration_ms": 43935}),
+            json.dumps({"type": "result", "stats": {"duration_ms": 1234}}),
+        ]
+    )
+
+    assert run_benchmark.infer_duration_ms_from_transcript(transcript) == 1234
 
 
 def test_local_mobile_tool_paths_are_added_when_present(tmp_path, monkeypatch) -> None:
@@ -1139,21 +1209,23 @@ def test_write_summary_includes_relative_token_efficiency_and_overall_score(
     scores = (tmp_path / "scores.md").read_text()
 
     assert (
-        "| Agent | QA Avg | Token Avg | Token Usage | Cache Read | Cache Create | Overall Score |"
+        "| Agent | QA | Tok | Used | Cache R | Cache W | Time | Overall | P | Part | F |"
         in scores
     )
     assert (
-        "| supatest [premium] | 100.0 | 100.0 | 1.0k | 0 | 0 | 100.0 | 1 | 0 | 0 |"
+        "| supatest [premium] | 100.0 | 100.0 | 1.0k | 0 | 0 | 123ms | 100.0 | 1 | 0 | 0 |"
         in scores
     )
     assert (
-        "| cursor [auto] | 100.0 | 50.0 | 2.0k | 0 | 0 | 85.0 | 1 | 0 | 0 |" in scores
+        "| cursor [auto] | 100.0 | 50.0 | 2.0k | 0 | 0 | 123ms | 85.0 | 1 | 0 | 0 |"
+        in scores
     )
     assert "Checks Pass" not in scores
     assert "Checks Fail" not in scores
-    assert "| Token Usage |" in scores
-    assert "| Cache Read |" in scores
-    assert "| Cache Create |" in scores
+    assert "| Used |" in scores
+    assert "| Cache R |" in scores
+    assert "| Cache W |" in scores
+    assert "| Time |" in scores
     assert "Cost USD" not in scores
     assert "$0.0100" not in scores
     assert summary["overallScoring"]["qaWeight"] == 0.7
@@ -1306,10 +1378,10 @@ def test_supatest_eval_dashboard_payload_uses_agent_summary_scores() -> None:
         "byCapability"
         in payload["runMetadata"]["qaBench"]["summary"]["byAgent"]["supatest:premium"]
     )
-    assert (
-        "Agent | QA Avg | Token Avg" in payload["runMetadata"]["scoreSummaryMarkdown"]
-    )
+    assert "Agent | QA | Tok" in payload["runMetadata"]["scoreSummaryMarkdown"]
+    assert "Time" in payload["runMetadata"]["scoreSummary"]["columns"]
     assert payload["runMetadata"]["scoreSummary"]["rows"][0]["overallScore"] == 98.5
+    assert payload["runMetadata"]["scoreSummary"]["rows"][0]["totalTimeText"] == "1.2s"
     assert payload["runMetadata"]["scoreSummary"]["rows"][1]["agent"] == "cursor:auto"
     assert len(payload["results"]) == 2
     by_eval_id = {result["evalId"]: result for result in payload["results"]}
@@ -1320,11 +1392,11 @@ def test_supatest_eval_dashboard_payload_uses_agent_summary_scores() -> None:
     assert uploaded["score"] == 98.5
     assert uploaded["durationMs"] == 1234
     assert (
-        "| supatest [premium] | 100.0 | 95.0 | 1.0k | 0 | 0 | 98.5 | 1 | 0 | 0 |"
+        "| supatest [premium] | 100.0 | 95.0 | 1.0k | 0 | 0 | 1.2s | 98.5 | 1 | 0 | 0 |"
         in uploaded["logs"]
     )
     assert (
-        "| cursor [auto] | 100.0 | 95.0 | 1.0k | 0 | 0 | 90.0 | 1 | 0 | 0 |"
+        "| cursor [auto] | 100.0 | 95.0 | 1.0k | 0 | 0 | 5.0s | 90.0 | 1 | 0 | 0 |"
         in uploaded["logs"]
     )
     assert uploaded["metadata"]["scoreSummary"]["agent"] == "supatest:premium"
@@ -1332,6 +1404,7 @@ def test_supatest_eval_dashboard_payload_uses_agent_summary_scores() -> None:
     assert uploaded["metadata"]["scoreSummary"]["tokenUsageText"] == "1.0k"
     assert uploaded["metadata"]["scoreSummary"]["cacheReadTokensText"] == "0"
     assert uploaded["metadata"]["scoreSummary"]["cacheCreationTokensText"] == "0"
+    assert uploaded["metadata"]["scoreSummary"]["totalTimeText"] == "1.2s"
     assert by_eval_id["summary:cursor-auto"]["evalCategory"] == "Agent Summary"
     assert by_eval_id["summary:cursor-auto"]["score"] == 90.0
 

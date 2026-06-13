@@ -172,8 +172,8 @@ final scored results to `POST /api/v1/ingest` after local `scores.md`,
 `summary.json`, and `run.json` are written. The upload sends one summary result
 per non-blocked benchmark agent, using eval IDs such as
 `summary:supatest-premium` and `summary:cursor-auto`. These summary results and
-the run metadata include the same QA Avg, Token Avg, Token Usage, Overall Score,
-Pass, Partial, and Fail table from `scores.md`. Set
+the run metadata include the same compact QA, token, cache, time, overall, and
+result-count table from `scores.md`. Set
 `BENCHMARK_SUPATEST_EVAL_DASHBOARD_STRICT=1` only if an upload failure should
 make the benchmark exit non-zero after writing local results.
 
@@ -311,6 +311,18 @@ and `BENCHMARK_EVAL_OFFSET` are applied.
 BENCHMARK_ENV_FILE_OVERRIDE=0 BENCHMARK_EVAL_IDS=suite:qa-smoke BENCHMARK_EXTRA_EVAL_IDS=E2,E6 ./run_benchmark.py
 ```
 
+If a run finishes agent execution but fails during judging, recover it without
+rerunning agents:
+
+```bash
+BENCHMARK_ENV_FILE_OVERRIDE=0 BENCHMARK_EVAL_IDS=E1,E3,E33,E50,E79 ./run_benchmark.py --score-existing 20260613-235343
+```
+
+Recovery scores the existing `runs/<run-id>` projects and transcripts and writes
+fresh `results/<run-id>` output. Runs created after this checkpointing change
+also save `pending-result.json` per agent as soon as the agent finishes, so
+duration and metadata survive judge failures.
+
 Example targeted debug subset:
 
 | Eval | Coverage                                                                      |
@@ -447,13 +459,14 @@ For the built-in agents, the next run attempts to emit machine-readable usage:
 
 The `scores.md` aggregate table includes:
 
-- `QA Avg` - average judge score for correctness
-- `Token Avg` - average relative token-efficiency score
-- `Token Usage` - summed known total tokens
-- `Cache Read` - summed known cached input tokens read by the provider
-- `Cache Create` - summed known cache creation input tokens
-- `Overall Score` - weighted combined score for ranking agents
-- `Pass`, `Partial`, `Fail` - result distribution for each agent
+- `QA` - average judge score for correctness
+- `Tok` - average relative token-efficiency score
+- `Used` - summed known total tokens
+- `Cache R` - summed known cached input tokens read by the provider
+- `Cache W` - summed known cache creation input tokens
+- `Time` - total known wall time across that agent's runs
+- `Overall` - weighted combined score for ranking agents
+- `P`, `Part`, `F` - pass, partial, and fail counts for each agent
 
 By default, `Overall` is calculated as:
 
