@@ -95,7 +95,6 @@ DEFAULT_AGENTS = ["supatest", "cursor", "codex", "gemini"]
 DEFAULT_PARALLELISM = 3
 DEFAULT_AGENT_TIMEOUT_SECONDS = 600
 DEFAULT_OVERALL_QA_WEIGHT = 0.7
-DEFAULT_OVERALL_TIME_WEIGHT = 0.15
 
 
 @dataclass(frozen=True)
@@ -1130,8 +1129,7 @@ def apply_overall_scores(results: list[dict]) -> None:
     for result in results:
         qa_score = result.get("scorePercent")
         token_score = (result.get("tokenUsage") or {}).get("scorePercent")
-        time_score = (result.get("time") or {}).get("scorePercent")
-        if qa_score is None or token_score is None or time_score is None:
+        if qa_score is None or token_score is None:
             result["overallScore"] = None
             result["overallScorePercent"] = None
             result["overallScoreSource"] = None
@@ -1140,25 +1138,20 @@ def apply_overall_scores(results: list[dict]) -> None:
         overall_percent = (
             float(qa_score) * weights["qa"]
             + float(token_score) * weights["tokenUsage"]
-            + float(time_score) * weights["time"]
         )
         result["overallScorePercent"] = round(overall_percent, 1)
         result["overallScore"] = round(overall_percent / 100, 4)
-        result["overallScoreSource"] = "weighted-qa-token-time"
+        result["overallScoreSource"] = "weighted-qa-token"
 
 
 def overall_score_weights() -> dict[str, float]:
     qa_weight = configured_overall_qa_weight()
-    time_weight = configured_overall_time_weight()
-    token_weight = round(1.0 - qa_weight - time_weight, 4)
+    token_weight = round(1.0 - qa_weight, 4)
     if token_weight < 0:
-        raise ValueError(
-            "BENCHMARK_OVERALL_QA_WEIGHT + BENCHMARK_OVERALL_TIME_WEIGHT must be <= 1."
-        )
+        raise ValueError("BENCHMARK_OVERALL_QA_WEIGHT must be <= 1.")
     return {
         "qa": qa_weight,
         "tokenUsage": token_weight,
-        "time": time_weight,
     }
 
 
@@ -1174,21 +1167,6 @@ def configured_overall_qa_weight() -> float:
         ) from error
     if value < 0 or value > 1:
         raise ValueError("BENCHMARK_OVERALL_QA_WEIGHT must be between 0 and 1.")
-    return value
-
-
-def configured_overall_time_weight() -> float:
-    raw = os.getenv(
-        "BENCHMARK_OVERALL_TIME_WEIGHT", str(DEFAULT_OVERALL_TIME_WEIGHT)
-    ).strip()
-    try:
-        value = float(raw)
-    except ValueError as error:
-        raise ValueError(
-            "BENCHMARK_OVERALL_TIME_WEIGHT must be between 0 and 1."
-        ) from error
-    if value < 0 or value > 1:
-        raise ValueError("BENCHMARK_OVERALL_TIME_WEIGHT must be between 0 and 1.")
     return value
 
 
@@ -1638,39 +1616,11 @@ def write_summary(
         lines.append("| " + " | ".join(cells) + " |")
 
     lines.append("")
-    lines.append(
-        "| Agent | QA Avg | Token Avg | Token Usage | Time Avg | Time | Overall Score | Pass | Partial | Fail |"
+    lines.extend(
+        format_agent_score_summary_table(
+            build_agent_score_summary_rows(agents, results)
+        ).splitlines()
     )
-    lines.append(
-        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |"
-    )
-    for agent in agents:
-        agent_results = [item for item in results if item["agent"] == agent]
-        scored_results = scored_only(agent_results)
-        token_summary = summarize_token_usage(agent_results)
-        time_summary = summarize_time(agent_results)
-        overall_summary = summarize_overall_score(agent_results)
-        if scored_results:
-            average = round(
-                sum(item["scorePercent"] for item in scored_results)
-                / len(scored_results),
-                1,
-            )
-        else:
-            average = "n/a"
-        pass_count = sum(1 for item in agent_results if item["result"] == "pass")
-        partial_count = sum(1 for item in agent_results if item["result"] == "partial")
-        fail_count = sum(1 for item in agent_results if item["result"] == "fail")
-        lines.append(
-            f"| {agent_display_name(agent)} | "
-            f"{average} | "
-            f"{format_optional_number(token_summary['scorePercent'])} | "
-            f"{format_token_count(token_summary['totalTokens'])} | "
-            f"{format_optional_number(time_summary['scorePercent'])} | "
-            f"{format_duration_ms(time_summary['averageDurationMs'])} | "
-            f"{format_optional_number(overall_summary['scorePercent'])} | "
-            f"{pass_count} | {partial_count} | {fail_count} |"
-        )
 
     (results_dir / "scores.md").write_text("\n".join(lines) + "\n")
     ordered_results = order_results(eval_ids, agents, results)
@@ -1704,11 +1654,8 @@ def write_summary(
             "scoreRange": "0 to 100",
             "qaWeight": weights["qa"],
             "tokenUsageWeight": weights["tokenUsage"],
-            "timeWeight": weights["time"],
-            "formula": "qaScorePercent * qaWeight + tokenUsage.scorePercent * tokenUsageWeight + time.scorePercent * timeWeight",
+            "formula": "qaScorePercent * qaWeight + tokenUsage.scorePercent * tokenUsageWeight",
             "unknownTokenUsage": "missing token usage contributes 0 to the weighted token component",
-            "timeBasis": "relative duration per eval; fastest QA-passing run gets 100",
-            "timeFailureCap": "runs below the QA baseline threshold cannot score above their QA percent for time efficiency",
         },
     }
     (results_dir / "summary.json").write_text(
@@ -1747,7 +1694,7 @@ def upload_supatest_eval_dashboard(
         run_id, eval_ids, agents, parallelism, timeout_seconds, results
     )
     if not payload["results"]:
-        print("Supatest eval dashboard: no supatest results to upload")
+        print("Supatest eval dashboard: no benchmark results to upload")
         return None
 
     request = urllib.request.Request(
@@ -1790,15 +1737,10 @@ def build_supatest_eval_dashboard_payload(
 ) -> dict:
     ensure_supatest_dashboard_overall_scores(results)
     ordered_results = order_results(eval_ids, agents, results)
-    uploaded_results = [
-        result
-        for result in ordered_results
-        if result.get("result") != "blocked"
-        and agent_family(str(result.get("agent") or "")) == "supatest"
-    ]
-    uploaded_agents = [
-        agent for agent in agents if agent_family(str(agent or "")) == "supatest"
-    ]
+    summary_rows = build_agent_score_summary_rows(agents, ordered_results)
+    uploaded_rows = [row for row in summary_rows if row["total"] > row["blocked"]]
+    uploaded_agents = [row["agent"] for row in uploaded_rows]
+    score_summary_markdown = format_agent_score_summary_table(summary_rows)
     weights = overall_score_weights()
     return {
         "runName": supatest_eval_dashboard_run_name(run_id),
@@ -1816,15 +1758,32 @@ def build_supatest_eval_dashboard_payload(
             "overallScoring": {
                 "qaWeight": weights["qa"],
                 "tokenUsageWeight": weights["tokenUsage"],
-                "timeWeight": weights["time"],
+            },
+            "scoreSummaryMarkdown": score_summary_markdown,
+            "scoreSummary": {
+                "columns": [
+                    "Agent",
+                    "QA Avg",
+                    "Token Avg",
+                    "Token Usage",
+                    "Overall Score",
+                    "Pass",
+                    "Partial",
+                    "Fail",
+                ],
+                "rows": summary_rows,
             },
         },
         "results": [
-            supatest_eval_dashboard_result_payload(result)
-            for result in uploaded_results
+            supatest_eval_dashboard_agent_summary_payload(
+                run_id, row, score_summary_markdown
+            )
+            for row in uploaded_rows
         ],
         "durationMs": sum(
-            int(result.get("durationMs") or 0) for result in uploaded_results
+            int(result.get("durationMs") or 0)
+            for result in ordered_results
+            if result.get("result") != "blocked"
         ),
     }
 
@@ -1832,7 +1791,6 @@ def build_supatest_eval_dashboard_payload(
 def ensure_supatest_dashboard_overall_scores(results: list[dict]) -> None:
     needs_overall_score = any(
         result.get("result") != "blocked"
-        and agent_family(str(result.get("agent") or "")) == "supatest"
         and result.get("overallScorePercent") is None
         for result in results
     )
@@ -1842,6 +1800,121 @@ def ensure_supatest_dashboard_overall_scores(results: list[dict]) -> None:
     apply_token_efficiency_scores(results)
     apply_time_efficiency_scores(results)
     apply_overall_scores(results)
+
+
+def build_agent_score_summary_rows(agents: list[str], results: list[dict]) -> list[dict]:
+    rows = []
+    for agent in agents:
+        agent_results = [item for item in results if item.get("agent") == agent]
+        scored_results = scored_only(agent_results)
+        token_summary = summarize_token_usage(agent_results)
+        time_summary = summarize_time(agent_results)
+        overall_summary = summarize_overall_score(agent_results)
+        qa_avg = (
+            round(
+                sum(item["scorePercent"] for item in scored_results)
+                / len(scored_results),
+                1,
+            )
+            if scored_results
+            else None
+        )
+        pass_count = sum(1 for item in agent_results if item.get("result") == "pass")
+        partial_count = sum(
+            1 for item in agent_results if item.get("result") == "partial"
+        )
+        fail_count = sum(1 for item in agent_results if item.get("result") == "fail")
+        blocked_count = sum(
+            1 for item in agent_results if item.get("result") == "blocked"
+        )
+        rows.append(
+            {
+                "agent": agent,
+                "agentDisplayName": agent_display_name(agent),
+                "agentModel": agent_model_label(agent),
+                "total": len(agent_results),
+                "scored": len(scored_results),
+                "qaAvg": qa_avg,
+                "tokenAvg": token_summary["scorePercent"],
+                "tokenUsage": token_summary["totalTokens"],
+                "tokenUsageText": format_token_count(token_summary["totalTokens"]),
+                "timeMs": time_summary["averageDurationMs"],
+                "overallScore": overall_summary["scorePercent"],
+                "pass": pass_count,
+                "partial": partial_count,
+                "fail": fail_count,
+                "blocked": blocked_count,
+            }
+        )
+    return rows
+
+
+def format_agent_score_summary_table(rows: list[dict]) -> str:
+    lines = [
+        "| Agent | QA Avg | Token Avg | Token Usage | Overall Score | Pass | Partial | Fail |",
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+    ]
+    for row in rows:
+        lines.append(
+            f"| {row['agentDisplayName']} | "
+            f"{format_optional_number(row['qaAvg'])} | "
+            f"{format_optional_number(row['tokenAvg'])} | "
+            f"{row['tokenUsageText']} | "
+            f"{format_optional_number(row['overallScore'])} | "
+            f"{row['pass']} | {row['partial']} | {row['fail']} |"
+        )
+    return "\n".join(lines)
+
+
+def supatest_eval_dashboard_agent_summary_payload(
+    run_id: str, row: dict, score_summary_markdown: str
+) -> dict:
+    agent = row["agent"]
+    display_name = row["agentDisplayName"]
+    score = dashboard_summary_score(row)
+    return {
+        "evalId": f"summary:{agent_run_dir_name(agent)}",
+        "evalName": display_name,
+        "evalCategory": "Agent Summary",
+        "evalDescription": agent_score_summary_description(row),
+        "evalMetadata": {
+            "type": "agent-score-summary",
+            "agent": agent,
+            "agentDisplayName": display_name,
+            "agentModel": row["agentModel"],
+        },
+        "result": dashboard_summary_result_label(score),
+        "score": score,
+        "durationMs": int(row.get("timeMs") or 0),
+        "logs": score_summary_markdown[:4000],
+        "metadata": {
+            "benchmarkRunId": run_id,
+            "type": "agent-score-summary",
+            "scoreSummary": row,
+            "scoreSummaryMarkdown": score_summary_markdown,
+        },
+    }
+
+
+def agent_score_summary_description(row: dict) -> str:
+    return (
+        f"QA Avg {format_optional_number(row['qaAvg'])} | "
+        f"Token Avg {format_optional_number(row['tokenAvg'])} | "
+        f"Token Usage {row['tokenUsageText']} | "
+        f"Overall Score {format_optional_number(row['overallScore'])} | "
+        f"Pass {row['pass']} | Partial {row['partial']} | Fail {row['fail']}"
+    )
+
+
+def dashboard_summary_score(row: dict) -> float:
+    value = row.get("overallScore")
+    if value is None:
+        return 0.0
+    return round(max(0.0, min(100.0, float(value))), 1)
+
+
+def dashboard_summary_result_label(score: float) -> str:
+    return result_label(score / 100.0, False)
 
 
 def supatest_eval_dashboard_result_payload(result: dict) -> dict:
@@ -1928,7 +2001,6 @@ def supatest_eval_dashboard_score_details(result: dict) -> dict:
         "weights": {
             "qa": weights["qa"],
             "tokenUsage": weights["tokenUsage"],
-            "time": weights["time"],
         },
     }
 
@@ -1973,8 +2045,7 @@ def supatest_eval_dashboard_logs(result: dict, score_details: dict) -> str:
         (
             "Weights: "
             f"QA {format_weight(weights['qa'])}, "
-            f"token {format_weight(weights['tokenUsage'])}, "
-            f"time {format_weight(weights['time'])}"
+            f"token {format_weight(weights['tokenUsage'])}"
         ),
     ]
     reason = str(result.get("reason") or "").strip()

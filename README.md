@@ -136,10 +136,11 @@ BENCHMARK_SUPATEST_EVAL_DASHBOARD_RUN_NAME=Benchmark {run_id}
 
 When `BENCHMARK_SUPATEST_EVAL_DASHBOARD_API_KEY` is set, the harness posts the
 final scored results to `POST /api/v1/ingest` after local `scores.md`,
-`summary.json`, and `run.json` are written. Only Supatest agent results are
-uploaded; they use separate eval IDs such as `E25:supatest-premium`, with the
-benchmark run ID, agent, token usage, time score, changed files, and transcript
-path included in result metadata. Set
+`summary.json`, and `run.json` are written. The upload sends one summary result
+per non-blocked benchmark agent, using eval IDs such as
+`summary:supatest-premium` and `summary:cursor-auto`. These summary results and
+the run metadata include the same QA Avg, Token Avg, Token Usage, Overall Score,
+Pass, Partial, and Fail table from `scores.md`. Set
 `BENCHMARK_SUPATEST_EVAL_DASHBOARD_STRICT=1` only if an upload failure should
 make the benchmark exit non-zero after writing local results.
 
@@ -376,35 +377,26 @@ The `scores.md` aggregate table includes:
 - `QA Avg` - average judge score for correctness
 - `Token Avg` - average relative token-efficiency score
 - `Token Usage` - summed known total tokens
-- `Time Avg` - average relative runtime-efficiency score
-- `Time` - average wall-clock duration per eval
 - `Overall Score` - weighted combined score for ranking agents
 - `Pass`, `Partial`, `Fail` - result distribution for each agent
 
 By default, `Overall` is calculated as:
 
 ```text
-overall = QA average * 0.7 + token efficiency average * 0.15 + time efficiency average * 0.15
+overall = QA average * 0.7 + token efficiency average * 0.3
 ```
 
-Change the QA and time weights in `.env` if you want efficiency to matter more
-or less. Token efficiency receives the remaining weight:
+Change the QA weight in `.env` if you want token efficiency to matter more or
+less. Token efficiency receives the remaining weight:
 
 ```bash
 BENCHMARK_OVERALL_QA_WEIGHT=0.7
-BENCHMARK_OVERALL_TIME_WEIGHT=0.15
 ```
 
 Token efficiency is calculated per eval from QA-passing baseline runs only:
 
 ```text
 token efficiency = best_passing_tokens / agent_tokens * 100
-```
-
-Time efficiency is calculated per eval from QA-passing baseline runs only:
-
-```text
-time efficiency = fastest_passing_duration_ms / agent_duration_ms * 100
 ```
 
 `best_passing_tokens` ignores agents below

@@ -724,11 +724,11 @@ def test_write_summary_emits_only_three_result_files(tmp_path) -> None:
         summary["summary"]["byAgent"]["supatest"]["tokenUsage"]["scorePercent"] == 0.0
     )
     assert summary["summary"]["byAgent"]["supatest"]["time"]["scorePercent"] == 100.0
-    assert summary["summary"]["byAgent"]["supatest"]["overallScorePercent"] == 85.0
+    assert summary["summary"]["byAgent"]["supatest"]["overallScorePercent"] == 70.0
     assert run["runsByEval"]["E25"]["supatest"]["caseId"] == "case-001"
     assert run["runsByEval"]["E25"]["supatest"]["tokenUsage"]["scorePercent"] == 0.0
     assert run["runsByEval"]["E25"]["supatest"]["time"]["scorePercent"] == 100.0
-    assert run["runsByEval"]["E25"]["supatest"]["overallScorePercent"] == 85.0
+    assert run["runsByEval"]["E25"]["supatest"]["overallScorePercent"] == 70.0
 
 
 def test_write_summary_creates_missing_results_dir(tmp_path) -> None:
@@ -767,7 +767,6 @@ def test_write_summary_includes_relative_token_efficiency_and_overall_score(
     tmp_path, monkeypatch
 ) -> None:
     monkeypatch.setenv("BENCHMARK_OVERALL_QA_WEIGHT", "0.7")
-    monkeypatch.setenv("BENCHMARK_OVERALL_TIME_WEIGHT", "0.15")
     base_result = {
         "runId": "verify",
         "caseId": "case-001",
@@ -823,15 +822,15 @@ def test_write_summary_includes_relative_token_efficiency_and_overall_score(
     scores = (tmp_path / "scores.md").read_text()
 
     assert (
-        "| Agent | QA Avg | Token Avg | Token Usage | Time Avg | Time | Overall Score |"
+        "| Agent | QA Avg | Token Avg | Token Usage | Overall Score |"
         in scores
     )
     assert (
-        "| supatest [premium] | 100.0 | 100.0 | 1.0k | 100.0 | 123ms | 100.0 | 1 | 0 | 0 |"
+        "| supatest [premium] | 100.0 | 100.0 | 1.0k | 100.0 | 1 | 0 | 0 |"
         in scores
     )
     assert (
-        "| cursor [auto] | 100.0 | 50.0 | 2.0k | 100.0 | 123ms | 92.5 | 1 | 0 | 0 |"
+        "| cursor [auto] | 100.0 | 50.0 | 2.0k | 85.0 | 1 | 0 | 0 |"
         in scores
     )
     assert "Checks Pass" not in scores
@@ -840,10 +839,10 @@ def test_write_summary_includes_relative_token_efficiency_and_overall_score(
     assert "Cost USD" not in scores
     assert "$0.0100" not in scores
     assert summary["overallScoring"]["qaWeight"] == 0.7
-    assert summary["overallScoring"]["tokenUsageWeight"] == 0.15
-    assert summary["overallScoring"]["timeWeight"] == 0.15
+    assert summary["overallScoring"]["tokenUsageWeight"] == 0.3
+    assert "timeWeight" not in summary["overallScoring"]
     assert summary["summary"]["byAgent"]["supatest"]["overallScorePercent"] == 100.0
-    assert summary["summary"]["byAgent"]["cursor"]["overallScorePercent"] == 92.5
+    assert summary["summary"]["byAgent"]["cursor"]["overallScorePercent"] == 85.0
     assert (
         summary["summary"]["byAgent"]["supatest"]["tokenUsage"]["scorePercent"] == 100.0
     )
@@ -851,7 +850,7 @@ def test_write_summary_includes_relative_token_efficiency_and_overall_score(
     assert summary["summary"]["byAgent"]["cursor"]["time"]["scorePercent"] == 100.0
     assert run["runsByEval"]["E25"]["cursor"]["tokenUsage"]["scorePercent"] == 50
     assert run["runsByEval"]["E25"]["cursor"]["time"]["scorePercent"] == 100.0
-    assert run["runsByEval"]["E25"]["cursor"]["overallScorePercent"] == 92.5
+    assert run["runsByEval"]["E25"]["cursor"]["overallScorePercent"] == 85.0
 
 
 def test_token_efficiency_baseline_ignores_cheap_failed_runs(monkeypatch) -> None:
@@ -912,7 +911,7 @@ def test_time_efficiency_baseline_ignores_fast_failed_runs(monkeypatch) -> None:
     assert results[2]["time"]["scorePercent"] == 50.0
 
 
-def test_supatest_eval_dashboard_payload_uses_agent_specific_eval_ids() -> None:
+def test_supatest_eval_dashboard_payload_uses_agent_summary_scores() -> None:
     supatest_result = {
         "runId": "verify",
         "caseId": "case-001",
@@ -920,12 +919,16 @@ def test_supatest_eval_dashboard_payload_uses_agent_specific_eval_ids() -> None:
         "evalName": "Batch Tests Before Running",
         "agent": "supatest:premium",
         "mode": "build",
+        "score": 1.0,
         "scorePercent": 100,
+        "overallScore": 0.985,
         "overallScorePercent": 98.5,
         "result": "pass",
         "reason": "ok",
         "scoreSource": "judge",
-        "overallScoreSource": "weighted-qa-token-time",
+        "overallScoreSource": "weighted-qa-token",
+        "passedChecks": 2,
+        "failedChecks": 0,
         "exitCode": 0,
         "timedOut": False,
         "durationMs": 1234,
@@ -933,8 +936,23 @@ def test_supatest_eval_dashboard_payload_uses_agent_specific_eval_ids() -> None:
         "transcriptPath": "runs/verify/case-001/supatest/transcript.log",
         "changedFiles": ["tests/error-users.spec.ts"],
         "artifactWarnings": [],
-        "tokenUsage": {**run_benchmark.empty_token_usage(), "totalTokens": 1000},
-        "time": run_benchmark.empty_time_score(1234),
+        "tokenUsage": {
+            **run_benchmark.empty_token_usage(),
+            "inputTokens": 800,
+            "outputTokens": 200,
+            "totalTokens": 1000,
+            "score": 0.95,
+            "scorePercent": 95.0,
+            "scoreBasis": "relative-passing-token-baseline",
+            "estimatedCostUsd": 0.0123,
+            "source": "transcript",
+        },
+        "time": {
+            **run_benchmark.empty_time_score(1234),
+            "score": 0.9,
+            "scorePercent": 90.0,
+            "scoreBasis": "relative-passing-time-baseline",
+        },
     }
     cursor_result = {
         **supatest_result,
@@ -953,29 +971,43 @@ def test_supatest_eval_dashboard_payload_uses_agent_specific_eval_ids() -> None:
     )
 
     assert payload["runName"] == "Benchmark verify"
-    assert payload["durationMs"] == 1234
+    assert payload["durationMs"] == 6234
     assert payload["runMetadata"]["benchmarkRunId"] == "verify"
-    assert payload["runMetadata"]["agents"] == ["supatest:premium"]
+    assert payload["runMetadata"]["agents"] == ["supatest:premium", "cursor:auto"]
     assert payload["runMetadata"]["benchmarkAgents"] == [
         "supatest:premium",
         "cursor:auto",
     ]
-    assert len(payload["results"]) == 1
-    uploaded = payload["results"][0]
-    assert uploaded["evalId"] == "E25:supatest-premium"
-    assert uploaded["evalName"] == "E25 / supatest [premium]"
-    assert uploaded["evalCategory"] == "supatest"
+    assert "Agent | QA Avg | Token Avg" in payload["runMetadata"][
+        "scoreSummaryMarkdown"
+    ]
+    assert payload["runMetadata"]["scoreSummary"]["rows"][0]["overallScore"] == 98.5
+    assert payload["runMetadata"]["scoreSummary"]["rows"][1]["agent"] == "cursor:auto"
+    assert len(payload["results"]) == 2
+    by_eval_id = {result["evalId"]: result for result in payload["results"]}
+    uploaded = by_eval_id["summary:supatest-premium"]
+    assert uploaded["evalId"] == "summary:supatest-premium"
+    assert uploaded["evalName"] == "supatest [premium]"
+    assert uploaded["evalCategory"] == "Agent Summary"
     assert uploaded["score"] == 98.5
     assert uploaded["durationMs"] == 1234
-    assert uploaded["metadata"]["baseEvalId"] == "E25"
-    assert uploaded["metadata"]["tokenUsage"]["totalTokens"] == 1000
+    assert "| supatest [premium] | 100.0 | 95.0 | 1.0k | 98.5 | 1 | 0 | 0 |" in uploaded[
+        "logs"
+    ]
+    assert "| cursor [auto] | 100.0 | 95.0 | 1.0k | 90.0 | 1 | 0 | 0 |" in uploaded[
+        "logs"
+    ]
+    assert uploaded["metadata"]["scoreSummary"]["agent"] == "supatest:premium"
+    assert uploaded["metadata"]["scoreSummary"]["overallScore"] == 98.5
+    assert uploaded["metadata"]["scoreSummary"]["tokenUsageText"] == "1.0k"
+    assert by_eval_id["summary:cursor-auto"]["evalCategory"] == "Agent Summary"
+    assert by_eval_id["summary:cursor-auto"]["score"] == 90.0
 
 
 def test_supatest_eval_dashboard_payload_backfills_overall_score(
     monkeypatch,
 ) -> None:
     monkeypatch.setenv("BENCHMARK_OVERALL_QA_WEIGHT", "0.7")
-    monkeypatch.setenv("BENCHMARK_OVERALL_TIME_WEIGHT", "0.15")
     result = {
         "runId": "verify",
         "caseId": "case-001",
@@ -1003,9 +1035,9 @@ def test_supatest_eval_dashboard_payload_backfills_overall_score(
     )
 
     uploaded = payload["results"][0]
-    assert uploaded["metadata"]["scorePercent"] == 100
-    assert uploaded["metadata"]["overallScorePercent"] == 85.0
-    assert uploaded["score"] == 85.0
+    assert uploaded["metadata"]["scoreSummary"]["qaAvg"] == 100.0
+    assert uploaded["metadata"]["scoreSummary"]["overallScore"] == 70.0
+    assert uploaded["score"] == 70.0
 
 
 def test_supatest_eval_dashboard_upload_posts_bearer_payload(monkeypatch) -> None:
@@ -1069,15 +1101,32 @@ def test_supatest_eval_dashboard_upload_posts_bearer_payload(monkeypatch) -> Non
     assert captured["content_type"] == "application/json"
     assert captured["timeout"] == 7
     assert captured["payload"]["runName"] == "Run verify"
-    assert len(captured["payload"]["results"]) == 1
-    assert captured["payload"]["results"][0]["evalId"] == "E25:supatest-premium"
+    assert len(captured["payload"]["results"]) == 2
+    assert {result["evalId"] for result in captured["payload"]["results"]} == {
+        "summary:cursor-auto",
+        "summary:supatest-premium",
+    }
 
 
-def test_supatest_eval_dashboard_upload_skips_without_supatest_results(
+def test_supatest_eval_dashboard_upload_includes_non_supatest_results(
     monkeypatch,
 ) -> None:
-    def fake_urlopen(_request, _timeout):
-        raise AssertionError("dashboard upload should not run without supatest results")
+    captured = {}
+
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def read(self):
+            return b'{"id":"run"}'
+
+    def fake_urlopen(request, timeout):
+        captured["payload"] = json.loads(request.data.decode())
+        captured["timeout"] = timeout
+        return FakeResponse()
 
     result = {
         "runId": "verify",
@@ -1108,6 +1157,8 @@ def test_supatest_eval_dashboard_upload_skips_without_supatest_results(
     )
 
     assert issue is None
+    assert captured["payload"]["runMetadata"]["agents"] == ["cursor:auto"]
+    assert captured["payload"]["results"][0]["evalId"] == "summary:cursor-auto"
 
 
 def test_score_line_matches_terminal_scoreboard_shape(monkeypatch) -> None:
