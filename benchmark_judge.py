@@ -255,7 +255,9 @@ def parse_batch_judge_response(response) -> BatchJudgeResponse:
     if isinstance(response, BatchJudgeResponse):
         return response
     if isinstance(response, dict):
-        return BatchJudgeResponse.model_validate(normalize_batch_response_payload(response))
+        return BatchJudgeResponse.model_validate(
+            normalize_batch_response_payload(response)
+        )
     parsed = json.loads(str(response))
     return BatchJudgeResponse.model_validate(normalize_batch_response_payload(parsed))
 
@@ -321,7 +323,9 @@ def build_batch_judge_prompt(
             "failureTaxonomy": (
                 "Optional diagnostic labels such as missing-artifact, missing-verification, "
                 "weak-assertion, irrelevant-change, assertion-weakened, fabricated-evidence, "
-                "wrong-route, env-auth, timeout, or app-bug."
+                "wrong-route, env-auth, timeout, app-bug, weak-generated-test, "
+                "unrelated-test, missing-regression-test, test-only-workaround, "
+                "or over-scoped-change."
             ),
         },
         "cases": cases,
@@ -337,6 +341,29 @@ def build_batch_judge_prompt(
         "Plan-mode cases are read-only: do not require changed files, and judge the "
         "delivered plan or recommendation from transcript evidence unless the criteria "
         "explicitly require a file. "
+        "Judge this as QA work, not generic minimal code editing. Inspect changedDiff and "
+        "qaReviewHints to identify the fixes the agent actually applied, the tests it "
+        "generated or updated, and whether those changes address the requested quality risk. "
+        "qaReviewHints.changeSignals are deterministic hints from the diff; use them to "
+        "notice sleeps, assertions, selectors, skips, mocks, and state-based waits, but treat "
+        "changedDiff and criteria as the source of truth. "
+        "Generated or updated tests are first-class QA evidence when the task asks for test "
+        "authoring, coverage, regression prevention, or feature validation. "
+        "Build and test-feature cases should reward relevant generated tests with meaningful "
+        "assertions, realistic setup, stable selectors, project conventions, and verification "
+        "evidence. Penalize trivial checks, snapshot-only coverage for behavior tasks, "
+        "unrelated flows, brittle sleeps, fabricated selectors, or tests that cannot exercise "
+        "the requested feature. "
+        "Fix and test-repair cases should reward precise root-cause fixes in tests, page "
+        "objects, app code, config, or data setup when the evidence supports them. New tests "
+        "are positive when they directly prove the regression or missing coverage, but neutral "
+        "or negative if they replace, obscure, or distract from fixing the existing failing "
+        "path. Preserve assertion intent and do not reward weakened tests just because they "
+        "pass. "
+        "Reports, screenshots, traces, and dashboards are useful QA evidence only when they "
+        "are relevant to the mode and criteria; do not give credit for unrelated generated "
+        "artifacts. Extra tests or fixes are not inherently bad, but score them by direct QA "
+        "value and penalize over-scoped or risky changes. "
         "Build/fix/test-feature cases generally require relevant artifacts and verification "
         "unless criteria explicitly say authoring-only or no-run. "
         "Penalize missing evidence, fabricated selectors, stale evidence, forbidden commands, "
@@ -374,6 +401,7 @@ def batch_case_payload(
         "changedFiles": result.get("changedFiles") or [],
         "changedDiff": truncate_text(str(result.get("changedDiff") or ""), diff_budget),
         "artifactChecks": result.get("artifactChecks") or {},
+        "qaReviewHints": qa_review_hints(result),
         "qaBench": result.get("qaBench") or {},
         "task": truncate_text(str(getattr(test_case, "input", "")), task_budget),
         "criteria": truncate_text(
@@ -383,6 +411,231 @@ def batch_case_payload(
             str(getattr(test_case, "actual_output", "")), evidence_budget
         ),
     }
+
+
+def qa_review_hints(result: dict) -> dict:
+    changed_files = result.get("changedFiles") or []
+    artifact_checks = result.get("artifactChecks") or {}
+    changed_test_files = artifact_checks.get("changedTestFiles") or [
+        path for path in changed_files if looks_like_test_file(path)
+    ]
+    changed_implementation_files = artifact_checks.get(
+        "changedImplementationFiles"
+    ) or [
+        path
+        for path in changed_files
+        if looks_like_implementation_file(path) and path not in changed_test_files
+    ]
+    changed_markdown_files = artifact_checks.get("changedMarkdownFiles") or [
+        path for path in changed_files if path.lower().endswith(".md")
+    ]
+    changed_noise_files = artifact_checks.get("changedNoiseFiles") or []
+    report_artifacts = [
+        path
+        for path in changed_files
+        if looks_like_report_artifact(path) and path not in changed_markdown_files
+    ]
+
+    return {
+        "reviewFocus": review_focus_for_mode(str(result.get("mode") or "")),
+        "changedTestFiles": changed_test_files,
+        "changedImplementationFiles": changed_implementation_files,
+        "changedMarkdownFiles": changed_markdown_files,
+        "changedNoiseFiles": changed_noise_files,
+        "changedRelevantFiles": artifact_checks.get("changedRelevantFiles") or [],
+        "generatedOrUpdatedTests": bool(changed_test_files),
+        "implementationTouched": bool(changed_implementation_files),
+        "reportArtifacts": report_artifacts,
+        "verificationObserved": artifact_checks.get("ranVerificationCommand"),
+        "changeSignals": qa_change_signals(str(result.get("changedDiff") or "")),
+        "artifactWarnings": result.get("artifactWarnings")
+        or artifact_checks.get("warnings")
+        or [],
+    }
+
+
+def review_focus_for_mode(mode: str) -> str:
+    normalized = mode.strip().lower()
+    if normalized in {"build", "test-authoring"}:
+        return (
+            "Inspect generated tests as the primary artifact: relevance, coverage, "
+            "assertion strength, selectors, setup, project conventions, and verification."
+        )
+    if normalized in {"fix", "test-repair"}:
+        return (
+            "Identify the actual root-cause repair and any regression tests. Reward precise "
+            "fixes and targeted tests; penalize assertion weakening or test-only workarounds."
+        )
+    if normalized == "test-feature":
+        return (
+            "Judge feature validation across automated/manual evidence, generated tests, "
+            "reports, screenshots, traces, and coverage of requested user flows."
+        )
+    if normalized in {"plan", "report"}:
+        return (
+            "Judge the delivered QA analysis from transcript evidence; file edits are not "
+            "required unless the criteria explicitly demand artifacts."
+        )
+    return (
+        "Judge whether changed tests, implementation fixes, and evidence directly satisfy "
+        "the requested QA task."
+    )
+
+
+def looks_like_test_file(path: str) -> bool:
+    lowered = path.lower()
+    return (
+        "/test/" in lowered
+        or "/tests/" in lowered
+        or "/e2e/" in lowered
+        or "/cypress/e2e/" in lowered
+        or lowered.startswith("test/")
+        or lowered.startswith("tests/")
+        or lowered.startswith("e2e/")
+        or lowered.startswith("cypress/e2e/")
+        or lowered.startswith("test/specs/")
+        or lowered.endswith(
+            (
+                ".spec.ts",
+                ".spec.tsx",
+                ".spec.js",
+                ".spec.jsx",
+                ".cy.ts",
+                ".cy.js",
+                ".test.ts",
+                ".test.tsx",
+                ".test.js",
+                ".test.jsx",
+                ".feature",
+            )
+        )
+    )
+
+
+def looks_like_implementation_file(path: str) -> bool:
+    lowered = path.lower()
+    if looks_like_test_file(path) or looks_like_report_artifact(path):
+        return False
+    return lowered.endswith(
+        (
+            ".ts",
+            ".tsx",
+            ".js",
+            ".jsx",
+            ".mjs",
+            ".cjs",
+            ".py",
+            ".java",
+            ".kt",
+            ".swift",
+            ".rb",
+            ".go",
+            ".rs",
+        )
+    )
+
+
+def looks_like_report_artifact(path: str) -> bool:
+    lowered = path.lower()
+    basename = lowered.rsplit("/", 1)[-1]
+    return (
+        "/report" in lowered
+        or "/reports/" in lowered
+        or "/test-results/" in lowered
+        or "/playwright-report/" in lowered
+        or lowered.startswith(
+            ("report/", "reports/", "test-results/", "playwright-report/")
+        )
+        or basename.startswith("report")
+        or basename.endswith(
+            (".trace.zip", ".webm", ".mp4", ".png", ".jpg", ".jpeg")
+        )
+    )
+
+
+def qa_change_signals(diff: str) -> dict:
+    added_lines = changed_diff_lines(diff, "+")
+    removed_lines = changed_diff_lines(diff, "-")
+    changed_lines = added_lines + removed_lines
+
+    return {
+        "assertionsAdded": count_matching_lines(added_lines, assertion_markers()),
+        "assertionsRemoved": count_matching_lines(removed_lines, assertion_markers()),
+        "fixedSleepAdded": any_line_contains(added_lines, fixed_sleep_markers()),
+        "fixedSleepRemoved": any_line_contains(removed_lines, fixed_sleep_markers()),
+        "stateWaitAdded": any_line_contains(added_lines, state_wait_markers()),
+        "trivialAssertionAdded": any_line_contains(
+            added_lines, ("expect(true)", "assert(true)", "tobe(true)")
+        ),
+        "skipAdded": any_line_contains(
+            added_lines,
+            ("test.skip", "it.skip", "describe.skip", ".skip(", "@skip"),
+        ),
+        "onlyAdded": any_line_contains(
+            added_lines, ("test.only", "it.only", "describe.only", ".only(")
+        ),
+        "selectorTouched": any_line_contains(
+            changed_lines,
+            (
+                "locator(",
+                "getby",
+                "data-testid",
+                "data-test",
+                "selector",
+                "xpath",
+                "css=",
+            ),
+        ),
+        "mockingTouched": any_line_contains(
+            changed_lines,
+            (
+                "route.fulfill",
+                "route.abort",
+                "page.route",
+                "cy.intercept",
+                "mock",
+                "stub",
+            ),
+        ),
+        "manualTagTouched": any_line_contains(changed_lines, ("@manual",)),
+    }
+
+
+def changed_diff_lines(diff: str, marker: str) -> list[str]:
+    return [
+        line[1:].strip().lower()
+        for line in diff.splitlines()
+        if line.startswith(marker) and not line.startswith(marker * 3)
+    ]
+
+
+def count_matching_lines(lines: list[str], markers: tuple[str, ...]) -> int:
+    return sum(1 for line in lines if any(marker in line for marker in markers))
+
+
+def any_line_contains(lines: list[str], markers: tuple[str, ...]) -> bool:
+    return any(any(marker in line for marker in markers) for line in lines)
+
+
+def assertion_markers() -> tuple[str, ...]:
+    return ("expect(", "assert.", "assert(", ".should(", "tohave", "tobe")
+
+
+def fixed_sleep_markers() -> tuple[str, ...]:
+    return ("waitfortimeout", "sleep(", "settimeout(", "cy.wait(")
+
+
+def state_wait_markers() -> tuple[str, ...]:
+    return (
+        "waitfor({ state:",
+        "waitforselector",
+        "waitforloadstate",
+        "tobevisible",
+        "tobeenabled",
+        "tohaveurl",
+        "tohavetext",
+        "tohavecount",
+    )
 
 
 def batch_case_char_budget(case_count: int) -> int:
@@ -512,9 +765,11 @@ def apply_judge_diagnostics(result: dict, scored: BatchJudgeCaseScore) -> None:
         "evidence": scored.evidence or [],
         "auditNotes": scored.auditNotes,
         "criterionScores": [
-            criterion.model_dump()
-            if isinstance(criterion, JudgeCriterionScore)
-            else dict(criterion)
+            (
+                criterion.model_dump()
+                if isinstance(criterion, JudgeCriterionScore)
+                else dict(criterion)
+            )
             for criterion in (scored.criterionScores or [])
         ],
     }
@@ -541,12 +796,16 @@ def apply_deterministic_score_caps(result: dict) -> None:
         "reasons": cap_reasons,
     }
     reason_suffix = " Deterministic cap applied: " + ", ".join(cap_reasons) + "."
-    result["reason"] = (str(result.get("reason") or "").rstrip() + reason_suffix).strip()
+    result["reason"] = (
+        str(result.get("reason") or "").rstrip() + reason_suffix
+    ).strip()
 
 
 def deterministic_score_cap(result: dict) -> tuple[float | None, list[str]]:
     artifact_checks = result.get("artifactChecks") or {}
-    warnings = set(result.get("artifactWarnings") or artifact_checks.get("warnings") or [])
+    warnings = set(
+        result.get("artifactWarnings") or artifact_checks.get("warnings") or []
+    )
     cap = None
     reasons: list[str] = []
 

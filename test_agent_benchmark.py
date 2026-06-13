@@ -1841,11 +1841,86 @@ def test_batch_judge_prompt_treats_plan_mode_transcript_as_deliverable() -> None
     assert "objective evidence" in prompt
 
 
+def test_batch_judge_prompt_includes_qa_review_hints_for_tests_and_fixes() -> None:
+    result = {
+        "runId": "verify",
+        "caseId": "case-001",
+        "evalId": "E12",
+        "evalName": "Fix Inventory Sorting",
+        "agent": "supatest",
+        "mode": "fix",
+        "exitCode": 0,
+        "timedOut": False,
+        "durationMs": 123,
+        "changedFiles": [
+            "pages/InventoryPage.ts",
+            "tests/inventory-sort.spec.ts",
+            "playwright-report/index.html",
+        ],
+        "changedDiff": (
+            "--- a/pages/InventoryPage.ts\n"
+            "+++ b/pages/InventoryPage.ts\n"
+            "-await page.waitForTimeout(500)\n"
+            "+await toast.waitFor({ state: 'visible' })\n"
+            "--- a/tests/inventory-sort.spec.ts\n"
+            "+++ b/tests/inventory-sort.spec.ts\n"
+            "+await expect(items).toHaveText(['A', 'B'])\n"
+        ),
+        "artifactChecks": {
+            "changedTestFiles": ["tests/inventory-sort.spec.ts"],
+            "changedImplementationFiles": ["pages/InventoryPage.ts"],
+            "changedMarkdownFiles": [],
+            "changedNoiseFiles": [],
+            "changedRelevantFiles": [
+                "pages/InventoryPage.ts",
+                "tests/inventory-sort.spec.ts",
+            ],
+            "ranVerificationCommand": True,
+            "warnings": [],
+        },
+        "passCriteria": ["removes the timeout", "adds coverage for sorting"],
+        "failCriteria": ["weakens the assertion"],
+    }
+    test_case = LLMTestCase(
+        input="Fix the flaky inventory sort test and add regression coverage.",
+        actual_output="Exit code: 0\nTimed out: False\nChanged files include a page object and a spec.",
+        expected_output=(
+            "Pass criteria:\n"
+            "- removes the timeout\n"
+            "- adds coverage for sorting\n"
+            "Fail criteria:\n"
+            "- weakens the assertion"
+        ),
+    )
+
+    prompt = run_benchmark.build_batch_judge_prompt(
+        "verify",
+        [result],
+        [(0, test_case)],
+        run_eval_ids=["E12"],
+        run_agents=["supatest", "cursor"],
+    )
+    payload = json.loads(prompt[prompt.index('{\n  "runId"') :])
+    hints = payload["cases"][0]["qaReviewHints"]
+
+    assert "Generated or updated tests are first-class QA evidence" in prompt
+    assert "identify the fixes the agent actually applied" in prompt
+    assert "qaReviewHints.changeSignals are deterministic hints" in prompt
+    assert "New tests are positive when they directly prove the regression" in prompt
+    assert hints["changedTestFiles"] == ["tests/inventory-sort.spec.ts"]
+    assert hints["changedImplementationFiles"] == ["pages/InventoryPage.ts"]
+    assert hints["generatedOrUpdatedTests"] is True
+    assert hints["implementationTouched"] is True
+    assert hints["reportArtifacts"] == ["playwright-report/index.html"]
+    assert hints["changeSignals"]["fixedSleepRemoved"] is True
+    assert hints["changeSignals"]["stateWaitAdded"] is True
+    assert hints["changeSignals"]["assertionsAdded"] == 1
+    assert "targeted tests" in hints["reviewFocus"]
+
+
 def test_batch_judge_schema_avoids_metric_score_map_additional_properties() -> None:
     schema = BatchJudgeResponse.model_json_schema()
-    metric_schema = schema["$defs"]["BatchJudgeCaseScore"]["properties"][
-        "metricScores"
-    ]
+    metric_schema = schema["$defs"]["BatchJudgeCaseScore"]["properties"]["metricScores"]
 
     assert "additionalProperties" not in json.dumps(metric_schema)
 
