@@ -319,6 +319,11 @@ def build_batch_judge_prompt(
                 "Return criterionScores for the most important pass/fail criteria "
                 "using status satisfied, partial, failed, or not_applicable."
             ),
+            "qaBenchGuidance": (
+                "Use qaBench.judgeGuidance and qaBench.qualitySignals as compact "
+                "per-eval QA expectations. They calibrate the task; they do not "
+                "override task text, criteria, changedDiff, or objective evidence."
+            ),
             "confidence": "0.0 to 1.0 confidence in the score based on available evidence.",
             "failureTaxonomy": (
                 "Optional diagnostic labels such as missing-artifact, missing-verification, "
@@ -347,6 +352,11 @@ def build_batch_judge_prompt(
         "qaReviewHints.changeSignals are deterministic hints from the diff; use them to "
         "notice sleeps, assertions, selectors, skips, mocks, and state-based waits, but treat "
         "changedDiff and criteria as the source of truth. "
+        "Use qaBench.judgeGuidance and qaBench.qualitySignals to calibrate each case. "
+        "For low difficulty cases, do not demand advanced enterprise workflow, but do "
+        "require the baseline QA fundamentals: real executable tests or targeted fixes, "
+        "meaningful assertions, stable selectors, no skips/only/trivial assertions, tight "
+        "scope, and verification when appropriate. "
         "Generated or updated tests are first-class QA evidence when the task asks for test "
         "authoring, coverage, regression prevention, or feature validation. "
         "Build and test-feature cases should reward relevant generated tests with meaningful "

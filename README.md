@@ -24,6 +24,7 @@ editing fixture content:
 | Suite | Purpose |
 | --- | --- |
 | `suite:qa-production` | Every available QA lifecycle fixture. This is the default production benchmark. |
+| `suite:qa-low` | Baseline QA competency suite covering low-difficulty authoring, repair, selector, metadata, and discovery tasks. |
 | `suite:qa-core` | Balanced representative suite for vendor comparisons. |
 | `suite:qa-smoke` | Fast sanity suite across authoring, repair, planning, runtime evidence, and mobile QA. |
 | `suite:qa-lifecycle-extended` | Broad lifecycle suite covering advanced QA tasks across web, mobile, repair, reporting, evidence, and metadata workflows. |

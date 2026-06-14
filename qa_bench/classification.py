@@ -4,6 +4,7 @@ import re
 from collections import Counter
 
 from .definitions import QA_BENCH_CAPABILITIES, QA_BENCH_METRICS, QA_BENCH_VERSION
+from .rubrics import guidance_for_eval
 
 
 DIFFICULTY_WEIGHTS = {
@@ -26,6 +27,12 @@ def eval_metadata(fixture) -> dict:
     tier = getattr(fixture, "tier", None)
     difficulty = str(explicit.get("difficulty") or difficulty_for_tier(tier))
     validate_difficulty(difficulty, fixture)
+    guidance = guidance_for_eval(
+        str(getattr(fixture, "mode", None) or ""),
+        capability,
+        difficulty,
+        metric_ids,
+    )
     return {
         "version": QA_BENCH_VERSION,
         "evalId": getattr(fixture, "eval_id", None),
@@ -45,6 +52,7 @@ def eval_metadata(fixture) -> dict:
         ],
         "weight": eval_weight_for_fixture(fixture),
         "metadataSource": "fixture" if explicit else "inferred",
+        **guidance,
     }
 
 

@@ -41,6 +41,7 @@ from qa_bench import (
     difficulty_for_tier,
     eval_metadata,
 )
+from qa_bench.rubrics import LOW_DIFFICULTY_EVAL_IDS
 import run_benchmark
 from run_benchmark import (
     BatchJudgeCaseScore,
@@ -478,6 +479,13 @@ def test_resolve_eval_ids_supports_named_qa_bench_suites() -> None:
     assert eval_ids == ["E25", "E31", "E43", "E48", "E50", "E65", "E101", "E118"]
 
 
+def test_resolve_eval_ids_supports_low_qa_bench_suite() -> None:
+    eval_ids = resolve_eval_ids("suite:qa-low")
+
+    assert eval_ids == LOW_DIFFICULTY_EVAL_IDS
+    assert all(difficulty_for_tier(load_fixture(eval_id).tier) == "low" for eval_id in eval_ids)
+
+
 def test_select_eval_ids_appends_extra_eval_ids_after_windowing() -> None:
     eval_ids = select_eval_ids("E1,E2,E3", "E4,E2", "2", "1")
 
@@ -511,6 +519,7 @@ def test_reproducibility_metadata_records_extra_eval_ids(monkeypatch) -> None:
 
 
 def test_qa_bench_suite_names_are_vendor_neutral() -> None:
+    assert "qa-low" in available_suite_names()
     assert "qa-lifecycle-extended" in available_suite_names()
     assert all("supatest" not in suite for suite in available_suite_names())
 
@@ -551,6 +560,10 @@ def test_low_and_medium_fixtures_have_explicit_qa_bench_metadata() -> None:
         assert metadata["difficulty"] == explicit["difficulty"], eval_id
         assert metadata["capability"] == explicit["capability"], eval_id
         assert metadata["metricIds"] == explicit["metricIds"], eval_id
+        assert metadata["judgeGuidance"], eval_id
+        assert metadata["qualitySignals"], eval_id
+        if metadata["difficulty"] == "low":
+            assert "baseline QA competency" in metadata["judgeGuidance"][0], eval_id
 
 
 def test_copy_project_does_not_mount_fixture_root_answer_files(tmp_path) -> None:
@@ -1878,6 +1891,16 @@ def test_batch_judge_prompt_includes_qa_review_hints_for_tests_and_fixes() -> No
             "ranVerificationCommand": True,
             "warnings": [],
         },
+        "qaBench": {
+            "difficulty": "low",
+            "judgeGuidance": [
+                "Low difficulty means baseline QA competency, not relaxed correctness."
+            ],
+            "qualitySignals": [
+                "Assertions verify product behavior, not implementation trivia."
+            ],
+            "metricIds": ["relevance", "assertion_quality"],
+        },
         "passCriteria": ["removes the timeout", "adds coverage for sorting"],
         "failCriteria": ["weakens the assertion"],
     }
@@ -1906,7 +1929,10 @@ def test_batch_judge_prompt_includes_qa_review_hints_for_tests_and_fixes() -> No
     assert "Generated or updated tests are first-class QA evidence" in prompt
     assert "identify the fixes the agent actually applied" in prompt
     assert "qaReviewHints.changeSignals are deterministic hints" in prompt
+    assert "Use qaBench.judgeGuidance and qaBench.qualitySignals" in prompt
     assert "New tests are positive when they directly prove the regression" in prompt
+    assert payload["cases"][0]["qaBench"]["difficulty"] == "low"
+    assert "baseline QA competency" in payload["cases"][0]["qaBench"]["judgeGuidance"][0]
     assert hints["changedTestFiles"] == ["tests/inventory-sort.spec.ts"]
     assert hints["changedImplementationFiles"] == ["pages/InventoryPage.ts"]
     assert hints["generatedOrUpdatedTests"] is True

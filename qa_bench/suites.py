@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from .rubrics import LOW_DIFFICULTY_EVAL_IDS
+
 
 SUITE_PREFIX = "suite:"
 
@@ -8,6 +10,11 @@ QA_BENCH_SUITES = {
         "label": "QA Bench Production",
         "description": "All available QA lifecycle fixtures, with metadata slices by capability, metric, mode, and difficulty.",
         "evalIds": ["all"],
+    },
+    "qa-low": {
+        "label": "QA Bench Low Difficulty",
+        "description": "Baseline QA competency suite covering simple but real test authoring, repair, selector, metadata, and discovery tasks.",
+        "evalIds": LOW_DIFFICULTY_EVAL_IDS,
     },
     "qa-core": {
         "label": "QA Bench Core",
