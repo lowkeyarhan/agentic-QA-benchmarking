@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 from pathlib import Path
 from types import SimpleNamespace
@@ -197,7 +198,12 @@ def test_score_existing_run_id_from_args(monkeypatch) -> None:
 def test_run_benchmark_exposes_judge_batch_size_helper(monkeypatch) -> None:
     monkeypatch.delenv("BENCHMARK_JUDGE_BATCH_SIZE", raising=False)
 
-    assert run_benchmark.configured_judge_batch_size(3) == 0
+    assert run_benchmark.configured_judge_batch_size(0) == 0
+    assert run_benchmark.configured_judge_batch_size(3) == 3
+    assert run_benchmark.configured_judge_batch_size(12) == 4
+
+    monkeypatch.setenv("BENCHMARK_JUDGE_BATCH_SIZE", "0")
+    assert run_benchmark.configured_judge_batch_size(12) == 0
 
 
 def test_infer_duration_ms_from_structured_transcript() -> None:
@@ -667,6 +673,56 @@ def test_copy_project_does_not_mount_fixture_root_answer_files(tmp_path) -> None
 
     assert copied == tmp_path / "project"
     assert not (copied / "solution.md").exists()
+
+
+def test_copy_project_materializes_base_template_and_modifications(tmp_path) -> None:
+    e79_project = copy_project(load_fixture("E79"), tmp_path / "e79")
+    checkout_spec = (e79_project / "tests" / "checkout.spec.ts").read_text()
+
+    assert "test.afterEach(async ({ page }) => {" in checkout_spec
+    assert "await page.close();" in checkout_spec
+    assert "Valid form proceeds to overview" in checkout_spec
+
+    e40_project = copy_project(load_fixture("E40"), tmp_path / "e40")
+    checkout_page = (e40_project / "pages" / "CheckoutPage.ts").read_text()
+
+    assert (
+        "this.errorMessage = page.locator('[data-test=\"error-message\"]');"
+        in checkout_page
+    )
+    assert (e40_project / "tests" / "checkout.spec.ts").exists()
+
+
+def test_failure_logs_reference_mounted_project_files(tmp_path) -> None:
+    missing: list[str] = []
+    path_pattern = re.compile(
+        r"\b((?:tests|pages|src|cypress|test|__tests__)/[\w./()@-]+\.(?:ts|tsx|js|jsx))"
+    )
+
+    for eval_id in available_eval_ids():
+        fixture = load_fixture(eval_id)
+        if not fixture.logs_file:
+            continue
+        project = copy_project(fixture, tmp_path / eval_id)
+        for referenced_path in sorted(
+            set(path_pattern.findall(fixture.logs_file.read_text()))
+        ):
+            if not (project / referenced_path).exists():
+                missing.append(f"{eval_id}:{referenced_path}")
+
+    assert missing == []
+
+
+def test_e50_fixture_criteria_match_mounted_assertions(tmp_path) -> None:
+    fixture = load_fixture("E50")
+    project = copy_project(fixture, tmp_path)
+    cart_spec = (project / "tests" / "cart.spec.ts").read_text()
+    criteria = "\n".join([*fixture.pass_criteria, *fixture.fail_criteria])
+
+    assert "expect(total).toBeCloseTo(60.45, 2)" in cart_spec
+    assert "expect(total).toBeCloseTo(53.99, 2)" in cart_spec
+    assert "toBe(99)" not in criteria
+    assert "toBeCloseTo(60.45, 2)" in criteria
 
 
 def test_window_eval_ids_supports_limit_and_offset() -> None:
@@ -2255,6 +2311,71 @@ def test_batch_scoring_can_chunk_large_runs(monkeypatch) -> None:
     assert calls["count"] == 2
     assert [item["scorePercent"] for item in scored] == [80, 80]
     assert [item["reason"] for item in scored] == ["Chunk 1 scored.", "Chunk 2 scored."]
+
+
+def test_batch_scoring_splits_failed_judge_batches(monkeypatch) -> None:
+    calls = {"count": 0, "failed_large_batch": False}
+
+    class FallbackJudge:
+        def generate(self, prompt, schema):
+            calls["count"] += 1
+            assert schema is BatchJudgeResponse
+            if "r002" in prompt:
+                calls["failed_large_batch"] = True
+                raise TimeoutError("batch too large")
+            return (
+                BatchJudgeResponse(
+                    results=[
+                        BatchJudgeCaseScore(
+                            resultId="r001",
+                            score=0.8,
+                            result="pass",
+                            passedChecks=1,
+                            failedChecks=0,
+                            reason="Split batch scored.",
+                        )
+                    ]
+                ),
+                0,
+            )
+
+    monkeypatch.setenv("BENCHMARK_JUDGE_BATCH_SIZE", "2")
+    monkeypatch.setattr(run_benchmark, "make_judge_model", lambda: FallbackJudge())
+
+    pending = []
+    for index, eval_id in enumerate(["E25", "E29"], start=1):
+        result = {
+            "runId": "verify",
+            "caseId": f"case-{index:03d}",
+            "evalId": eval_id,
+            "evalName": "Fixture",
+            "agent": "supatest",
+            "mode": "build",
+            "exitCode": 0,
+            "timedOut": False,
+            "durationMs": 123,
+            "projectDir": f"runs/verify/case-{index:03d}/supatest/project",
+            "transcriptPath": f"runs/verify/case-{index:03d}/supatest/transcript.log",
+            "changedFiles": ["tests/example.spec.ts"],
+            "passCriteria": ["does A"],
+            "failCriteria": [],
+        }
+        pending.append(
+            run_benchmark.PendingResult(
+                result,
+                LLMTestCase(
+                    input="Do QA work",
+                    actual_output="Exit code: 0\nTimed out: False\nDone",
+                    expected_output="Pass criteria:\n- does A",
+                ),
+            )
+        )
+
+    scored = run_benchmark.score_pending_results("verify", pending)
+
+    assert calls == {"count": 3, "failed_large_batch": True}
+    assert [item["scorePercent"] for item in scored] == [80, 80]
+    assert [item["scoreSource"] for item in scored] == ["batch-judge", "batch-judge"]
 
 
 def test_missing_batch_score_is_unscored(monkeypatch) -> None:

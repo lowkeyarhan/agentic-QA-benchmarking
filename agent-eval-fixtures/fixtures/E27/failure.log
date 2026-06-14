@@ -9,7 +9,7 @@ Running tests...
 
 Error: Test failed with unexpected error
 
-    at tests/example.spec.ts:10:5
+    at tests/auth.spec.ts:15:3
 
 
   Slow test file: tests/auth.spec.ts (10.2s)

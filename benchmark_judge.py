@@ -16,6 +16,7 @@ from scoring import (
 
 
 DEFAULT_OVERALL_QA_WEIGHT = 0.7
+DEFAULT_JUDGE_BATCH_SIZE = 4
 
 
 class BatchJudgeCaseScore(BaseModel):
@@ -192,30 +193,20 @@ def score_pending_results(
         list(chunked(scoring_jobs, batch_size)) if batch_size else [scoring_jobs]
     )
     for scoring_batch in scoring_batches:
-        try:
-            judge_response = batch_judge_results(
-                run_id,
-                results,
-                scoring_batch,
-                run_eval_ids=run_eval_ids,
-                run_agents=run_agents,
-            )
-        except Exception as error:
-            reason = redact_configured_secrets(f"{type(error).__name__}: {error}")
-            for result_index, _ in scoring_batch:
-                mark_unscored(results[result_index], reason, "judge-error")
-            for result in results:
-                result.pop("_judgeResultId", None)
-            continue
-
-        apply_batch_judgement(results, scoring_batch, judge_response)
+        score_judge_batch_with_fallback(
+            run_id,
+            results,
+            scoring_batch,
+            run_eval_ids=run_eval_ids,
+            run_agents=run_agents,
+        )
     return results
 
 
 def configured_judge_batch_size(job_count: int) -> int:
     raw = os.getenv("BENCHMARK_JUDGE_BATCH_SIZE", "").strip()
     if not raw:
-        return 0
+        return min(DEFAULT_JUDGE_BATCH_SIZE, job_count) if job_count > 0 else 0
     value = int(raw)
     if value <= 0 or job_count <= 0:
         return 0
@@ -225,6 +216,56 @@ def configured_judge_batch_size(job_count: int) -> int:
 def chunked(items: list[tuple[int, object]], chunk_size: int):
     for index in range(0, len(items), chunk_size):
         yield items[index : index + chunk_size]
+
+
+def score_judge_batch_with_fallback(
+    run_id: str,
+    results: list[dict],
+    scoring_batch: list[tuple[int, object]],
+    run_eval_ids: list[str] | None = None,
+    run_agents: list[str] | None = None,
+) -> None:
+    try:
+        judge_response = batch_judge_results(
+            run_id,
+            results,
+            scoring_batch,
+            run_eval_ids=run_eval_ids,
+            run_agents=run_agents,
+        )
+    except Exception as error:
+        clear_judge_result_ids(results, scoring_batch)
+        if len(scoring_batch) > 1:
+            midpoint = max(1, len(scoring_batch) // 2)
+            score_judge_batch_with_fallback(
+                run_id,
+                results,
+                scoring_batch[:midpoint],
+                run_eval_ids=run_eval_ids,
+                run_agents=run_agents,
+            )
+            score_judge_batch_with_fallback(
+                run_id,
+                results,
+                scoring_batch[midpoint:],
+                run_eval_ids=run_eval_ids,
+                run_agents=run_agents,
+            )
+            return
+
+        reason = redact_configured_secrets(f"{type(error).__name__}: {error}")
+        for result_index, _ in scoring_batch:
+            mark_unscored(results[result_index], reason, "judge-error")
+        return
+
+    apply_batch_judgement(results, scoring_batch, judge_response)
+
+
+def clear_judge_result_ids(
+    results: list[dict], scoring_batch: list[tuple[int, object]]
+) -> None:
+    for result_index, _ in scoring_batch:
+        results[result_index].pop("_judgeResultId", None)
 
 
 def batch_judge_results(

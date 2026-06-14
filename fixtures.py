@@ -6,6 +6,7 @@ import re
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from qa_bench import (
     available_suite_names,
@@ -28,6 +29,20 @@ FIXTURES_ROOT = benchmark_path(
     os.getenv("BENCHMARK_FIXTURES_ROOT"),
     BENCHMARK_ROOT / "agent-eval-fixtures" / "fixtures",
 )
+BASE_TEMPLATES_ROOT = benchmark_path(
+    os.getenv("BENCHMARK_BASE_TEMPLATES_ROOT"),
+    BENCHMARK_ROOT / "agent-eval-fixtures" / "base-templates",
+)
+PROJECT_COPY_IGNORE = shutil.ignore_patterns(
+    "node_modules",
+    ".git",
+    "dist",
+    "build",
+    "coverage",
+    "playwright-report",
+    "test-results",
+    ".turbo",
+)
 
 
 @dataclass(frozen=True)
@@ -43,6 +58,8 @@ class EvalFixture:
     project_dir: Path
     logs_file: Path | None
     qa_bench: dict | None = None
+    base_template: str | None = None
+    modifications: list[Any] | None = None
 
 
 def available_eval_ids(fixtures_root: Path = FIXTURES_ROOT) -> list[str]:
@@ -192,25 +209,95 @@ def load_fixture(eval_id: str) -> EvalFixture:
         project_dir=project_dir,
         logs_file=logs_file,
         qa_bench=dict(qa_bench) if qa_bench is not None else None,
+        base_template=data.get("baseTemplate"),
+        modifications=list(data.get("modifications") or []),
     )
 
 
 def copy_project(fixture: EvalFixture, destination: Path) -> Path:
+    destination.mkdir(parents=True, exist_ok=True)
     project_destination = destination / "project"
     if project_destination.exists():
         shutil.rmtree(project_destination)
-    shutil.copytree(
-        fixture.project_dir,
-        project_destination,
-        ignore=shutil.ignore_patterns(
-            "node_modules",
-            ".git",
-            "dist",
-            "build",
-            "coverage",
-            "playwright-report",
-            "test-results",
-            ".turbo",
-        ),
-    )
+    base_template_dir = base_template_project_dir(fixture)
+    if base_template_dir:
+        shutil.copytree(
+            base_template_dir,
+            project_destination,
+            ignore=PROJECT_COPY_IGNORE,
+        )
+        shutil.copytree(
+            fixture.project_dir,
+            project_destination,
+            dirs_exist_ok=True,
+            ignore=PROJECT_COPY_IGNORE,
+        )
+    else:
+        shutil.copytree(
+            fixture.project_dir,
+            project_destination,
+            ignore=PROJECT_COPY_IGNORE,
+        )
+    apply_fixture_modifications(fixture, project_destination)
     return project_destination
+
+
+def base_template_project_dir(fixture: EvalFixture) -> Path | None:
+    if not fixture.base_template:
+        return None
+    candidate = BASE_TEMPLATES_ROOT / fixture.base_template
+    return candidate if candidate.exists() else None
+
+
+def apply_fixture_modifications(fixture: EvalFixture, project_dir: Path) -> None:
+    for modification in fixture.modifications or []:
+        if not isinstance(modification, dict):
+            continue
+        modification_type = modification.get("type")
+        if modification_type == "delete":
+            apply_delete_modification(project_dir, modification)
+        elif modification_type == "replace":
+            apply_replace_modification(fixture, project_dir, modification)
+
+
+def apply_delete_modification(project_dir: Path, modification: dict) -> None:
+    pattern = modification.get("pattern") or modification.get("file")
+    if not pattern:
+        return
+
+    matches = list(project_dir.glob(str(pattern)))
+    direct = project_dir / str(pattern)
+    if direct.exists() and direct not in matches:
+        matches.append(direct)
+
+    for path in matches:
+        if path.is_dir():
+            shutil.rmtree(path)
+        elif path.exists():
+            path.unlink()
+
+
+def apply_replace_modification(
+    fixture: EvalFixture, project_dir: Path, modification: dict
+) -> None:
+    relative_file = modification.get("file")
+    find_text = modification.get("find")
+    replace_text = modification.get("replace")
+    if not relative_file or find_text is None or replace_text is None:
+        return
+
+    path = project_dir / str(relative_file)
+    if not path.exists():
+        raise FileNotFoundError(
+            f"Fixture {fixture.eval_id} replace target is missing: {relative_file}"
+        )
+
+    text = path.read_text()
+    if str(find_text) in text:
+        path.write_text(text.replace(str(find_text), str(replace_text), 1))
+        return
+    if str(replace_text) in text:
+        return
+    raise ValueError(
+        f"Fixture {fixture.eval_id} replace target did not contain find or replacement text: {relative_file}"
+    )
