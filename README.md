@@ -27,6 +27,8 @@ editing fixture content:
 | `suite:qa-low` | Baseline QA competency suite covering low-difficulty authoring, repair, selector, metadata, and discovery tasks. |
 | `suite:qa-medium` | Intermediate QA lifecycle suite covering bounded exploration, reports, manual/automation feature validation, and repair discipline. |
 | `suite:qa-high` | Advanced QA suite covering robust waits, project discovery, assertion preservation, root-cause repair, and anti-shortcut behavior. |
+| `suite:qa-ultra` | Expert QA suite covering framework adaptation, stale evidence, scoped planning, bounded repair, and complex browser/mobile-adjacent workflows. |
+| `suite:qa-max` | Production-regression QA suite covering mobile hierarchy, Appium/WDIO, device targeting, log interpretation, and non-destructive fixes. |
 | `suite:qa-core` | Balanced representative suite for vendor comparisons. |
 | `suite:qa-smoke` | Fast sanity suite across authoring, repair, planning, runtime evidence, and mobile QA. |
 | `suite:qa-lifecycle-extended` | Broad lifecycle suite covering advanced QA tasks across web, mobile, repair, reporting, evidence, and metadata workflows. |

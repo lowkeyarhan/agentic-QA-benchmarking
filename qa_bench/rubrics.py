@@ -70,6 +70,52 @@ HIGH_DIFFICULTY_EVAL_IDS = [
     "E80",
 ]
 
+ULTRA_DIFFICULTY_EVAL_IDS = [
+    "E4",
+    "E5",
+    "E8",
+    "E14",
+    "E15",
+    "E16",
+    "E19",
+    "E21",
+    "E26",
+    "E29",
+    "E30",
+    "E31",
+    "E32",
+    "E36",
+    "E77",
+    "E114",
+    "E115",
+    "E116",
+    "E117",
+    "E118",
+]
+
+MAX_DIFFICULTY_EVAL_IDS = [
+    "E70",
+    "E71",
+    "E72",
+    "E73",
+    "E74",
+    "E81",
+    "E82",
+    "E83",
+    "E101",
+    "E102",
+    "E103",
+    "E104",
+    "E105",
+    "E106",
+    "E107",
+    "E108",
+    "E109",
+    "E113",
+    "E119",
+    "E120",
+]
+
 LOW_EVAL_TUNING = {
     "E1": {
         "expectedSignals": [
@@ -996,10 +1042,639 @@ HIGH_EVAL_TUNING = {
     },
 }
 
+ULTRA_EVAL_TUNING = {
+    "E4": {
+        "expectedSignals": [
+            "Detects WebDriverIO from package.json and wdio.conf.ts.",
+            "Uses WDIO describe/it syntax with $() and $$() selectors.",
+            "Places tags in title strings as expected by the project.",
+        ],
+        "antiPatterns": [
+            "Generates Playwright code in a WDIO project.",
+            "Uses Playwright-style metadata objects or { tags } format.",
+            "Ignores wdio.conf.ts and framework conventions.",
+        ],
+        "scoringNotes": [
+            "Framework adaptation is the core skill; correct behavior in the wrong framework should not score highly.",
+        ],
+    },
+    "E5": {
+        "expectedSignals": [
+            "Uses Cypress command-chain style with cy.visit, cy.get, and cy.should.",
+            "Creates a *.cy.ts file under cypress/e2e.",
+            "Covers add/remove cart behavior.",
+        ],
+        "antiPatterns": [
+            "Uses async/await control flow for Cypress commands.",
+            "Uses Playwright page.locator or Playwright syntax.",
+            "Places the spec outside Cypress conventions.",
+        ],
+        "scoringNotes": [
+            "Reward Cypress-native syntax and file placement, not generic browser-test code.",
+        ],
+    },
+    "E8": {
+        "expectedSignals": [
+            "Reads page objects before writing.",
+            "Uses existing page object methods in the new test.",
+            "Avoids Agent Browser before the first run because source context is sufficient.",
+        ],
+        "antiPatterns": [
+            "Opens browser before using available page-object context.",
+            "Writes raw locators that duplicate existing page-object methods.",
+            "Over-explores despite complete source context.",
+        ],
+        "scoringNotes": [
+            "This eval measures context selection; browser use is negative before source context is exhausted.",
+        ],
+    },
+    "E14": {
+        "expectedSignals": [
+            "Reads the error and categorizes the issue as selector-related.",
+            "Uses Agent Browser to inspect the selector failure.",
+            "Stays within three attempts and produces a fix report.",
+        ],
+        "antiPatterns": [
+            "Exceeds three attempts.",
+            "Never opens browser for selector evidence.",
+            "Weakens assertions instead of fixing selectors.",
+        ],
+        "scoringNotes": [
+            "Bounded selector repair with runtime evidence is the desired workflow.",
+        ],
+    },
+    "E15": {
+        "expectedSignals": [
+            "Runs the failing test first.",
+            "Edits only the broken line with a targeted edit.",
+            "Leaves passing tests and unrelated code untouched.",
+        ],
+        "antiPatterns": [
+            "Rewrites the whole file.",
+            "Changes passing tests.",
+            "Uses test.skip or broad cleanup to avoid the failure.",
+        ],
+        "scoringNotes": [
+            "Minimal targeted repair is the primary criterion.",
+        ],
+    },
+    "E16": {
+        "expectedSignals": [
+            "Fixes failures one at a time.",
+            "Runs the full suite after individual fixes pass.",
+            "Reports X/Y passing or equivalent final suite status.",
+        ],
+        "antiPatterns": [
+            "Never runs the full suite after fixes.",
+            "Only validates individual tests and claims regression safety.",
+        ],
+        "scoringNotes": [
+            "Final regression verification is mandatory after staged fixes.",
+        ],
+    },
+    "E19": {
+        "expectedSignals": [
+            "Produces a risk assessment with high, medium, and low risk levels.",
+            "Marks auth and checkout as high risk.",
+            "Includes user journeys, test tags, and a Not Testing section.",
+            "Does not create project files.",
+        ],
+        "antiPatterns": [
+            "Assigns all areas the same risk.",
+            "Omits Not Testing or risk justification.",
+            "Creates files during a plan-only task.",
+        ],
+        "scoringNotes": [
+            "Risk-based planning is judged on prioritization and explicit exclusions.",
+        ],
+    },
+    "E21": {
+        "expectedSignals": [
+            "Navigates login, inventory, cart, checkout form, overview, and completion path.",
+            "Adds assertions at each transition.",
+            "Fills checkout details and verifies order completion.",
+            "Uses proper tags.",
+        ],
+        "antiPatterns": [
+            "Skips pages in the requested journey.",
+            "Only asserts the final page.",
+            "Introduces race conditions or fixed waits.",
+        ],
+        "scoringNotes": [
+            "Complete E2E journey coverage requires transition-level assertions, not only final success.",
+        ],
+    },
+    "E26": {
+        "expectedSignals": [
+            "Writes checkout and cart-removal tests.",
+            "First verification command targets a single test/file or grep.",
+            "Runs broader file/suite only after the individual target passes.",
+        ],
+        "antiPatterns": [
+            "First run executes the full suite or multiple files.",
+            "Skips the fast-feedback single-test step.",
+        ],
+        "scoringNotes": [
+            "This eval measures verification strategy, not just final test content.",
+        ],
+    },
+    "E29": {
+        "expectedSignals": [
+            "Fixes the broken selector.",
+            "Adds required Playwright metadata tags to the previously untagged test.",
+            "Uses feature, priority, and test_type tag dimensions.",
+        ],
+        "antiPatterns": [
+            "Fixes the selector but leaves missing tags.",
+            "Adds tags only in title text when metadata object is required.",
+        ],
+        "scoringNotes": [
+            "Repair and metadata governance are both required for full credit.",
+        ],
+    },
+    "E30": {
+        "expectedSignals": [
+            "Reads checkout tests, page objects, and app routes before planning.",
+            "Produces a plan referencing concrete code-found pages/components.",
+            "Avoids asking questions that the code answers.",
+        ],
+        "antiPatterns": [
+            "Asks what pages or fields exist before reading code.",
+            "Creates a generic checkout plan with no code references.",
+        ],
+        "scoringNotes": [
+            "Plan mode can still require code-first context gathering.",
+        ],
+    },
+    "E31": {
+        "expectedSignals": [
+            "Includes a Not Testing section with at least two exclusions.",
+            "Justifies exclusions by risk, cost, or maintenance tradeoff.",
+            "Avoids trying to test every possible thing.",
+        ],
+        "antiPatterns": [
+            "No Not Testing section.",
+            "Exclusions without justification.",
+            "Plan has no prioritization or scope judgment.",
+        ],
+        "scoringNotes": [
+            "Good QA planning includes explicit scope boundaries.",
+        ],
+    },
+    "E32": {
+        "expectedSignals": [
+            "Plans user-journey tests for authentication.",
+            "Keeps the test count compact.",
+            "Names tests after user goals rather than individual UI elements.",
+        ],
+        "antiPatterns": [
+            "Creates one test per form element.",
+            "Proposes more than ten tests for a single auth page.",
+            "Uses element-first naming and coverage.",
+        ],
+        "scoringNotes": [
+            "Journey-first planning is the evaluated skill.",
+        ],
+    },
+    "E36": {
+        "expectedSignals": [
+            "Traces count mismatch to broken add-to-cart selector in InventoryPage.ts.",
+            "Fixes getAddToCartButton selector pattern.",
+            "Preserves assertCartItemCount(1).",
+        ],
+        "antiPatterns": [
+            "Changes expected count to zero.",
+            "Skips cart tests.",
+            "Removes or weakens count assertions.",
+        ],
+        "scoringNotes": [
+            "Selector repair must preserve the cart-count assertion.",
+        ],
+    },
+    "E77": {
+        "expectedSignals": [
+            "Reads the working snippet from SUPATEST.md.",
+            "Integrates the snippet into a reusable helper or pattern.",
+            "Removes or replaces failing code without leaving it commented out.",
+            "Produces a passing test.",
+        ],
+        "antiPatterns": [
+            "Ignores the provided snippet.",
+            "Pastes the snippet inline without refactoring.",
+            "Leaves old failing code in place.",
+        ],
+        "scoringNotes": [
+            "The task rewards understanding and reusable integration of user-provided code.",
+        ],
+    },
+    "E114": {
+        "expectedSignals": [
+            "Reads pages/LoginPage.ts and source/current data-test attributes.",
+            "Fixes the page-object selector.",
+            "Rejects stale README selector advice as unverified.",
+        ],
+        "antiPatterns": [
+            "Uses README selector values as authoritative.",
+            "Changes tests to match stale docs.",
+            "Skips or weakens assertions.",
+        ],
+        "scoringNotes": [
+            "Current source beats stale README guidance.",
+        ],
+    },
+    "E115": {
+        "expectedSignals": [
+            "Uses page.setViewportSize for mobile and desktop dimensions.",
+            "Logs in before checking responsive hamburger visibility.",
+            "Asserts visible at mobile and hidden/not visible at desktop.",
+        ],
+        "antiPatterns": [
+            "Tests only one viewport.",
+            "Does not verify a visibility difference.",
+            "Uses waitForTimeout for resize handling.",
+        ],
+        "scoringNotes": [
+            "Responsive behavior must be proven across both requested viewport states.",
+        ],
+    },
+    "E116": {
+        "expectedSignals": [
+            "Uses page.route or context.route scoped to inventory requests.",
+            "Serves a mocked inventory page with exactly three products.",
+            "Verifies exactly three products render while login still works.",
+        ],
+        "antiPatterns": [
+            "Does not intercept network/page requests.",
+            "Mocks so broadly that login breaks.",
+            "Fails to assert product count.",
+            "Uses interactive-only APIs.",
+        ],
+        "scoringNotes": [
+            "Mocking is required here but must be scoped to the requested behavior.",
+        ],
+    },
+    "E117": {
+        "expectedSignals": [
+            "Analyzes failure.log plus checkout test/page-object source.",
+            "Identifies both total mismatch and confirmation text mismatch root causes.",
+            "Produces a structured bug report with severity and affected tests.",
+            "Does not edit files or run tests.",
+        ],
+        "antiPatterns": [
+            "Addresses only one failure.",
+            "Runs commands or edits files in report-only mode.",
+            "Provides vague analysis without source/log evidence.",
+        ],
+        "scoringNotes": [
+            "This is evidence-based reporting, not repair.",
+        ],
+    },
+    "E118": {
+        "expectedSignals": [
+            "Removes waitForTimeout from InventoryPage.ts addProductToCart.",
+            "Uses state-based waits such as waitForSelector or visibility assertions.",
+            "Preserves toast assertions and verifies tests pass.",
+        ],
+        "antiPatterns": [
+            "Increases timeout values.",
+            "Keeps or adds waitForTimeout.",
+            "Removes toast assertions or skips flaky tests.",
+        ],
+        "scoringNotes": [
+            "The root cause is timing strategy; timeout inflation should not get repair credit.",
+        ],
+    },
+}
+
+MAX_EVAL_TUNING = {
+    "E70": {
+        "expectedSignals": [
+            "Uses Maestro inspect_view_hierarchy or inspect_screen within the first two tool calls.",
+            "Takes at least one screenshot.",
+            "Reports five UI elements with at least three accessibility identifiers.",
+        ],
+        "antiPatterns": [
+            "Uses adb, xcrun, or Appium through Bash for inspection.",
+            "Gives up without listing devices when device availability is unclear.",
+            "Writes Maestro YAML for an exploration-only task.",
+        ],
+        "scoringNotes": [
+            "Max mobile exploration requires the right device-inspection tool path first.",
+        ],
+    },
+    "E71": {
+        "expectedSignals": [
+            "Reads current-ios-settings-hierarchy.csv.",
+            "Returns exactly one Appium-ready selector for the General row.",
+            "Prefers resource-id or accessibility label over XPath.",
+            "Explains selector stability in one sentence.",
+        ],
+        "antiPatterns": [
+            "Uses legacy XPath as primary selector.",
+            "Skips the current hierarchy file.",
+            "Creates files or returns multiple alternatives.",
+        ],
+        "scoringNotes": [
+            "Selector-only mobile requests should stay concise and hierarchy-grounded.",
+        ],
+    },
+    "E72": {
+        "expectedSignals": [
+            "Reads current-catalog-hierarchy.json.",
+            "Returns five distinct selectors for the requested catalog elements.",
+            "Uses real resource-ids and maps each to evidence rows.",
+        ],
+        "antiPatterns": [
+            "Guesses generic selectors.",
+            "Uses class-name/XPath when resource-id exists.",
+            "Copies stale adb quick selectors.",
+            "Creates files or test code.",
+        ],
+        "scoringNotes": [
+            "Element-discovery coverage and evidence mapping are both required.",
+        ],
+    },
+    "E73": {
+        "expectedSignals": [
+            "Inspects hierarchy at multiple login-flow steps.",
+            "Identifies menu-to-login navigation, fields, and login button.",
+            "Reports what changed on screen after each action.",
+        ],
+        "antiPatterns": [
+            "Inspects once and narrates the rest from memory.",
+            "Uses screenshots only without hierarchy evidence.",
+            "Fabricates selectors for uninspected screens.",
+        ],
+        "scoringNotes": [
+            "Multi-step mobile walkthroughs need repeated device-state evidence.",
+        ],
+    },
+    "E74": {
+        "expectedSignals": [
+            "Inspects hierarchy on multiple screens before authoring.",
+            "Writes a WDIO/Appium TypeScript test with real resource-ids.",
+            "Uses WDIO accessibility-id/resource-id selector syntax.",
+            "Implements login, catalog, product, add-to-cart, cart, and item-count assertion flow.",
+        ],
+        "antiPatterns": [
+            "Fabricates selectors.",
+            "Generates Maestro YAML instead of WDIO test code.",
+            "Writes from training-data assumptions without live inspection.",
+        ],
+        "scoringNotes": [
+            "Real mobile test authoring must be grounded in current live hierarchy.",
+        ],
+    },
+    "E81": {
+        "expectedSignals": [
+            "Explains native-to-WebView context boundary.",
+            "Recommends Appium getContexts and switchContext.",
+            "Distinguishes native selectors from web DOM selectors.",
+            "Mentions switching back to native context.",
+        ],
+        "antiPatterns": [
+            "Claims Maestro hierarchy inspection reads WebView DOM.",
+            "Recommends Maestro YAML instead of Appium context switching.",
+            "Repeats incorrect team notes.",
+            "Creates files for an explanation-only request.",
+        ],
+        "scoringNotes": [
+            "This is conceptual mobile QA guidance; no artifact creation is needed.",
+        ],
+    },
+    "E82": {
+        "expectedSignals": [
+            "Inspects live device state before hypothesizing.",
+            "Identifies the cart-count element and current value/state.",
+            "Separates possible causes based on observed device state.",
+        ],
+        "antiPatterns": [
+            "Hypothesizes before inspection.",
+            "Asks the user to debug first.",
+            "Jumps to adb logcat instead of Maestro inspection.",
+        ],
+        "scoringNotes": [
+            "Device state must precede diagnosis.",
+        ],
+    },
+    "E83": {
+        "expectedSignals": [
+            "Inspects live device state before rerun, code change, or selector edit.",
+            "Finds the actual Add-to-cart selector or unexpected screen state.",
+            "Bases recommendation on live hierarchy.",
+        ],
+        "antiPatterns": [
+            "Suggests rerunning first.",
+            "Edits files before inspection.",
+            "Greps logs or reruns repeatedly before any Maestro call.",
+            "Suggests sleeps as primary fix.",
+        ],
+        "scoringNotes": [
+            "This eval targets no-yak-shave mobile debugging.",
+        ],
+    },
+    "E101": {
+        "expectedSignals": [
+            "Reads lumpsum-inspect-snippet.json before editing.",
+            "Uses ~mfAddStock or label predicate without invented XCUIElementType.",
+            "Disambiguates the first of four duplicate mfAddStock elements by index.",
+            "Rejects legacy type-inferred fabricated data.",
+        ],
+        "antiPatterns": [
+            "Invents XCUIElementTypeButton.",
+            "Uses a single undisambiguated $('~mfAddStock').",
+            "Hardcodes fund/session-specific values.",
+            "Runs install/wdio/tsc instead of editing the page object.",
+        ],
+        "scoringNotes": [
+            "Maestro-to-WDIO translation must preserve duplicate-index semantics and avoid fabricated type data.",
+        ],
+    },
+    "E102": {
+        "expectedSignals": [
+            "Reads wdio-success-log.txt.",
+            "Sets didRun to yes from the final Spec Files summary.",
+            "Reports 1 passed and 0 failed from the current log.",
+            "Copies the exact Spec Files line into sourceLine.",
+        ],
+        "antiPatterns": [
+            "Uses stale-run-output.log or WARN lines as final status.",
+            "Uses grep/tail/bash instead of direct log analysis.",
+            "Claims the test did not run despite final summary.",
+        ],
+        "scoringNotes": [
+            "Noisy WDIO logs require final-summary interpretation, not grep heuristics.",
+        ],
+    },
+    "E103": {
+        "expectedSignals": [
+            "Reads ios-login-inspect-snippet.json.",
+            "Uses ~SignInButton or equivalent current iOS accessibility selector.",
+            "Preserves async tapLogin with waitForDisplayed and click.",
+            "Leaves Android page object unchanged.",
+        ],
+        "antiPatterns": [
+            "Copies Android resource-id into iOS.",
+            "Uses legacy btn_login or alternate LoginButton instead of current hierarchy.",
+            "Guesses without current iOS reference.",
+            "Adds unrelated methods or changes Android code.",
+        ],
+        "scoringNotes": [
+            "Cross-platform porting requires current platform hierarchy, not Android copy-paste.",
+        ],
+    },
+    "E104": {
+        "expectedSignals": [
+            "Writes a one-line npx wdio command to run-command.txt.",
+            "Uses --spec targeting test/specs/cart.spec.ts only.",
+            "Includes --workers=1.",
+        ],
+        "antiPatterns": [
+            "Runs the command instead of authoring it.",
+            "Uses full-suite glob or no --spec.",
+            "Includes checkout.spec.ts.",
+        ],
+        "scoringNotes": [
+            "Command authoring must respect narrow run scope and no-execute instruction.",
+        ],
+    },
+    "E105": {
+        "expectedSignals": [
+            "Names ~UploadButton as the wrong selector in completeDocumentUpload.",
+            "Cites SubmitUpload from inspect-upload-screen.json as current selector.",
+            "Rejects legacy selector map and unrelated payment screen evidence.",
+            "Avoids timing/navigation hypotheses unsupported by hierarchy.",
+        ],
+        "antiPatterns": [
+            "Provides vague root cause without hierarchy evidence.",
+            "Uses legacy UploadButton or payment-screen evidence.",
+            "Starts grep/rerun debug spiral.",
+            "Fails to name the bad method.",
+        ],
+        "scoringNotes": [
+            "Production regression diagnosis must identify method, bad selector, and current hierarchy evidence.",
+        ],
+    },
+    "E106": {
+        "expectedSignals": [
+            "Writes exactly three numbered debug steps.",
+            "Step 1 is Maestro device inspection.",
+            "Mentions at most one test rerun after inspection.",
+        ],
+        "antiPatterns": [
+            "Writes more than three steps.",
+            "Starts with grep, tail, or rerun.",
+            "Includes multiple rerun or bash log-scraping steps.",
+        ],
+        "scoringNotes": [
+            "Efficient debug planning is scored by sequence discipline and brevity.",
+        ],
+    },
+    "E107": {
+        "expectedSignals": [
+            "Keeps fillShipping, submitOrder, verifyConfirmation, and completeDocumentUpload present.",
+            "Changes only completeDocumentUpload to use ~SubmitUpload from production hierarchy.",
+            "Preserves working method bodies and trackOrderSubmission import.",
+        ],
+        "antiPatterns": [
+            "Rewrites or removes working methods.",
+            "Uses legacy, checkout-screen, or beta selectors.",
+            "Leaves ~UploadButton.",
+            "Adds retries, sleeps, try/catch, or unrelated abstractions.",
+        ],
+        "scoringNotes": [
+            "Non-destructive repair is the target; collateral changes should be penalized heavily.",
+        ],
+    },
+    "E108": {
+        "expectedSignals": [
+            "Uses a single scoped WDIO command with --spec for the named mobile spec.",
+            "Reports pass/fail only from Spec Files summary.",
+            "Keeps strategy to four or fewer numbered steps.",
+            "Does not propose code fixes or retry loops.",
+        ],
+        "antiPatterns": [
+            "Multiple reruns or retry-until-pass loops.",
+            "Uses grep/tail/log scraping.",
+            "Copies archived troubleshooting or quick-retry patterns.",
+            "Runs full suite instead of the named spec.",
+        ],
+        "scoringNotes": [
+            "This eval checks whether the agent avoids slow debug spirals.",
+        ],
+    },
+    "E109": {
+        "expectedSignals": [
+            "Plans list_devices first.",
+            "Selects emulator-5554 specifically.",
+            "Plans inspect on emulator-5554 and not 5556.",
+        ],
+        "antiPatterns": [
+            "Skips list_devices.",
+            "Uses adb devices.",
+            "Targets emulator-5556 or ambiguous device.",
+        ],
+        "scoringNotes": [
+            "Named device targeting is mandatory when multiple emulators exist.",
+        ],
+    },
+    "E113": {
+        "expectedSignals": [
+            "Writes next steps with device inspection first.",
+            "Proposes fixing one failing spec.",
+            "Proposes one targeted --spec rerun.",
+            "Avoids running commands in authoring-only mode.",
+        ],
+        "antiPatterns": [
+            "Reruns full suite glob first.",
+            "Skips device inspection.",
+            "Includes multiple full-suite reruns.",
+        ],
+        "scoringNotes": [
+            "Production suite failures should narrow by state inspection and single-spec verification.",
+        ],
+    },
+    "E119": {
+        "expectedSignals": [
+            "Covers Android and iOS strategy.",
+            "Addresses selector differences, WebView context switching, permissions, and keyboard handling.",
+            "Stays in plan mode without tests, commands, or device inspection.",
+        ],
+        "antiPatterns": [
+            "Covers only one platform.",
+            "Writes WDIO/Appium test code.",
+            "Ignores WebView context switching.",
+            "Runs Maestro or shell commands.",
+        ],
+        "scoringNotes": [
+            "This max plan task is written strategy only, not implementation or inspection.",
+        ],
+    },
+    "E120": {
+        "expectedSignals": [
+            "Uses Maestro inspect_view_hierarchy or inspect_screen to discover selectors.",
+            "Navigates menu to Drawing screen.",
+            "Addresses Android system camera permission handling.",
+            "Provides Appium/WDIO selectors based on live device evidence.",
+        ],
+        "antiPatterns": [
+            "Does not inspect the device.",
+            "Skips permission dialog handling.",
+            "Fabricates selectors.",
+            "Writes Maestro YAML instead of Appium/WDIO guidance/code.",
+        ],
+        "scoringNotes": [
+            "System permission flows require live selector evidence and platform-specific handling.",
+        ],
+    },
+}
+
 EVAL_TUNING = {
     **LOW_EVAL_TUNING,
     **MEDIUM_EVAL_TUNING,
     **HIGH_EVAL_TUNING,
+    **ULTRA_EVAL_TUNING,
+    **MAX_EVAL_TUNING,
 }
 
 DIFFICULTY_GUIDANCE = {

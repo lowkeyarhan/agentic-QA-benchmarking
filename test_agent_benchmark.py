@@ -44,7 +44,9 @@ from qa_bench import (
 from qa_bench.rubrics import (
     HIGH_DIFFICULTY_EVAL_IDS,
     LOW_DIFFICULTY_EVAL_IDS,
+    MAX_DIFFICULTY_EVAL_IDS,
     MEDIUM_DIFFICULTY_EVAL_IDS,
+    ULTRA_DIFFICULTY_EVAL_IDS,
 )
 import run_benchmark
 from run_benchmark import (
@@ -506,6 +508,22 @@ def test_resolve_eval_ids_supports_medium_and_high_qa_bench_suites() -> None:
     )
 
 
+def test_resolve_eval_ids_supports_ultra_and_max_qa_bench_suites() -> None:
+    ultra_eval_ids = resolve_eval_ids("suite:qa-ultra")
+    max_eval_ids = resolve_eval_ids("suite:qa-max")
+
+    assert ultra_eval_ids == ULTRA_DIFFICULTY_EVAL_IDS
+    assert max_eval_ids == MAX_DIFFICULTY_EVAL_IDS
+    assert all(
+        difficulty_for_tier(load_fixture(eval_id).tier) == "ultra"
+        for eval_id in ultra_eval_ids
+    )
+    assert all(
+        difficulty_for_tier(load_fixture(eval_id).tier) == "max"
+        for eval_id in max_eval_ids
+    )
+
+
 def test_select_eval_ids_appends_extra_eval_ids_after_windowing() -> None:
     eval_ids = select_eval_ids("E1,E2,E3", "E4,E2", "2", "1")
 
@@ -541,7 +559,9 @@ def test_reproducibility_metadata_records_extra_eval_ids(monkeypatch) -> None:
 def test_qa_bench_suite_names_are_vendor_neutral() -> None:
     assert "qa-high" in available_suite_names()
     assert "qa-low" in available_suite_names()
+    assert "qa-max" in available_suite_names()
     assert "qa-medium" in available_suite_names()
+    assert "qa-ultra" in available_suite_names()
     assert "qa-lifecycle-extended" in available_suite_names()
     assert all("supatest" not in suite for suite in available_suite_names())
 
@@ -607,6 +627,23 @@ def test_medium_and_high_difficulty_evals_have_expected_signals_and_antipatterns
     for difficulty, eval_ids in [
         ("medium", MEDIUM_DIFFICULTY_EVAL_IDS),
         ("high", HIGH_DIFFICULTY_EVAL_IDS),
+    ]:
+        for eval_id in eval_ids:
+            metadata = eval_metadata(load_fixture(eval_id))
+
+            assert metadata["difficulty"] == difficulty, eval_id
+            assert metadata["expectedSignals"], eval_id
+            assert metadata["antiPatterns"], eval_id
+            assert metadata["scoringNotes"], eval_id
+
+
+def test_ultra_and_max_difficulty_evals_have_expected_signals_and_antipatterns() -> None:
+    assert len(ULTRA_DIFFICULTY_EVAL_IDS) == 20
+    assert len(MAX_DIFFICULTY_EVAL_IDS) == 20
+
+    for difficulty, eval_ids in [
+        ("ultra", ULTRA_DIFFICULTY_EVAL_IDS),
+        ("max", MAX_DIFFICULTY_EVAL_IDS),
     ]:
         for eval_id in eval_ids:
             metadata = eval_metadata(load_fixture(eval_id))

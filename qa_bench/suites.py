@@ -3,7 +3,9 @@ from __future__ import annotations
 from .rubrics import (
     HIGH_DIFFICULTY_EVAL_IDS,
     LOW_DIFFICULTY_EVAL_IDS,
+    MAX_DIFFICULTY_EVAL_IDS,
     MEDIUM_DIFFICULTY_EVAL_IDS,
+    ULTRA_DIFFICULTY_EVAL_IDS,
 )
 
 
@@ -29,6 +31,16 @@ QA_BENCH_SUITES = {
         "label": "QA Bench High Difficulty",
         "description": "Advanced QA suite covering robust waits, project discovery, assertion preservation, root-cause repair, and anti-shortcut behavior.",
         "evalIds": HIGH_DIFFICULTY_EVAL_IDS,
+    },
+    "qa-ultra": {
+        "label": "QA Bench Ultra Difficulty",
+        "description": "Expert QA suite covering framework adaptation, stale evidence, scoped planning, bounded repair, and complex browser/mobile-adjacent workflows.",
+        "evalIds": ULTRA_DIFFICULTY_EVAL_IDS,
+    },
+    "qa-max": {
+        "label": "QA Bench Max Difficulty",
+        "description": "Production-regression QA suite covering mobile hierarchy, Appium/WDIO, device targeting, log interpretation, and non-destructive fixes.",
+        "evalIds": MAX_DIFFICULTY_EVAL_IDS,
     },
     "qa-core": {
         "label": "QA Bench Core",
