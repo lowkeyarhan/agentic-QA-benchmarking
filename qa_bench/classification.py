@@ -28,6 +28,7 @@ def eval_metadata(fixture) -> dict:
     difficulty = str(explicit.get("difficulty") or difficulty_for_tier(tier))
     validate_difficulty(difficulty, fixture)
     guidance = guidance_for_eval(
+        str(getattr(fixture, "eval_id", "") or ""),
         str(getattr(fixture, "mode", None) or ""),
         capability,
         difficulty,

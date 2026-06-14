@@ -320,9 +320,11 @@ def build_batch_judge_prompt(
                 "using status satisfied, partial, failed, or not_applicable."
             ),
             "qaBenchGuidance": (
-                "Use qaBench.judgeGuidance and qaBench.qualitySignals as compact "
-                "per-eval QA expectations. They calibrate the task; they do not "
-                "override task text, criteria, changedDiff, or objective evidence."
+                "Use qaBench.judgeGuidance, qaBench.qualitySignals, "
+                "qaBench.expectedSignals, qaBench.antiPatterns, and "
+                "qaBench.scoringNotes as compact per-eval QA expectations. "
+                "They calibrate the task; they do not override task text, "
+                "criteria, changedDiff, or objective evidence."
             ),
             "confidence": "0.0 to 1.0 confidence in the score based on available evidence.",
             "failureTaxonomy": (
@@ -352,7 +354,11 @@ def build_batch_judge_prompt(
         "qaReviewHints.changeSignals are deterministic hints from the diff; use them to "
         "notice sleeps, assertions, selectors, skips, mocks, and state-based waits, but treat "
         "changedDiff and criteria as the source of truth. "
-        "Use qaBench.judgeGuidance and qaBench.qualitySignals to calibrate each case. "
+        "Use qaBench.judgeGuidance, qaBench.qualitySignals, qaBench.expectedSignals, "
+        "qaBench.antiPatterns, and qaBench.scoringNotes to calibrate each case. "
+        "Expected signals are evidence to look for, not hidden mandatory criteria unless "
+        "they match the task or criteria. Anti-patterns should reduce score when observed "
+        "in changedDiff, evidence, or artifact checks. "
         "For low difficulty cases, do not demand advanced enterprise workflow, but do "
         "require the baseline QA fundamentals: real executable tests or targeted fixes, "
         "meaningful assertions, stable selectors, no skips/only/trivial assertions, tight "

@@ -566,6 +566,18 @@ def test_low_and_medium_fixtures_have_explicit_qa_bench_metadata() -> None:
             assert "baseline QA competency" in metadata["judgeGuidance"][0], eval_id
 
 
+def test_low_difficulty_evals_have_explicit_expected_signals_and_antipatterns() -> None:
+    assert len(LOW_DIFFICULTY_EVAL_IDS) == 20
+
+    for eval_id in LOW_DIFFICULTY_EVAL_IDS:
+        metadata = eval_metadata(load_fixture(eval_id))
+
+        assert metadata["difficulty"] == "low", eval_id
+        assert metadata["expectedSignals"], eval_id
+        assert metadata["antiPatterns"], eval_id
+        assert metadata["scoringNotes"], eval_id
+
+
 def test_copy_project_does_not_mount_fixture_root_answer_files(tmp_path) -> None:
     fixture = load_fixture("E75")
     assert (fixture.fixture_dir / "solution.md").exists()
@@ -1899,6 +1911,11 @@ def test_batch_judge_prompt_includes_qa_review_hints_for_tests_and_fixes() -> No
             "qualitySignals": [
                 "Assertions verify product behavior, not implementation trivia."
             ],
+            "expectedSignals": [
+                "Removes fixed waits and adds state-based synchronization."
+            ],
+            "antiPatterns": ["Keeps waitForTimeout or weakens the assertion."],
+            "scoringNotes": ["Targeted repair plus regression coverage should score well."],
             "metricIds": ["relevance", "assertion_quality"],
         },
         "passCriteria": ["removes the timeout", "adds coverage for sorting"],
@@ -1929,10 +1946,13 @@ def test_batch_judge_prompt_includes_qa_review_hints_for_tests_and_fixes() -> No
     assert "Generated or updated tests are first-class QA evidence" in prompt
     assert "identify the fixes the agent actually applied" in prompt
     assert "qaReviewHints.changeSignals are deterministic hints" in prompt
-    assert "Use qaBench.judgeGuidance and qaBench.qualitySignals" in prompt
+    assert "qaBench.expectedSignals" in prompt
+    assert "qaBench.antiPatterns" in prompt
     assert "New tests are positive when they directly prove the regression" in prompt
     assert payload["cases"][0]["qaBench"]["difficulty"] == "low"
     assert "baseline QA competency" in payload["cases"][0]["qaBench"]["judgeGuidance"][0]
+    assert payload["cases"][0]["qaBench"]["expectedSignals"]
+    assert payload["cases"][0]["qaBench"]["antiPatterns"]
     assert hints["changedTestFiles"] == ["tests/inventory-sort.spec.ts"]
     assert hints["changedImplementationFiles"] == ["pages/InventoryPage.ts"]
     assert hints["generatedOrUpdatedTests"] is True
