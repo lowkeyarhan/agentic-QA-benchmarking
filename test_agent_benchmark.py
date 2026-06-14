@@ -41,7 +41,11 @@ from qa_bench import (
     difficulty_for_tier,
     eval_metadata,
 )
-from qa_bench.rubrics import LOW_DIFFICULTY_EVAL_IDS
+from qa_bench.rubrics import (
+    HIGH_DIFFICULTY_EVAL_IDS,
+    LOW_DIFFICULTY_EVAL_IDS,
+    MEDIUM_DIFFICULTY_EVAL_IDS,
+)
 import run_benchmark
 from run_benchmark import (
     BatchJudgeCaseScore,
@@ -486,6 +490,22 @@ def test_resolve_eval_ids_supports_low_qa_bench_suite() -> None:
     assert all(difficulty_for_tier(load_fixture(eval_id).tier) == "low" for eval_id in eval_ids)
 
 
+def test_resolve_eval_ids_supports_medium_and_high_qa_bench_suites() -> None:
+    medium_eval_ids = resolve_eval_ids("suite:qa-medium")
+    high_eval_ids = resolve_eval_ids("suite:qa-high")
+
+    assert medium_eval_ids == MEDIUM_DIFFICULTY_EVAL_IDS
+    assert high_eval_ids == HIGH_DIFFICULTY_EVAL_IDS
+    assert all(
+        difficulty_for_tier(load_fixture(eval_id).tier) == "medium"
+        for eval_id in medium_eval_ids
+    )
+    assert all(
+        difficulty_for_tier(load_fixture(eval_id).tier) == "high"
+        for eval_id in high_eval_ids
+    )
+
+
 def test_select_eval_ids_appends_extra_eval_ids_after_windowing() -> None:
     eval_ids = select_eval_ids("E1,E2,E3", "E4,E2", "2", "1")
 
@@ -519,7 +539,9 @@ def test_reproducibility_metadata_records_extra_eval_ids(monkeypatch) -> None:
 
 
 def test_qa_bench_suite_names_are_vendor_neutral() -> None:
+    assert "qa-high" in available_suite_names()
     assert "qa-low" in available_suite_names()
+    assert "qa-medium" in available_suite_names()
     assert "qa-lifecycle-extended" in available_suite_names()
     assert all("supatest" not in suite for suite in available_suite_names())
 
@@ -576,6 +598,23 @@ def test_low_difficulty_evals_have_explicit_expected_signals_and_antipatterns() 
         assert metadata["expectedSignals"], eval_id
         assert metadata["antiPatterns"], eval_id
         assert metadata["scoringNotes"], eval_id
+
+
+def test_medium_and_high_difficulty_evals_have_expected_signals_and_antipatterns() -> None:
+    assert len(MEDIUM_DIFFICULTY_EVAL_IDS) == 20
+    assert len(HIGH_DIFFICULTY_EVAL_IDS) == 20
+
+    for difficulty, eval_ids in [
+        ("medium", MEDIUM_DIFFICULTY_EVAL_IDS),
+        ("high", HIGH_DIFFICULTY_EVAL_IDS),
+    ]:
+        for eval_id in eval_ids:
+            metadata = eval_metadata(load_fixture(eval_id))
+
+            assert metadata["difficulty"] == difficulty, eval_id
+            assert metadata["expectedSignals"], eval_id
+            assert metadata["antiPatterns"], eval_id
+            assert metadata["scoringNotes"], eval_id
 
 
 def test_copy_project_does_not_mount_fixture_root_answer_files(tmp_path) -> None:

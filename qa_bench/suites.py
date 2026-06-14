@@ -1,6 +1,10 @@
 from __future__ import annotations
 
-from .rubrics import LOW_DIFFICULTY_EVAL_IDS
+from .rubrics import (
+    HIGH_DIFFICULTY_EVAL_IDS,
+    LOW_DIFFICULTY_EVAL_IDS,
+    MEDIUM_DIFFICULTY_EVAL_IDS,
+)
 
 
 SUITE_PREFIX = "suite:"
@@ -15,6 +19,16 @@ QA_BENCH_SUITES = {
         "label": "QA Bench Low Difficulty",
         "description": "Baseline QA competency suite covering simple but real test authoring, repair, selector, metadata, and discovery tasks.",
         "evalIds": LOW_DIFFICULTY_EVAL_IDS,
+    },
+    "qa-medium": {
+        "label": "QA Bench Medium Difficulty",
+        "description": "Intermediate QA lifecycle suite covering bounded exploration, reports, manual/automation feature validation, and repair discipline.",
+        "evalIds": MEDIUM_DIFFICULTY_EVAL_IDS,
+    },
+    "qa-high": {
+        "label": "QA Bench High Difficulty",
+        "description": "Advanced QA suite covering robust waits, project discovery, assertion preservation, root-cause repair, and anti-shortcut behavior.",
+        "evalIds": HIGH_DIFFICULTY_EVAL_IDS,
     },
     "qa-core": {
         "label": "QA Bench Core",
