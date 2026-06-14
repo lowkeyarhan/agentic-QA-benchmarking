@@ -16,6 +16,18 @@
     "Adds NaN handling in tests instead of fixing the parser"
   ],
   "tier": 6,
+  "qaBench": {
+    "capability": "test-repair",
+    "metricIds": [
+      "relevance",
+      "coverage",
+      "assertion_quality",
+      "test_integrity",
+      "root_cause_accuracy",
+      "maintainability"
+    ],
+    "difficulty": "high"
+  },
   "baseTemplate": "playwright-ts-full",
   "modifications": [
     {

@@ -19,8 +19,21 @@
     "Test still fails with same error"
   ],
   "tier": 8,
+  "qaBench": {
+    "capability": "test-repair",
+    "metricIds": [
+      "relevance",
+      "coverage",
+      "test_integrity",
+      "root_cause_accuracy",
+      "maintainability"
+    ],
+    "difficulty": "ultra"
+  },
   "category": "complex-ui-interactions",
   "baseTemplate": "playwright-ts-full",
-  "modifications": ["user-snippet-app"],
+  "modifications": [
+    "user-snippet-app"
+  ],
   "generatedAt": "2026-03-14T12:00:00.000Z"
 }

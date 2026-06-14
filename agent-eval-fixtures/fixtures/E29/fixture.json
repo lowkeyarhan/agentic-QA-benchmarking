@@ -11,6 +11,18 @@
     "Fixes the selector but leaves the test without tags"
   ],
   "tier": 8,
+  "qaBench": {
+    "capability": "metadata-governance",
+    "metricIds": [
+      "relevance",
+      "coverage",
+      "metadata_quality",
+      "test_integrity",
+      "root_cause_accuracy",
+      "maintainability"
+    ],
+    "difficulty": "ultra"
+  },
   "baseTemplate": "playwright-ts-full",
   "modifications": [
     {

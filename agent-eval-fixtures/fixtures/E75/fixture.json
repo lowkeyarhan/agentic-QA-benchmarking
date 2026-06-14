@@ -7,7 +7,7 @@
   "passCriteria": [
     "Test passes successfully",
     "Does NOT use getByRole('option') for custom dropdown",
-    "Uses proper wait pattern (click trigger → wait → select option)",
+    "Uses proper wait pattern (click trigger \u2192 wait \u2192 select option)",
     "Selects 'Premium' option successfully"
   ],
   "failCriteria": [
@@ -17,8 +17,23 @@
     "Still fails with timeout or '0 elements' error"
   ],
   "tier": 6,
+  "qaBench": {
+    "capability": "test-repair",
+    "metricIds": [
+      "relevance",
+      "coverage",
+      "test_integrity",
+      "root_cause_accuracy",
+      "selector_strategy",
+      "state_timing_reliability",
+      "maintainability"
+    ],
+    "difficulty": "high"
+  },
   "category": "complex-ui-interactions",
   "baseTemplate": "playwright-ts-full",
-  "modifications": ["custom-dropdown-app"],
+  "modifications": [
+    "custom-dropdown-app"
+  ],
   "generatedAt": "2026-03-14T12:00:00.000Z"
 }

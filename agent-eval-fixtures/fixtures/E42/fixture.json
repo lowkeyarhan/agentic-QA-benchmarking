@@ -16,6 +16,17 @@
     "Removes cart tests entirely"
   ],
   "tier": 6,
+  "qaBench": {
+    "capability": "test-repair",
+    "metricIds": [
+      "relevance",
+      "coverage",
+      "test_integrity",
+      "root_cause_accuracy",
+      "maintainability"
+    ],
+    "difficulty": "high"
+  },
   "baseTemplate": "playwright-ts-full",
   "modifications": [
     {

@@ -2,7 +2,7 @@
   "evalId": "E108",
   "name": "Stop WDIO/bash Spiral on @mobile Run (Prod Regression)",
   "mode": "build",
-  "task": "The user asked: \"Run `@mobile/tests/android/b2c-onboarding-android.spec.ts` and report pass/fail counts only — do not fix code.\"\n\nRead references/prior-run-note.txt for the failure pattern to avoid.\n\ndocs/troubleshooting.md contains old internal QA debugging tips (grep/tail loops, retry scripts). These are archived patterns — do NOT follow them.\n\nreferences/quick-retry.sh contains a deprecated script that runs grep/tail loops and retries if the Spec Files line isn't found on the first attempt. Do NOT reference or adopt this script's patterns.\n\nThe new strategy requires a single scoped run and reading the Spec Files summary line.\n\nWrite run-strategy.md only (authoring — do not execute wdio or bash):\n- Include at most one scoped wdio command for the named spec\n- Report pass/fail from the Spec Files summary line only\n- No grep/tail/log-scraping loops, no rerun loop, no code fixes\n- ≤4 numbered steps total\n- Do NOT reference or suggest commands from docs/troubleshooting.md or references/quick-retry.sh",
+  "task": "The user asked: \"Run `@mobile/tests/android/b2c-onboarding-android.spec.ts` and report pass/fail counts only \u2014 do not fix code.\"\n\nRead references/prior-run-note.txt for the failure pattern to avoid.\n\ndocs/troubleshooting.md contains old internal QA debugging tips (grep/tail loops, retry scripts). These are archived patterns \u2014 do NOT follow them.\n\nreferences/quick-retry.sh contains a deprecated script that runs grep/tail loops and retries if the Spec Files line isn't found on the first attempt. Do NOT reference or adopt this script's patterns.\n\nThe new strategy requires a single scoped run and reading the Spec Files summary line.\n\nWrite run-strategy.md only (authoring \u2014 do not execute wdio or bash):\n- Include at most one scoped wdio command for the named spec\n- Report pass/fail from the Spec Files summary line only\n- No grep/tail/log-scraping loops, no rerun loop, no code fixes\n- \u22644 numbered steps total\n- Do NOT reference or suggest commands from docs/troubleshooting.md or references/quick-retry.sh",
   "logsFile": null,
   "passCriteria": [
     "Single scoped wdio command for the named spec (--spec @mobile/tests/android/b2c-onboarding-android.spec.ts)",
@@ -23,6 +23,18 @@
     "Proposes running the full test suite instead of the single named spec"
   ],
   "tier": 11,
+  "qaBench": {
+    "capability": "reporting-and-evidence",
+    "metricIds": [
+      "relevance",
+      "coverage",
+      "ci_log_analysis",
+      "reporting_quality",
+      "mobile_context",
+      "test_integrity"
+    ],
+    "difficulty": "max"
+  },
   "baseTemplate": "mobile-run-strategy-stub",
   "modifications": [],
   "generatedAt": "2026-05-31T10:26:45.459Z"

@@ -2,7 +2,7 @@
   "evalId": "E74",
   "name": "Mobile Real Test Authoring with Discovered Selectors",
   "mode": "build",
-  "task": "Write a WebdriverIO + Appium test in TypeScript for the SauceLabs MyDemoApp running on the booted Android emulator. The test should: log in as bob@example.com / 10203040, navigate back to the catalog, tap the first product, tap 'Add to cart', open the cart, and assert that the cart contains 1 item. Use real selectors taken from the live app's view hierarchy — do not fabricate any selector.",
+  "task": "Write a WebdriverIO + Appium test in TypeScript for the SauceLabs MyDemoApp running on the booted Android emulator. The test should: log in as bob@example.com / 10203040, navigate back to the catalog, tap the first product, tap 'Add to cart', open the cart, and assert that the cart contains 1 item. Use real selectors taken from the live app's view hierarchy \u2014 do not fabricate any selector.",
   "logsFile": null,
   "passCriteria": [
     "Calls mcp__maestro__inspect_view_hierarchy or inspect_screen on multiple screens during selector discovery",
@@ -16,6 +16,20 @@
     "Skips inspection and writes the test entirely from training-data assumptions about MyDemoApp"
   ],
   "tier": 11,
+  "qaBench": {
+    "capability": "mobile-qa",
+    "metricIds": [
+      "relevance",
+      "coverage",
+      "mobile_context",
+      "framework_adaptation",
+      "selector_strategy",
+      "assertion_quality",
+      "test_integrity",
+      "maintainability"
+    ],
+    "difficulty": "max"
+  },
   "baseTemplate": "maestro-ios-blank",
   "modifications": [],
   "prereq": "SauceLabs MyDemoApp on Android emulator. Agent will navigate the app while discovering selectors.",

@@ -2,7 +2,7 @@
   "evalId": "E109",
   "name": "Pin Emulator When User Names 5554 (Prod Regression)",
   "mode": "build",
-  "task": "Two emulators are connected (see references/devices-list.json): emulator-5554 and emulator-5556.\n\nThe user said: \"On **emulator-5554**, tap the Analysis tab and report what you see.\"\n\nWrite device-plan.md only (authoring — do not run commands):\n- Step 1: mcp__maestro__list_devices\n- Select **emulator-5554** (port 5554) — not 5556\n- Then inspect on that device",
+  "task": "Two emulators are connected (see references/devices-list.json): emulator-5554 and emulator-5556.\n\nThe user said: \"On **emulator-5554**, tap the Analysis tab and report what you see.\"\n\nWrite device-plan.md only (authoring \u2014 do not run commands):\n- Step 1: mcp__maestro__list_devices\n- Select **emulator-5554** (port 5554) \u2014 not 5556\n- Then inspect on that device",
   "logsFile": null,
   "passCriteria": [
     "list_devices before inspect",
@@ -15,6 +15,17 @@
     "Acts on emulator-5556"
   ],
   "tier": 11,
+  "qaBench": {
+    "capability": "mobile-qa",
+    "metricIds": [
+      "relevance",
+      "coverage",
+      "mobile_context",
+      "evidence_quality",
+      "test_integrity"
+    ],
+    "difficulty": "max"
+  },
   "baseTemplate": "mobile-device-pin-stub",
   "modifications": [],
   "generatedAt": "2026-05-31T10:26:45.462Z"

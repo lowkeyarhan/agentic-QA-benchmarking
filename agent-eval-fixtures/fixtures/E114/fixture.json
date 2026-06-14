@@ -17,6 +17,18 @@
     "Adds test.skip() or weakens assertions"
   ],
   "tier": 7,
+  "qaBench": {
+    "capability": "test-repair",
+    "metricIds": [
+      "relevance",
+      "coverage",
+      "test_integrity",
+      "root_cause_accuracy",
+      "selector_strategy",
+      "maintainability"
+    ],
+    "difficulty": "ultra"
+  },
   "baseTemplate": "playwright-ts-full",
   "generatedAt": "2026-06-11T10:00:00.000Z"
 }

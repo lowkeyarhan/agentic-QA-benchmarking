@@ -10,9 +10,19 @@
     "Plan references specific components/pages found in code"
   ],
   "failCriteria": [
-    "Agent asks \"What pages are in the checkout flow?\" or \"What form fields are on the checkout page?\" — questions that the code answers"
+    "Agent asks \"What pages are in the checkout flow?\" or \"What form fields are on the checkout page?\" \u2014 questions that the code answers"
   ],
   "tier": 7,
+  "qaBench": {
+    "capability": "risk-planning",
+    "metricIds": [
+      "relevance",
+      "coverage",
+      "reporting_quality",
+      "maintainability"
+    ],
+    "difficulty": "ultra"
+  },
   "baseTemplate": "playwright-ts-full",
   "modifications": [],
   "generatedAt": "2026-04-12T17:09:08.844Z"

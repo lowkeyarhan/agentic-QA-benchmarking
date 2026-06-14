@@ -1,6 +1,6 @@
 {
   "evalId": "E70",
-  "name": "Mobile Tool Selection — Inspect Foreground App",
+  "name": "Mobile Tool Selection \u2014 Inspect Foreground App",
   "mode": "build",
   "task": "What's on the phone screen right now? List 5 UI elements I can target with their identifiers.",
   "logsFile": null,
@@ -16,6 +16,18 @@
     "Writes a Maestro YAML flow (this fixture is exploration-only)"
   ],
   "tier": 11,
+  "qaBench": {
+    "capability": "mobile-qa",
+    "metricIds": [
+      "relevance",
+      "coverage",
+      "mobile_context",
+      "evidence_quality",
+      "selector_strategy",
+      "framework_adaptation"
+    ],
+    "difficulty": "max"
+  },
   "baseTemplate": "maestro-ios-blank",
   "modifications": [],
   "generatedAt": "2026-05-12T18:00:00.000Z"

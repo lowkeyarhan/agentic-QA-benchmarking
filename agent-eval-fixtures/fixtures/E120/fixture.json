@@ -17,6 +17,19 @@
     "Writes Maestro YAML instead of Appium/WDIO test code"
   ],
   "tier": 11,
+  "qaBench": {
+    "capability": "mobile-qa",
+    "metricIds": [
+      "relevance",
+      "coverage",
+      "mobile_context",
+      "framework_adaptation",
+      "selector_strategy",
+      "evidence_quality",
+      "reporting_quality"
+    ],
+    "difficulty": "max"
+  },
   "baseTemplate": "maestro-ios-blank",
   "generatedAt": "2026-06-11T10:00:00.000Z"
 }

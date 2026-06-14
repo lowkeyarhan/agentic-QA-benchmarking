@@ -17,6 +17,17 @@
     "Uses page.pause() or interactive-only APIs"
   ],
   "tier": 8,
+  "qaBench": {
+    "capability": "test-authoring",
+    "metricIds": [
+      "relevance",
+      "coverage",
+      "assertion_quality",
+      "test_integrity",
+      "maintainability"
+    ],
+    "difficulty": "ultra"
+  },
   "baseTemplate": "playwright-ts-full",
   "generatedAt": "2026-06-11T10:00:00.000Z"
 }

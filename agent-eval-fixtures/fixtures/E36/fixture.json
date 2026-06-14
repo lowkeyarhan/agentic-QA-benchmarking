@@ -17,6 +17,19 @@
     "Changes test expectations instead of fixing the selector"
   ],
   "tier": 8,
+  "qaBench": {
+    "capability": "test-repair",
+    "metricIds": [
+      "relevance",
+      "coverage",
+      "assertion_quality",
+      "test_integrity",
+      "root_cause_accuracy",
+      "selector_strategy",
+      "maintainability"
+    ],
+    "difficulty": "ultra"
+  },
   "baseTemplate": "playwright-ts-full",
   "modifications": [
     {

@@ -15,6 +15,17 @@
     "New test uses different patterns than the codebase"
   ],
   "tier": 5,
+  "qaBench": {
+    "capability": "project-discovery",
+    "metricIds": [
+      "relevance",
+      "coverage",
+      "maintainability",
+      "selector_strategy",
+      "test_integrity"
+    ],
+    "difficulty": "high"
+  },
   "baseTemplate": "playwright-ts-full",
   "modifications": [
     {

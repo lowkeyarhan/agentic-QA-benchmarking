@@ -14,6 +14,16 @@
     "Tests are named after UI elements rather than user goals"
   ],
   "tier": 7,
+  "qaBench": {
+    "capability": "risk-planning",
+    "metricIds": [
+      "relevance",
+      "coverage",
+      "reporting_quality",
+      "maintainability"
+    ],
+    "difficulty": "ultra"
+  },
   "baseTemplate": "playwright-ts-full",
   "modifications": [],
   "generatedAt": "2026-04-12T17:09:08.992Z"

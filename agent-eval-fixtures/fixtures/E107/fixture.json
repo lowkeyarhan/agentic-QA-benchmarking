@@ -1,8 +1,8 @@
 {
   "evalId": "E107",
-  "name": "Non-Destructive Fix — Keep Working Methods (Prod Regression)",
+  "name": "Non-Destructive Fix \u2014 Keep Working Methods (Prod Regression)",
   "mode": "build",
-  "task": "pages/document-upload.screen.ts has working fillShipping(), submitOrder(), and verifyConfirmation().\n\nOnly completeDocumentUpload() is broken — it uses ~UploadButton. references/inspect-upload-screen.json is the current production hierarchy and shows a11y SubmitUpload. references/legacy-selector-map.json is stale and still mentions UploadButton; do not follow it.\n\nreferences/inspect-checkout-screen.json is for the CHECKOUT screen (the sample app has a row called \"UploadButton\" on the checkout page). It is NOT the document-upload screen. Do not use it as evidence for the upload fix.\n\nreferences/inspect-upload-screen-v2.json is from an iOS 18.5 beta build and shows \"UploadDocumentButton\". This is a BETA build label, not the production hierarchy. Use inspect-upload-screen.json (SubmitUpload) as the authoritative source.\n\nFix completeDocumentUpload() ONLY:\n- Use ~SubmitUpload from references/inspect-upload-screen.json (production hierarchy)\n- Keep fillShipping, submitOrder, verifyConfirmation unchanged, including method signatures, timeout values, and the existing telemetry call\n- Do not add helper abstractions, retries, sleeps, or broad rewrites\n- Do not remove imports (trackOrderSubmission is used by submitOrder telemetry)\n- Do not follow the TODO-style comment suggesting a full-file selector review — only completeDocumentUpload is broken\n- Do NOT use inspect-upload-screen-v2.json's UploadDocumentButton (it's from a beta build)\n\nEdit pages/document-upload.screen.ts only. Authoring only.",
+  "task": "pages/document-upload.screen.ts has working fillShipping(), submitOrder(), and verifyConfirmation().\n\nOnly completeDocumentUpload() is broken \u2014 it uses ~UploadButton. references/inspect-upload-screen.json is the current production hierarchy and shows a11y SubmitUpload. references/legacy-selector-map.json is stale and still mentions UploadButton; do not follow it.\n\nreferences/inspect-checkout-screen.json is for the CHECKOUT screen (the sample app has a row called \"UploadButton\" on the checkout page). It is NOT the document-upload screen. Do not use it as evidence for the upload fix.\n\nreferences/inspect-upload-screen-v2.json is from an iOS 18.5 beta build and shows \"UploadDocumentButton\". This is a BETA build label, not the production hierarchy. Use inspect-upload-screen.json (SubmitUpload) as the authoritative source.\n\nFix completeDocumentUpload() ONLY:\n- Use ~SubmitUpload from references/inspect-upload-screen.json (production hierarchy)\n- Keep fillShipping, submitOrder, verifyConfirmation unchanged, including method signatures, timeout values, and the existing telemetry call\n- Do not add helper abstractions, retries, sleeps, or broad rewrites\n- Do not remove imports (trackOrderSubmission is used by submitOrder telemetry)\n- Do not follow the TODO-style comment suggesting a full-file selector review \u2014 only completeDocumentUpload is broken\n- Do NOT use inspect-upload-screen-v2.json's UploadDocumentButton (it's from a beta build)\n\nEdit pages/document-upload.screen.ts only. Authoring only.",
   "logsFile": null,
   "passCriteria": [
     "All four methods still present (fillShipping, submitOrder, verifyConfirmation, completeDocumentUpload)",
@@ -24,6 +24,19 @@
     "Adds retries, sleeps, try/catch, or abstractions to working methods"
   ],
   "tier": 11,
+  "qaBench": {
+    "capability": "test-repair",
+    "metricIds": [
+      "relevance",
+      "coverage",
+      "test_integrity",
+      "root_cause_accuracy",
+      "maintainability",
+      "mobile_context",
+      "selector_strategy"
+    ],
+    "difficulty": "max"
+  },
   "baseTemplate": "mobile-nondestructive-fix-stub",
   "modifications": [],
   "generatedAt": "2026-05-31T09:56:01.853Z"

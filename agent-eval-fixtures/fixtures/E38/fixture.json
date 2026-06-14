@@ -15,6 +15,19 @@
     "Wraps URL assertion in try/catch"
   ],
   "tier": 6,
+  "qaBench": {
+    "capability": "test-repair",
+    "metricIds": [
+      "relevance",
+      "coverage",
+      "assertion_quality",
+      "test_integrity",
+      "root_cause_accuracy",
+      "selector_strategy",
+      "maintainability"
+    ],
+    "difficulty": "high"
+  },
   "baseTemplate": "playwright-ts-full",
   "modifications": [
     {

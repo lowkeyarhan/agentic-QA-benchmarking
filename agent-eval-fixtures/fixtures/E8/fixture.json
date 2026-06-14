@@ -14,6 +14,17 @@
     "Opens browser when page objects have all needed info"
   ],
   "tier": 7,
+  "qaBench": {
+    "capability": "project-discovery",
+    "metricIds": [
+      "relevance",
+      "coverage",
+      "maintainability",
+      "selector_strategy",
+      "test_integrity"
+    ],
+    "difficulty": "ultra"
+  },
   "baseTemplate": "playwright-ts-full",
   "modifications": [],
   "generatedAt": "2026-06-11T13:29:55.087Z"

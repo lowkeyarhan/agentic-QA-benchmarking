@@ -18,6 +18,19 @@
     "Vague analysis without specific root cause identification"
   ],
   "tier": 8,
+  "qaBench": {
+    "capability": "reporting-and-evidence",
+    "metricIds": [
+      "relevance",
+      "coverage",
+      "reporting_quality",
+      "root_cause_accuracy",
+      "ci_log_analysis",
+      "evidence_quality",
+      "test_integrity"
+    ],
+    "difficulty": "ultra"
+  },
   "baseTemplate": "playwright-ts-full",
   "generatedAt": "2026-06-11T10:00:00.000Z"
 }

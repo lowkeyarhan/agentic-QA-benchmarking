@@ -18,6 +18,17 @@
     "Runs any mcp__maestro__* commands or shell commands"
   ],
   "tier": 11,
+  "qaBench": {
+    "capability": "risk-planning",
+    "metricIds": [
+      "relevance",
+      "coverage",
+      "reporting_quality",
+      "mobile_context",
+      "framework_adaptation"
+    ],
+    "difficulty": "max"
+  },
   "baseTemplate": "maestro-ios-blank",
   "generatedAt": "2026-06-11T10:00:00.000Z"
 }

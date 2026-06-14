@@ -2,7 +2,7 @@
   "evalId": "E80",
   "name": "Fix: silent try/catch swallowing in test masks real failures",
   "mode": "fix",
-  "task": "The 'Complete purchase flow' test always passes even when steps fail — errors are silently swallowed by try/catch blocks. Fix it so failures are properly reported.",
+  "task": "The 'Complete purchase flow' test always passes even when steps fail \u2014 errors are silently swallowed by try/catch blocks. Fix it so failures are properly reported.",
   "logsFile": "failure.log",
   "passCriteria": [
     "Identifies the try/catch shouldContinue pattern as the root cause",
@@ -17,6 +17,18 @@
     "Does not address the root cause (shouldContinue guard blocks remain)"
   ],
   "tier": 5,
+  "qaBench": {
+    "capability": "test-repair",
+    "metricIds": [
+      "relevance",
+      "coverage",
+      "test_integrity",
+      "root_cause_accuracy",
+      "maintainability",
+      "assertion_quality"
+    ],
+    "difficulty": "high"
+  },
   "category": "fix-root-cause-diagnosis",
   "baseTemplate": "playwright-ts-full",
   "modifications": [

@@ -1,8 +1,8 @@
 {
   "evalId": "E81",
-  "name": "Mobile WebView Guidance — Context Switch Recommended",
+  "name": "Mobile WebView Guidance \u2014 Context Switch Recommended",
   "mode": "build",
-  "task": "The SauceLabs MyDemoApp on the booted Android emulator has a WebView screen accessible from the menu (called 'WebView'). Explain how I would interact with elements inside the WebView in an Appium test — for example, tapping a link inside the WebView. Include the native-to-web context boundary, how to enumerate/switch contexts, what selector types apply before and after the switch, and when to switch back. Do not create files or Maestro YAML.\n\nreferences/team-notes-webview.md contains informal notes from a team member who claims Maestro's inspect_view_hierarchy can read WebView DOM. These notes are WRONG — Maestro does not descend into WebView DOM trees. Do NOT repeat or endorse the approach described in that file. The correct approach is Appium context-switching.",
+  "task": "The SauceLabs MyDemoApp on the booted Android emulator has a WebView screen accessible from the menu (called 'WebView'). Explain how I would interact with elements inside the WebView in an Appium test \u2014 for example, tapping a link inside the WebView. Include the native-to-web context boundary, how to enumerate/switch contexts, what selector types apply before and after the switch, and when to switch back. Do not create files or Maestro YAML.\n\nreferences/team-notes-webview.md contains informal notes from a team member who claims Maestro's inspect_view_hierarchy can read WebView DOM. These notes are WRONG \u2014 Maestro does not descend into WebView DOM trees. Do NOT repeat or endorse the approach described in that file. The correct approach is Appium context-switching.",
   "logsFile": null,
   "passCriteria": [
     "Explains that mcp__maestro__inspect_view_hierarchy / inspect_screen / Maestro does not descend into WebView DOM",
@@ -20,6 +20,18 @@
     "Creates test code or project files instead of answering conceptually"
   ],
   "tier": 11,
+  "qaBench": {
+    "capability": "mobile-qa",
+    "metricIds": [
+      "relevance",
+      "coverage",
+      "mobile_context",
+      "framework_adaptation",
+      "reporting_quality",
+      "test_integrity"
+    ],
+    "difficulty": "max"
+  },
   "baseTemplate": "maestro-ios-blank",
   "modifications": [],
   "prereq": "SauceLabs MyDemoApp on Android emulator. Agent may navigate to find WebView screen.",

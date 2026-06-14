@@ -17,6 +17,19 @@
     "Skips the flaky toast tests"
   ],
   "tier": 9,
+  "qaBench": {
+    "capability": "test-repair",
+    "metricIds": [
+      "relevance",
+      "coverage",
+      "assertion_quality",
+      "test_integrity",
+      "root_cause_accuracy",
+      "state_timing_reliability",
+      "maintainability"
+    ],
+    "difficulty": "ultra"
+  },
   "baseTemplate": "playwright-ts-full",
   "generatedAt": "2026-06-11T10:00:00.000Z"
 }

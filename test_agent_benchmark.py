@@ -579,16 +579,11 @@ def test_documented_tier_difficulty_mapping() -> None:
     assert difficulty_for_tier(11) == "max"
 
 
-def test_low_and_medium_fixtures_have_explicit_qa_bench_metadata() -> None:
+def test_all_fixtures_have_explicit_qa_bench_metadata() -> None:
     fixtures = [load_fixture(eval_id) for eval_id in available_eval_ids()]
-    covered_fixtures = [
-        fixture
-        for fixture in fixtures
-        if difficulty_for_tier(fixture.tier) in {"low", "medium"}
-    ]
 
-    assert len(covered_fixtures) == 40
-    for fixture in covered_fixtures:
+    assert len(fixtures) == 100
+    for fixture in fixtures:
         eval_id = fixture.eval_id
         explicit = fixture.qa_bench
         metadata = eval_metadata(fixture)
@@ -604,6 +599,9 @@ def test_low_and_medium_fixtures_have_explicit_qa_bench_metadata() -> None:
         assert metadata["metricIds"] == explicit["metricIds"], eval_id
         assert metadata["judgeGuidance"], eval_id
         assert metadata["qualitySignals"], eval_id
+        assert metadata["expectedSignals"], eval_id
+        assert metadata["antiPatterns"], eval_id
+        assert metadata["scoringNotes"], eval_id
         if metadata["difficulty"] == "low":
             assert "baseline QA competency" in metadata["judgeGuidance"][0], eval_id
 

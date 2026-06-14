@@ -14,6 +14,17 @@
     "Agent uses getByRole when the existing codebase uses [data-test] exclusively"
   ],
   "tier": 5,
+  "qaBench": {
+    "capability": "project-discovery",
+    "metricIds": [
+      "relevance",
+      "coverage",
+      "maintainability",
+      "selector_strategy",
+      "test_integrity"
+    ],
+    "difficulty": "high"
+  },
   "baseTemplate": "playwright-ts-full",
   "modifications": [
     {

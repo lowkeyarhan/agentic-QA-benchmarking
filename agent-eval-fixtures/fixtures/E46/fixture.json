@@ -19,6 +19,17 @@
     "Uses context.route() to intercept requests"
   ],
   "tier": 5,
+  "qaBench": {
+    "capability": "test-authoring",
+    "metricIds": [
+      "relevance",
+      "coverage",
+      "assertion_quality",
+      "test_integrity",
+      "maintainability"
+    ],
+    "difficulty": "high"
+  },
   "category": "deception-detection",
   "baseTemplate": "playwright-ts-blank",
   "modifications": [],

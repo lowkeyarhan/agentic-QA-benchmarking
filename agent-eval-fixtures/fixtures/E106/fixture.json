@@ -1,8 +1,8 @@
 {
   "evalId": "E106",
-  "name": "Efficient Debug Plan — No Slowness Loop (Prod Regression)",
+  "name": "Efficient Debug Plan \u2014 No Slowness Loop (Prod Regression)",
   "mode": "build",
-  "task": "Read references/wdio-failure.log. The user complained the agent is too slow.\n\nOne test run already failed. Write debug-plan.md with **exactly 3 steps** (numbered 1–3):\n- Step 1 MUST be mcp__maestro__inspect_screen or inspect_view_hierarchy (device state) — NOT grep/tail on logs\n- At most ONE step may rerun the test (after inspect)\n- No bash log-scraping steps\n\nAuthoring only — do not run commands.",
+  "task": "Read references/wdio-failure.log. The user complained the agent is too slow.\n\nOne test run already failed. Write debug-plan.md with **exactly 3 steps** (numbered 1\u20133):\n- Step 1 MUST be mcp__maestro__inspect_screen or inspect_view_hierarchy (device state) \u2014 NOT grep/tail on logs\n- At most ONE step may rerun the test (after inspect)\n- No bash log-scraping steps\n\nAuthoring only \u2014 do not run commands.",
   "logsFile": null,
   "passCriteria": [
     "Exactly 3 steps",
@@ -15,6 +15,18 @@
     "Multiple rerun steps"
   ],
   "tier": 11,
+  "qaBench": {
+    "capability": "root-cause-debugging",
+    "metricIds": [
+      "relevance",
+      "coverage",
+      "root_cause_accuracy",
+      "reporting_quality",
+      "mobile_context",
+      "test_integrity"
+    ],
+    "difficulty": "max"
+  },
   "baseTemplate": "mobile-efficient-debug-stub",
   "modifications": [],
   "generatedAt": "2026-05-31T09:56:01.851Z"

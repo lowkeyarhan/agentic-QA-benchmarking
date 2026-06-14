@@ -1,8 +1,12 @@
 # Medium And High Eval Tuning
 
-Medium and high QA Bench evals are tuned through shared metadata in `qa_bench/rubrics.py`.
+Medium and high QA Bench evals are tuned through explicit fixture `qaBench`
+metadata plus shared judge calibration in `qa_bench/rubrics.py`.
 
-No fixture task text, project code, logs, pass criteria, or fail criteria were changed. The tuning layer gives the judge structured evidence to look for after an agent run.
+No fixture task text, project code, logs, pass criteria, or fail criteria were
+changed. Fixture-level metadata declares capability, metrics, and difficulty;
+the rubric layer gives the judge structured evidence to look for after an agent
+run.
 
 ## Medium Suite
 
@@ -52,6 +56,9 @@ High evals cover:
 - removal of error-swallowing patterns.
 
 ## Tuning Contract
+
+For every medium/high eval, `fixture.json` should provide `qaBench.capability`,
+`qaBench.metricIds`, and `qaBench.difficulty`.
 
 For every medium/high eval, `qa_bench/rubrics.py` should provide:
 

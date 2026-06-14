@@ -1,8 +1,8 @@
 {
   "evalId": "E105",
-  "name": "Root Cause Diagnosis — completeDocumentUploadScreen (Prod Regression)",
+  "name": "Root Cause Diagnosis \u2014 completeDocumentUploadScreen (Prod Regression)",
   "mode": "build",
-  "task": "Read references/wdio-failure.log, references/inspect-upload-screen.json, and references/legacy-selector-map.json.\n\nThe test fails in completeDocumentUpload() with ~UploadButton. The user has been debugging for a day with no root cause.\n\nReferences directory also contains:\n- references/inspect-payment-screen.json — unrelated screen (payment form) that happens to have an UploadButton label in its hierarchy. Do NOT use this for the document-upload root cause.\n- references/appium-debug.log — low-level Appium session log; it mentions UploadButton via deprecated queries but this is internal driver noise, not current hierarchy evidence.\n- references/legacy-selector-map.json — stale map from an older build. Included as a trap: it still lists UploadButton for the DocumentUpload screen but is marked \"deprecated\". Do not follow it.\n- references/dev-hypothesis.md — the developer's own debugging notes from their day-long investigation. They guessed the root cause was timing or navigation issues (Hypothesis A and B). Their notes mention they \"haven't confirmed by reading inspect-upload-screen.json yet.\" Do NOT adopt the developer's incorrect hypotheses.\n\nEdit root-cause.md only:\n- Identify failing method and wrong selector from wdio-failure.log\n- Identify correct current selector from inspect-upload-screen.json (SubmitUpload)\n- Explicitly reject the stale legacy UploadButton evidence\n- Explain root cause in one sentence — do NOT repeat the dev's timing/navigation hypotheses\n- Propose a one-line selector fix\n\nDo NOT suggest grep/tail/rerun loops. Do NOT run bash or wdio. Do NOT use inspect-payment-screen.json as document-upload hierarchy evidence. Do NOT adopt the timing or screen-navigation hypotheses from dev-hypothesis.md.",
+  "task": "Read references/wdio-failure.log, references/inspect-upload-screen.json, and references/legacy-selector-map.json.\n\nThe test fails in completeDocumentUpload() with ~UploadButton. The user has been debugging for a day with no root cause.\n\nReferences directory also contains:\n- references/inspect-payment-screen.json \u2014 unrelated screen (payment form) that happens to have an UploadButton label in its hierarchy. Do NOT use this for the document-upload root cause.\n- references/appium-debug.log \u2014 low-level Appium session log; it mentions UploadButton via deprecated queries but this is internal driver noise, not current hierarchy evidence.\n- references/legacy-selector-map.json \u2014 stale map from an older build. Included as a trap: it still lists UploadButton for the DocumentUpload screen but is marked \"deprecated\". Do not follow it.\n- references/dev-hypothesis.md \u2014 the developer's own debugging notes from their day-long investigation. They guessed the root cause was timing or navigation issues (Hypothesis A and B). Their notes mention they \"haven't confirmed by reading inspect-upload-screen.json yet.\" Do NOT adopt the developer's incorrect hypotheses.\n\nEdit root-cause.md only:\n- Identify failing method and wrong selector from wdio-failure.log\n- Identify correct current selector from inspect-upload-screen.json (SubmitUpload)\n- Explicitly reject the stale legacy UploadButton evidence\n- Explain root cause in one sentence \u2014 do NOT repeat the dev's timing/navigation hypotheses\n- Propose a one-line selector fix\n\nDo NOT suggest grep/tail/rerun loops. Do NOT run bash or wdio. Do NOT use inspect-payment-screen.json as document-upload hierarchy evidence. Do NOT adopt the timing or screen-navigation hypotheses from dev-hypothesis.md.",
   "logsFile": null,
   "passCriteria": [
     "Names ~UploadButton as the wrong selector",
@@ -25,6 +25,19 @@
     "Fails to name the method that contains the bad selector"
   ],
   "tier": 11,
+  "qaBench": {
+    "capability": "root-cause-debugging",
+    "metricIds": [
+      "relevance",
+      "coverage",
+      "root_cause_accuracy",
+      "ci_log_analysis",
+      "evidence_quality",
+      "mobile_context",
+      "reporting_quality"
+    ],
+    "difficulty": "max"
+  },
   "baseTemplate": "mobile-root-cause-stub",
   "modifications": [],
   "generatedAt": "2026-05-31T09:56:01.848Z"

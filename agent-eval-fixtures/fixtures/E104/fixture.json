@@ -1,8 +1,8 @@
 {
   "evalId": "E104",
-  "name": "WDIO Run Scope — Single Spec Only (Prod Regression)",
+  "name": "WDIO Run Scope \u2014 Single Spec Only (Prod Regression)",
   "mode": "build",
-  "task": "This project has test/specs/cart.spec.ts and test/specs/checkout.spec.ts. wdio.conf.ts runs all specs via a glob.\n\nThe user asked: \"Run ONLY test/specs/cart.spec.ts with workers=1.\"\n\nWrite the exact npx wdio command to run-command.txt (one line). Must:\n- Target cart.spec.ts only (use --spec)\n- NOT run checkout.spec.ts or test/specs/**/*.spec.ts\n- Include --workers=1\n\nDo NOT execute the command — authoring only.",
+  "task": "This project has test/specs/cart.spec.ts and test/specs/checkout.spec.ts. wdio.conf.ts runs all specs via a glob.\n\nThe user asked: \"Run ONLY test/specs/cart.spec.ts with workers=1.\"\n\nWrite the exact npx wdio command to run-command.txt (one line). Must:\n- Target cart.spec.ts only (use --spec)\n- NOT run checkout.spec.ts or test/specs/**/*.spec.ts\n- Include --workers=1\n\nDo NOT execute the command \u2014 authoring only.",
   "logsFile": null,
   "passCriteria": [
     "Command includes --spec and cart.spec.ts",
@@ -15,6 +15,17 @@
     "Executes wdio instead of writing run-command.txt"
   ],
   "tier": 11,
+  "qaBench": {
+    "capability": "mobile-qa",
+    "metricIds": [
+      "relevance",
+      "coverage",
+      "framework_adaptation",
+      "maintainability",
+      "test_integrity"
+    ],
+    "difficulty": "max"
+  },
   "baseTemplate": "wdio-run-scope-stub",
   "modifications": [],
   "generatedAt": "2026-05-31T09:37:50.846Z"

@@ -1,6 +1,6 @@
 {
   "evalId": "E83",
-  "name": "Mobile Test Debug — Inspect Device Before Re-running",
+  "name": "Mobile Test Debug \u2014 Inspect Device Before Re-running",
   "mode": "build",
   "task": "I just ran an Appium test against the booted Android emulator (SauceLabs MyDemoApp) and it failed. The test is supposed to add the first product to the cart but it fails on the 'Add to cart' step with:\n\n  Error: An element could not be located on the page using the given search parameters.\n     selector: ~Tap to add product to cart\n     at ProductsListPage.addFirstToCart (test/pages/products.page.ts:42)\n     at test/specs/cart.spec.ts:12\n\n  Spec Files: 0 passed, 1 failed, 1 total (100% completed) in 00:00:14\n\nThe selector worked last week. Help me figure out what's wrong.",
   "logsFile": null,
@@ -17,6 +17,18 @@
     "Yak-shaves into adb / xcrun / find / curl Bash commands"
   ],
   "tier": 11,
+  "qaBench": {
+    "capability": "mobile-qa",
+    "metricIds": [
+      "relevance",
+      "coverage",
+      "mobile_context",
+      "evidence_quality",
+      "root_cause_accuracy",
+      "selector_strategy"
+    ],
+    "difficulty": "max"
+  },
   "baseTemplate": "maestro-ios-blank",
   "modifications": [],
   "prereq": "SauceLabs MyDemoApp installed on a booted Android emulator. The agent must use mcp__maestro__inspect_view_hierarchy or inspect_screen on the live device to discover that the real Add-to-cart selector is by resource-id (com.saucelabs.mydemoapp.android:id/productIV inside productRV item, with content-desc 'Tap to add product to cart' on the actual button) rather than the deprecated ~accessibility-id used in the failing test.",

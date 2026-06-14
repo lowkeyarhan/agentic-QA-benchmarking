@@ -16,6 +16,19 @@
     "Weakens assertions"
   ],
   "tier": 7,
+  "qaBench": {
+    "capability": "test-repair",
+    "metricIds": [
+      "relevance",
+      "coverage",
+      "test_integrity",
+      "root_cause_accuracy",
+      "selector_strategy",
+      "evidence_quality",
+      "maintainability"
+    ],
+    "difficulty": "ultra"
+  },
   "baseTemplate": "playwright-ts-full",
   "modifications": [
     {

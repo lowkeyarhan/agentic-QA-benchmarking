@@ -22,6 +22,18 @@
     "Creates files or test code instead of returning the requested selector table"
   ],
   "tier": 11,
+  "qaBench": {
+    "capability": "mobile-qa",
+    "metricIds": [
+      "relevance",
+      "coverage",
+      "mobile_context",
+      "selector_strategy",
+      "evidence_quality",
+      "maintainability"
+    ],
+    "difficulty": "max"
+  },
   "baseTemplate": "maestro-ios-blank",
   "modifications": [],
   "prereq": "Self-contained captured hierarchy fixture; no live Android emulator required.",

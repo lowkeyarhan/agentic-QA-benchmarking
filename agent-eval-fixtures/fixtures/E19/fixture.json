@@ -18,6 +18,16 @@
     "Creates files"
   ],
   "tier": 7,
+  "qaBench": {
+    "capability": "risk-planning",
+    "metricIds": [
+      "relevance",
+      "coverage",
+      "reporting_quality",
+      "maintainability"
+    ],
+    "difficulty": "ultra"
+  },
   "baseTemplate": "playwright-ts-full",
   "modifications": [],
   "generatedAt": "2026-06-11T13:29:55.097Z"

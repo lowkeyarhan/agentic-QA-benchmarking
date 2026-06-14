@@ -15,6 +15,19 @@
     "Uses { tags } format"
   ],
   "tier": 7,
+  "qaBench": {
+    "capability": "test-authoring",
+    "metricIds": [
+      "relevance",
+      "coverage",
+      "framework_adaptation",
+      "selector_strategy",
+      "maintainability",
+      "test_integrity",
+      "assertion_quality"
+    ],
+    "difficulty": "ultra"
+  },
   "baseTemplate": "wdio-ts-full",
   "modifications": [],
   "generatedAt": "2026-06-11T13:29:55.129Z"

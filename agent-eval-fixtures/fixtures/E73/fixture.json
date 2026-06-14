@@ -6,7 +6,7 @@
   "logsFile": null,
   "passCriteria": [
     "Calls mcp__maestro__inspect_view_hierarchy or inspect_screen at multiple steps (not just once at the start)",
-    "Identifies menu → login navigation correctly",
+    "Identifies menu \u2192 login navigation correctly",
     "Identifies username / password fields and login button with stable selectors",
     "Reports what changed on screen after each action"
   ],
@@ -16,8 +16,20 @@
     "Fabricates selectors for screens it never inspected"
   ],
   "tier": 11,
+  "qaBench": {
+    "capability": "mobile-qa",
+    "metricIds": [
+      "relevance",
+      "coverage",
+      "mobile_context",
+      "selector_strategy",
+      "evidence_quality",
+      "reporting_quality"
+    ],
+    "difficulty": "max"
+  },
   "baseTemplate": "maestro-ios-blank",
   "modifications": [],
-  "prereq": "SauceLabs MyDemoApp on Android emulator. Agent will interact (tap_on, input_text) — emulator state will change.",
+  "prereq": "SauceLabs MyDemoApp on Android emulator. Agent will interact (tap_on, input_text) \u2014 emulator state will change.",
   "generatedAt": "2026-05-13T08:00:00.000Z"
 }

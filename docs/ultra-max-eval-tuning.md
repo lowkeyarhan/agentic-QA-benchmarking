@@ -1,6 +1,12 @@
 # Ultra And Max Eval Tuning
 
-Ultra and max QA Bench evals are tuned through `qa_bench/rubrics.py` metadata, not by changing fixture prompts, projects, logs, pass criteria, or fail criteria.
+Ultra and max QA Bench evals are tuned through explicit fixture `qaBench`
+metadata plus shared judge calibration in `qa_bench/rubrics.py`.
+
+No fixture task text, project code, logs, pass criteria, or fail criteria were
+changed. Fixture-level metadata declares capability, metrics, and difficulty;
+the rubric layer gives the judge structured evidence to look for after an agent
+run.
 
 ## Ultra Suite
 
@@ -55,4 +61,7 @@ Max evals cover:
 
 ## Fairness Rule
 
-The tuning metadata is judge-facing only. It is used after an agent run to make the judge more consistent about objective evidence, anti-patterns, and intended QA skill. It should not be copied into agent prompts or used to add hidden answer keys.
+The tuning metadata is judge-facing only. It is used after an agent run to make
+the judge more consistent about objective evidence, anti-patterns, and intended
+QA skill. It should not be copied into agent prompts or used to add hidden answer
+keys.

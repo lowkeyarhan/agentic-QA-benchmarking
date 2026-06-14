@@ -14,6 +14,18 @@
     "Applies wrong fix category (e.g., changes selector for a timing issue)"
   ],
   "tier": 6,
+  "qaBench": {
+    "capability": "root-cause-debugging",
+    "metricIds": [
+      "relevance",
+      "coverage",
+      "root_cause_accuracy",
+      "state_timing_reliability",
+      "reporting_quality",
+      "test_integrity"
+    ],
+    "difficulty": "high"
+  },
   "baseTemplate": "playwright-ts-full",
   "modifications": [
     {
