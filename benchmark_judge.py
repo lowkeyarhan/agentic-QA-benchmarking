@@ -6,6 +6,7 @@ from typing import Literal
 
 from pydantic import BaseModel
 
+from benchmark_deterministic import build_deterministic_grade
 from scoring import (
     configured_token_baseline_threshold_percent,
     make_judge_model,
@@ -563,9 +564,7 @@ def looks_like_report_artifact(path: str) -> bool:
             ("report/", "reports/", "test-results/", "playwright-report/")
         )
         or basename.startswith("report")
-        or basename.endswith(
-            (".trace.zip", ".webm", ".mp4", ".png", ".jpg", ".jpeg")
-        )
+        or basename.endswith((".trace.zip", ".webm", ".mp4", ".png", ".jpg", ".jpeg"))
     )
 
 
@@ -793,8 +792,12 @@ def apply_judge_diagnostics(result: dict, scored: BatchJudgeCaseScore) -> None:
 
 
 def apply_deterministic_score_caps(result: dict) -> None:
-    cap, cap_reasons = deterministic_score_cap(result)
+    deterministic_grade = build_deterministic_grade(result)
+    result["deterministicGrade"] = deterministic_grade
+    cap, cap_reasons = deterministic_score_cap(result, deterministic_grade)
     if cap is None or result.get("score") is None or float(result["score"]) <= cap:
+        diagnostics = result.setdefault("judgeDiagnostics", {})
+        diagnostics["deterministicChecks"] = deterministic_grade.get("checks") or []
         return
 
     original_score = float(result["score"])
@@ -806,10 +809,12 @@ def apply_deterministic_score_caps(result: dict) -> None:
         result["failedChecks"] = max(1, int(result.get("failedChecks") or 0))
 
     diagnostics = result.setdefault("judgeDiagnostics", {})
+    diagnostics["deterministicChecks"] = deterministic_grade.get("checks") or []
     diagnostics["deterministicCaps"] = {
         "originalScore": original_score,
         "cappedScore": cap,
         "reasons": cap_reasons,
+        "checks": deterministic_grade.get("caps") or [],
     }
     reason_suffix = " Deterministic cap applied: " + ", ".join(cap_reasons) + "."
     result["reason"] = (
@@ -817,24 +822,13 @@ def apply_deterministic_score_caps(result: dict) -> None:
     ).strip()
 
 
-def deterministic_score_cap(result: dict) -> tuple[float | None, list[str]]:
-    artifact_checks = result.get("artifactChecks") or {}
-    warnings = set(
-        result.get("artifactWarnings") or artifact_checks.get("warnings") or []
-    )
-    cap = None
-    reasons: list[str] = []
-
-    if "expected-artifact-change-missing" in warnings:
-        cap = min_cap(cap, 0.39)
-        reasons.append("expected artifact change missing")
-    if "only-noisy-files-changed" in warnings:
-        cap = min_cap(cap, 0.39)
-        reasons.append("only noisy files changed")
-    if "verification-command-not-observed" in warnings:
-        cap = min_cap(cap, 0.69)
-        reasons.append("verification command not observed")
-
+def deterministic_score_cap(
+    result: dict, deterministic_grade: dict | None = None
+) -> tuple[float | None, list[str]]:
+    grade = deterministic_grade or build_deterministic_grade(result)
+    caps = grade.get("caps") or []
+    cap = min((float(item["cap"]) for item in caps), default=None)
+    reasons = [str(item.get("reason") or item.get("checkId")) for item in caps]
     return cap, reasons
 
 

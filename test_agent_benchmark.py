@@ -7,6 +7,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import agents
+from benchmark_deterministic import build_deterministic_grade
 from deepeval.test_case import LLMTestCase
 
 from agents import (
@@ -489,7 +490,9 @@ def test_resolve_eval_ids_supports_low_qa_bench_suite() -> None:
     eval_ids = resolve_eval_ids("suite:qa-low")
 
     assert eval_ids == LOW_DIFFICULTY_EVAL_IDS
-    assert all(difficulty_for_tier(load_fixture(eval_id).tier) == "low" for eval_id in eval_ids)
+    assert all(
+        difficulty_for_tier(load_fixture(eval_id).tier) == "low" for eval_id in eval_ids
+    )
 
 
 def test_resolve_eval_ids_supports_medium_and_high_qa_bench_suites() -> None:
@@ -618,7 +621,9 @@ def test_low_difficulty_evals_have_explicit_expected_signals_and_antipatterns() 
         assert metadata["scoringNotes"], eval_id
 
 
-def test_medium_and_high_difficulty_evals_have_expected_signals_and_antipatterns() -> None:
+def test_medium_and_high_difficulty_evals_have_expected_signals_and_antipatterns() -> (
+    None
+):
     assert len(MEDIUM_DIFFICULTY_EVAL_IDS) == 20
     assert len(HIGH_DIFFICULTY_EVAL_IDS) == 20
 
@@ -635,7 +640,9 @@ def test_medium_and_high_difficulty_evals_have_expected_signals_and_antipatterns
             assert metadata["scoringNotes"], eval_id
 
 
-def test_ultra_and_max_difficulty_evals_have_expected_signals_and_antipatterns() -> None:
+def test_ultra_and_max_difficulty_evals_have_expected_signals_and_antipatterns() -> (
+    None
+):
     assert len(ULTRA_DIFFICULTY_EVAL_IDS) == 20
     assert len(MAX_DIFFICULTY_EVAL_IDS) == 20
 
@@ -756,6 +763,77 @@ def test_artifact_checks_still_require_report_artifacts() -> None:
     checks = build_artifact_checks(fixture, run)
 
     assert "expected-artifact-change-missing" in checks["warnings"]
+
+
+def test_deterministic_grader_flags_fixed_waits_and_skips() -> None:
+    result = {
+        "mode": "build",
+        "changedDiff": (
+            "--- a/tests/example.spec.ts\n"
+            "+++ b/tests/example.spec.ts\n"
+            "+test.skip('flaky test', async ({ page }) => {})\n"
+            "+await page.waitForTimeout(500)\n"
+            "+expect(true).toBe(true)\n"
+        ),
+        "artifactChecks": {"warnings": [], "ranVerificationCommand": True},
+    }
+
+    grade = build_deterministic_grade(result)
+
+    assert "no-fixed-waits" in grade["failedCheckIds"]
+    assert "no-skip-or-only" in grade["failedCheckIds"]
+    assert "no-trivial-assertions" in grade["failedCheckIds"]
+    assert grade["cap"] == 0.49
+
+
+def test_deterministic_grader_flags_missing_required_implementation_change() -> None:
+    result = {
+        "mode": "fix",
+        "changedFiles": ["tests/cart.spec.ts"],
+        "changedDiff": "+expect(total).toBe(85)\n",
+        "artifactChecks": {
+            "changedImplementationFiles": [],
+            "changedTestFiles": ["tests/cart.spec.ts"],
+            "warnings": [],
+        },
+        "passCriteria": ["At least one non-test file is modified"],
+        "failCriteria": ["No implementation file changes"],
+    }
+
+    grade = build_deterministic_grade(result)
+
+    assert "implementation-change-required" in grade["failedCheckIds"]
+    assert grade["cap"] == 0.39
+
+
+def test_deterministic_grader_flags_plan_mode_writes() -> None:
+    result = {
+        "mode": "plan",
+        "changedFiles": ["tests/new.spec.ts"],
+        "artifactChecks": {"warnings": [], "changedTestFiles": ["tests/new.spec.ts"]},
+    }
+
+    grade = build_deterministic_grade(result)
+
+    assert "plan-read-only" in grade["failedCheckIds"]
+    assert "no-spec-files-when-forbidden" in grade["failedCheckIds"]
+    assert grade["cap"] == 0.39
+
+
+def test_deterministic_grader_flags_missing_mobile_inspect() -> None:
+    result = {
+        "mode": "build",
+        "changedDiff": "",
+        "artifactChecks": {"warnings": []},
+        "task": "Call inspect_view_hierarchy to discover selectors from the live device.",
+        "evidence": "Final answer guessed selectors without tool use.",
+        "telemetry": {"toolCounts": {}},
+    }
+
+    grade = build_deterministic_grade(result)
+
+    assert "maestro-inspect-required" in grade["failedCheckIds"]
+    assert grade["cap"] == 0.69
 
 
 def test_token_usage_parser_reads_codex_footer() -> None:
@@ -1818,7 +1896,7 @@ def test_batch_scoring_uses_one_judge_call_and_check_counts(monkeypatch) -> None
             calls["count"] += 1
             assert "r001" in prompt
             assert '"changedDiff"' in prompt
-            assert "expect(true)" in prompt
+            assert "expect(page.locator" in prompt
             assert schema is BatchJudgeResponse
             return (
                 BatchJudgeResponse(
@@ -1868,7 +1946,7 @@ def test_batch_scoring_uses_one_judge_call_and_check_counts(monkeypatch) -> None
             "--- a/tests/example.spec.ts\n"
             "+++ b/tests/example.spec.ts\n"
             "-expect(locator).toBeVisible()\n"
-            "+expect(true).toBe(true)\n"
+            "+expect(page.locator('[data-testid=\"checkout-button\"]')).toBeVisible()\n"
         ),
         "qaBench": {
             "metricIds": ["relevance", "coverage"],
@@ -1989,7 +2067,9 @@ def test_batch_judge_prompt_includes_qa_review_hints_for_tests_and_fixes() -> No
                 "Removes fixed waits and adds state-based synchronization."
             ],
             "antiPatterns": ["Keeps waitForTimeout or weakens the assertion."],
-            "scoringNotes": ["Targeted repair plus regression coverage should score well."],
+            "scoringNotes": [
+                "Targeted repair plus regression coverage should score well."
+            ],
             "metricIds": ["relevance", "assertion_quality"],
         },
         "passCriteria": ["removes the timeout", "adds coverage for sorting"],
@@ -2024,7 +2104,9 @@ def test_batch_judge_prompt_includes_qa_review_hints_for_tests_and_fixes() -> No
     assert "qaBench.antiPatterns" in prompt
     assert "New tests are positive when they directly prove the regression" in prompt
     assert payload["cases"][0]["qaBench"]["difficulty"] == "low"
-    assert "baseline QA competency" in payload["cases"][0]["qaBench"]["judgeGuidance"][0]
+    assert (
+        "baseline QA competency" in payload["cases"][0]["qaBench"]["judgeGuidance"][0]
+    )
     assert payload["cases"][0]["qaBench"]["expectedSignals"]
     assert payload["cases"][0]["qaBench"]["antiPatterns"]
     assert hints["changedTestFiles"] == ["tests/inventory-sort.spec.ts"]
@@ -2104,6 +2186,12 @@ def test_deterministic_artifact_cap_prevents_inflated_judge_score(
     assert scored["judgeDiagnostics"]["deterministicCaps"]["reasons"] == [
         "expected artifact change missing"
     ]
+    assert scored["deterministicGrade"]["failedCheckIds"] == [
+        "expected-artifact-change"
+    ]
+    assert scored["judgeDiagnostics"]["deterministicChecks"][0]["id"] == (
+        "expected-artifact-change"
+    )
 
 
 def test_batch_scoring_can_chunk_large_runs(monkeypatch) -> None:

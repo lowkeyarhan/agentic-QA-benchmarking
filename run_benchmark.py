@@ -529,7 +529,9 @@ def score_existing_run(
                 continue
             try:
                 pending_results.append(
-                    recover_pending_result(run_id, fixture, agent, case_id, case_run_dir)
+                    recover_pending_result(
+                        run_id, fixture, agent, case_id, case_run_dir
+                    )
                 )
             except FileNotFoundError:
                 missing.append(f"{case_id}/{agent_run_dir_name(agent)}")
@@ -843,6 +845,9 @@ def failure_taxonomy_for_result(result: dict, fixture=None) -> list[str]:
     taxonomy.extend(judge_diagnostics.get("failureTaxonomy") or [])
     if judge_diagnostics.get("deterministicCaps"):
         taxonomy.append("deterministic-cap")
+    deterministic_grade = result.get("deterministicGrade") or {}
+    for check_id in deterministic_grade.get("failedCheckIds") or []:
+        taxonomy.append(f"deterministic:{check_id}")
 
     if telemetry.get("deniedPolicyCount"):
         taxonomy.append("policy-denial")
