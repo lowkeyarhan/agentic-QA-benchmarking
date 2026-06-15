@@ -563,6 +563,7 @@ def test_reproducibility_metadata_records_extra_eval_ids(monkeypatch) -> None:
     assert metadata["evalRunner"]["baseEvalIds"] == "suite:qa-smoke"
     assert metadata["evalRunner"]["extraEvalIds"] == "E2,E6"
     assert metadata["evalRunner"]["benchmarkSuite"]["id"] == "custom-qa"
+    assert metadata["evalRunner"]["supatestEvalDashboardUpload"] is False
 
 
 def test_qa_bench_suite_names_are_vendor_neutral() -> None:
@@ -1678,6 +1679,42 @@ def test_supatest_eval_dashboard_payload_backfills_overall_score(
     assert uploaded["score"] == 70.0
 
 
+def test_supatest_eval_dashboard_upload_requires_env_toggle(monkeypatch) -> None:
+    def fail_urlopen(_request, _timeout):
+        raise AssertionError("dashboard upload should be disabled")
+
+    result = {
+        "runId": "verify",
+        "caseId": "case-001",
+        "evalId": "E25",
+        "evalName": "Batch Tests Before Running",
+        "agent": "supatest:premium",
+        "mode": "build",
+        "scorePercent": 100,
+        "overallScorePercent": 90,
+        "result": "pass",
+        "reason": "ok",
+        "exitCode": 0,
+        "timedOut": False,
+        "durationMs": 2000,
+        "changedFiles": [],
+    }
+    monkeypatch.setenv("BENCHMARK_SUPATEST_EVAL_DASHBOARD_API_KEY", "sk_test_123")
+    monkeypatch.delenv("BENCHMARK_SUPATEST_EVAL_DASHBOARD_UPLOAD", raising=False)
+    monkeypatch.setattr(run_benchmark.urllib.request, "urlopen", fail_urlopen)
+
+    issue = run_benchmark.upload_supatest_eval_dashboard(
+        "verify",
+        ["E25"],
+        ["supatest:premium"],
+        1,
+        600,
+        [result],
+    )
+
+    assert issue is None
+
+
 def test_supatest_eval_dashboard_upload_posts_bearer_payload(monkeypatch) -> None:
     captured = {}
 
@@ -1716,6 +1753,7 @@ def test_supatest_eval_dashboard_upload_posts_bearer_payload(monkeypatch) -> Non
         "changedFiles": [],
     }
     cursor_result = {**result, "agent": "cursor:auto", "durationMs": 3000}
+    monkeypatch.setenv("BENCHMARK_SUPATEST_EVAL_DASHBOARD_UPLOAD", "1")
     monkeypatch.setenv("BENCHMARK_SUPATEST_EVAL_DASHBOARD_API_KEY", "sk_test_123")
     monkeypatch.setenv(
         "BENCHMARK_SUPATEST_EVAL_DASHBOARD_URL", "https://evals.example.com"
@@ -1782,6 +1820,7 @@ def test_supatest_eval_dashboard_upload_includes_non_supatest_results(
         "durationMs": 2000,
         "changedFiles": [],
     }
+    monkeypatch.setenv("BENCHMARK_SUPATEST_EVAL_DASHBOARD_UPLOAD", "1")
     monkeypatch.setenv("BENCHMARK_SUPATEST_EVAL_DASHBOARD_API_KEY", "sk_test_123")
     monkeypatch.setattr(run_benchmark.urllib.request, "urlopen", fake_urlopen)
 

@@ -909,6 +909,7 @@ def build_reproducibility_metadata(
             "promptProfile": os.getenv("BENCHMARK_PROMPT_PROFILE", "qa"),
             "environmentMode": benchmark_environment_mode(),
             "telemetryExpected": supatest_eval_telemetry_enabled(),
+            "supatestEvalDashboardUpload": supatest_eval_dashboard_upload_enabled(),
             "supatestMachineMode": os.getenv("BENCHMARK_SUPATEST_MACHINE_MODE", "1"),
         },
         "agents": {
@@ -1156,6 +1157,9 @@ def upload_supatest_eval_dashboard(
     timeout_seconds: int,
     results: list[dict],
 ) -> str | None:
+    if not supatest_eval_dashboard_upload_enabled():
+        return None
+
     api_key = os.getenv("BENCHMARK_SUPATEST_EVAL_DASHBOARD_API_KEY", "").strip()
     if not api_key:
         return None
@@ -1195,6 +1199,11 @@ def upload_supatest_eval_dashboard(
         f"{len(payload['results'])} results to {request.full_url}"
     )
     return None
+
+
+def supatest_eval_dashboard_upload_enabled() -> bool:
+    raw = os.getenv("BENCHMARK_SUPATEST_EVAL_DASHBOARD_UPLOAD", "").strip().lower()
+    return raw in {"1", "true", "yes", "on"}
 
 
 def build_supatest_eval_dashboard_payload(

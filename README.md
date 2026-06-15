@@ -167,15 +167,19 @@ Create an API key from the Supatest eval dashboard under **Settings → API Keys
 then add it to `benchmark/.env`:
 
 ```bash
+BENCHMARK_SUPATEST_EVAL_DASHBOARD_UPLOAD=1
 BENCHMARK_SUPATEST_EVAL_DASHBOARD_API_KEY=sk_eval...
 BENCHMARK_SUPATEST_EVAL_DASHBOARD_URL=https://evals-dashboard.supatest.ai
 BENCHMARK_SUPATEST_EVAL_DASHBOARD_RUN_NAME=Benchmark {run_id}
 ```
 
-When `BENCHMARK_SUPATEST_EVAL_DASHBOARD_API_KEY` is set, the harness posts the
-final scored results to `POST /api/v1/ingest` after local `scores.md`,
-`summary.json`, and `run.json` are written. The upload sends one summary result
-per non-blocked benchmark agent, using eval IDs such as
+When `BENCHMARK_SUPATEST_EVAL_DASHBOARD_UPLOAD=1` and
+`BENCHMARK_SUPATEST_EVAL_DASHBOARD_API_KEY` are set, the harness posts the final
+scored results to `POST /api/v1/ingest` after local `scores.md`, `summary.json`,
+and `run.json` are written. Leave
+`BENCHMARK_SUPATEST_EVAL_DASHBOARD_UPLOAD=0` or unset to keep results local even
+when an API key exists in `.env`. The upload sends one summary result per
+non-blocked benchmark agent, using eval IDs such as
 `summary:supatest-premium` and `summary:cursor-auto`. These summary results and
 the run metadata include the same compact QA, token, cache, time, overall, and
 result-count table from `scores.md`. Set
