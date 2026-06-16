@@ -24,6 +24,9 @@ from agents import (
     build_command,
     build_prompt,
     changed_file_excerpt,
+    fixture_difficulty,
+    max_iterations_for_fixture,
+    max_iterations_policy_metadata,
     resolve_supatest_project_id,
     with_local_tool_paths,
 )
@@ -407,6 +410,69 @@ def test_generic_agent_command_can_render_model_placeholders(
     assert f"--cwd {project_dir}" in command
 
 
+def test_generic_agent_command_can_render_iteration_placeholders(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.delenv("BENCHMARK_MAX_ITERATIONS_POLICY", raising=False)
+    monkeypatch.delenv("BENCHMARK_MAX_ITERATIONS_HIGH", raising=False)
+    monkeypatch.setenv(
+        "BENCHMARK_QA_PRO_CMD",
+        "qa-pro run --difficulty {difficulty} --max-iterations {max_iterations} --cwd {cwd} {prompt}",
+    )
+    project_dir = tmp_path / "project"
+    project_dir.mkdir()
+
+    command, cwd, use_shell = build_command("qa-pro", load_fixture("E25"), project_dir)
+
+    assert use_shell is True
+    assert cwd == project_dir
+    assert "--difficulty high" in command
+    assert "--max-iterations 120" in command
+
+
+def test_max_iterations_scale_by_fixture_difficulty(monkeypatch) -> None:
+    monkeypatch.delenv("BENCHMARK_MAX_ITERATIONS_POLICY", raising=False)
+    monkeypatch.delenv("BENCHMARK_MAX_ITERATIONS", raising=False)
+    for difficulty in ["LOW", "MEDIUM", "HIGH", "ULTRA", "MAX", "UNKNOWN"]:
+        monkeypatch.delenv(f"BENCHMARK_MAX_ITERATIONS_{difficulty}", raising=False)
+
+    assert fixture_difficulty(load_fixture("E45")) == "low"
+    assert max_iterations_for_fixture(load_fixture("E45")) == 75
+    assert max_iterations_for_fixture(load_fixture("E65")) == 95
+    assert max_iterations_for_fixture(load_fixture("E25")) == 120
+    assert max_iterations_for_fixture(load_fixture("E30")) == 150
+    assert max_iterations_for_fixture(load_fixture("E70")) == 180
+
+
+def test_max_iterations_support_global_and_difficulty_overrides(monkeypatch) -> None:
+    monkeypatch.setenv("BENCHMARK_MAX_ITERATIONS_POLICY", "static")
+    monkeypatch.setenv("BENCHMARK_MAX_ITERATIONS", "88")
+    monkeypatch.delenv("BENCHMARK_MAX_ITERATIONS_HIGH", raising=False)
+
+    assert max_iterations_for_fixture(load_fixture("E25")) == 88
+
+    monkeypatch.setenv("BENCHMARK_MAX_ITERATIONS_HIGH", "144")
+
+    assert max_iterations_for_fixture(load_fixture("E25")) == 144
+
+
+def test_supatest_command_uses_difficulty_based_iterations(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.setenv("BENCHMARK_SUPATEST_PROJECT_ID", "benchmark-project")
+    monkeypatch.delenv("BENCHMARK_SUPATEST_CMD", raising=False)
+    monkeypatch.delenv("BENCHMARK_SUPATEST_MACHINE_MODE", raising=False)
+    monkeypatch.delenv("BENCHMARK_MAX_ITERATIONS_POLICY", raising=False)
+    monkeypatch.delenv("BENCHMARK_MAX_ITERATIONS", raising=False)
+    monkeypatch.delenv("BENCHMARK_MAX_ITERATIONS_HIGH", raising=False)
+    project_dir = tmp_path / "project"
+    project_dir.mkdir()
+
+    command, _, _ = build_command("supatest", load_fixture("E25"), project_dir)
+
+    assert command[command.index("--max-iterations") + 1] == "120"
+
+
 def test_supatest_project_id_uses_explicit_or_benchmark_settings(monkeypatch) -> None:
     monkeypatch.delenv("BENCHMARK_SUPATEST_PROJECT_ID", raising=False)
     monkeypatch.setenv("SUPATEST_PROJECT_ID", "global-env-should-not-leak")
@@ -551,6 +617,9 @@ def test_selected_eval_ids_reads_extra_eval_ids_from_env(monkeypatch) -> None:
 def test_reproducibility_metadata_records_extra_eval_ids(monkeypatch) -> None:
     monkeypatch.setenv("BENCHMARK_EVAL_IDS", "suite:qa-smoke")
     monkeypatch.setenv("BENCHMARK_EXTRA_EVAL_IDS", "E2,E6")
+    monkeypatch.delenv("BENCHMARK_MAX_ITERATIONS_POLICY", raising=False)
+    monkeypatch.delenv("BENCHMARK_MAX_ITERATIONS", raising=False)
+    monkeypatch.delenv("BENCHMARK_MAX_ITERATIONS_HIGH", raising=False)
 
     metadata = run_benchmark.build_reproducibility_metadata(
         "extra-evals",
@@ -563,7 +632,21 @@ def test_reproducibility_metadata_records_extra_eval_ids(monkeypatch) -> None:
     assert metadata["evalRunner"]["baseEvalIds"] == "suite:qa-smoke"
     assert metadata["evalRunner"]["extraEvalIds"] == "E2,E6"
     assert metadata["evalRunner"]["benchmarkSuite"]["id"] == "custom-qa"
+    assert metadata["evalRunner"]["maxIterations"]["policy"] == "difficulty-based"
+    assert metadata["evalRunner"]["maxIterations"]["byDifficulty"]["max"] == 180
     assert metadata["evalRunner"]["supatestEvalDashboardUpload"] is False
+
+
+def test_max_iterations_policy_metadata_records_overrides(monkeypatch) -> None:
+    monkeypatch.setenv("BENCHMARK_MAX_ITERATIONS_POLICY", "static")
+    monkeypatch.setenv("BENCHMARK_MAX_ITERATIONS", "99")
+    monkeypatch.setenv("BENCHMARK_MAX_ITERATIONS_MAX", "210")
+
+    metadata = max_iterations_policy_metadata()
+
+    assert metadata["policy"] == "static"
+    assert metadata["staticOverride"] == "99"
+    assert metadata["difficultyOverrides"] == {"max": "210"}
 
 
 def test_qa_bench_suite_names_are_vendor_neutral() -> None:

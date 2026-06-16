@@ -294,6 +294,25 @@ BENCHMARK_AGENTS=supatest,qa-pro
 
 `{model_arg}` expands to `--model <model>` when a model is selected, otherwise
 empty. `{model}` expands to only the shell-quoted model value.
+`{difficulty}` expands to the fixture QA difficulty, and `{max_iterations}`
+expands to the benchmark's difficulty-based iteration budget for that fixture.
+
+Supatest's built-in command uses the same difficulty-based max-iteration budget:
+
+| Difficulty | Default max iterations |
+| --- | ---: |
+| `low` | 75 |
+| `medium` | 95 |
+| `high` | 120 |
+| `ultra` | 150 |
+| `max` | 180 |
+
+The default policy is difficulty-based. Use `BENCHMARK_MAX_ITERATIONS_LOW`,
+`BENCHMARK_MAX_ITERATIONS_MEDIUM`, `BENCHMARK_MAX_ITERATIONS_HIGH`,
+`BENCHMARK_MAX_ITERATIONS_ULTRA`, and `BENCHMARK_MAX_ITERATIONS_MAX` to tune one
+difficulty tier. To force a single flat budget for every eval, set
+`BENCHMARK_MAX_ITERATIONS_POLICY=static` and `BENCHMARK_MAX_ITERATIONS=<n>`.
+The policy is recorded in `run.json` under `metadata.evalRunner.maxIterations`.
 
 Prompt profile also affects score separation:
 

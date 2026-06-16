@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from fixtures import BENCHMARK_ROOT, EvalFixture
+from qa_bench import difficulty_for_tier
 
 
 SKIP_DIRS = {
@@ -61,6 +62,14 @@ DEFAULT_AGENT_COMMANDS = {
 
 PROMPT_PROFILES = {"qa", "minimal", "raw"}
 DEFAULT_HIDDEN_HOST_TOOLS = "rtk"
+DEFAULT_MAX_ITERATIONS_BY_DIFFICULTY = {
+    "unknown": 75,
+    "low": 75,
+    "medium": 95,
+    "high": 120,
+    "ultra": 150,
+    "max": 180,
+}
 
 
 @dataclass(frozen=True)
@@ -160,7 +169,7 @@ def build_command(
                 True,
             )
 
-        max_iterations = os.getenv("BENCHMARK_MAX_ITERATIONS", "75")
+        max_iterations = str(max_iterations_for_fixture(fixture))
         model = agent_model(agent) or DEFAULT_AGENT_MODELS["supatest"]
         binary = os.getenv("BENCHMARK_SUPATEST_BINARY") or "supatest"
         if supatest_machine_mode_enabled():
@@ -251,6 +260,71 @@ def agent_stdin_input(agent: str, fixture: EvalFixture) -> str | None:
 def supatest_machine_mode_enabled() -> bool:
     raw = os.getenv("BENCHMARK_SUPATEST_MACHINE_MODE", "1").strip().lower()
     return raw not in {"0", "false", "no", "off"}
+
+
+def fixture_difficulty(fixture: EvalFixture) -> str:
+    raw_qa_bench = getattr(fixture, "qa_bench", None)
+    qa_bench = raw_qa_bench if isinstance(raw_qa_bench, dict) else {}
+    difficulty = str(
+        qa_bench.get("difficulty")
+        or difficulty_for_tier(getattr(fixture, "tier", None))
+    )
+    return difficulty if difficulty in DEFAULT_MAX_ITERATIONS_BY_DIFFICULTY else "unknown"
+
+
+def parse_positive_int(raw: str, name: str) -> int:
+    try:
+        value = int(raw)
+    except ValueError as error:
+        raise ValueError(f"{name} must be a positive integer.") from error
+    if value <= 0:
+        raise ValueError(f"{name} must be a positive integer.")
+    return value
+
+
+def max_iterations_policy_mode() -> str:
+    raw = os.getenv("BENCHMARK_MAX_ITERATIONS_POLICY", "difficulty").strip().lower()
+    if raw in {"difficulty", "difficulty-based", "by-difficulty"}:
+        return "difficulty"
+    if raw in {"static", "fixed", "global"}:
+        return "static"
+    raise ValueError(
+        "BENCHMARK_MAX_ITERATIONS_POLICY must be 'difficulty' or 'static'."
+    )
+
+
+def max_iterations_for_fixture(fixture: EvalFixture) -> int:
+    difficulty = fixture_difficulty(fixture)
+    difficulty_env_name = f"BENCHMARK_MAX_ITERATIONS_{difficulty.upper()}"
+    difficulty_override = os.getenv(difficulty_env_name)
+    if difficulty_override:
+        return parse_positive_int(difficulty_override, difficulty_env_name)
+
+    global_override = (
+        os.getenv("BENCHMARK_MAX_ITERATIONS")
+        if max_iterations_policy_mode() == "static"
+        else None
+    )
+    if global_override:
+        return parse_positive_int(global_override, "BENCHMARK_MAX_ITERATIONS")
+
+    return DEFAULT_MAX_ITERATIONS_BY_DIFFICULTY[difficulty]
+
+
+def max_iterations_policy_metadata() -> dict[str, object]:
+    overrides = {
+        difficulty: os.getenv(f"BENCHMARK_MAX_ITERATIONS_{difficulty.upper()}")
+        for difficulty in DEFAULT_MAX_ITERATIONS_BY_DIFFICULTY
+        if os.getenv(f"BENCHMARK_MAX_ITERATIONS_{difficulty.upper()}")
+    }
+    return {
+        "policy": "static" if max_iterations_policy_mode() == "static" else "difficulty-based",
+        "byDifficulty": DEFAULT_MAX_ITERATIONS_BY_DIFFICULTY,
+        "staticOverride": os.getenv("BENCHMARK_MAX_ITERATIONS")
+        if max_iterations_policy_mode() == "static"
+        else None,
+        "difficultyOverrides": overrides,
+    }
 
 
 def agent_family(agent: str) -> str:
@@ -473,6 +547,7 @@ def render_command_template(
     project_id = resolve_supatest_project_id() or ""
     model = agent_model(agent) or DEFAULT_AGENT_MODELS.get(agent_family(agent), "")
     model_arg = f"--model {shlex.quote(model)}" if model else ""
+    difficulty = fixture_difficulty(fixture)
     return template.format(
         agent=shlex.quote(agent_family(agent)),
         prompt=shlex.quote(prompt),
@@ -483,6 +558,8 @@ def render_command_template(
         model=shlex.quote(model) if model else "",
         model_arg=model_arg,
         project_id=shlex.quote(project_id),
+        difficulty=shlex.quote(difficulty),
+        max_iterations=str(max_iterations_for_fixture(fixture)),
     )
 
 
