@@ -843,6 +843,118 @@ def test_deterministic_grader_flags_fixed_waits_and_skips() -> None:
     assert grade["cap"] == 0.49
 
 
+def test_deterministic_grader_allows_existing_async_timer_implementation_fix() -> None:
+    result = {
+        "mode": "fix",
+        "task": "Fix the flaky async loader timing bug.",
+        "passCriteria": ["The load method waits for delayed content before resolving."],
+        "changedDiff": (
+            "--- a/src/loader.ts\n"
+            "+++ b/src/loader.ts\n"
+            "-  load(): void {\n"
+            "-    setTimeout(() => {\n"
+            "-      this.data = 'loaded content';\n"
+            "-    }, 100);\n"
+            "+  async load(): Promise<void> {\n"
+            "+    await new Promise<void>((resolve) => {\n"
+            "+      setTimeout(() => {\n"
+            "+        this.data = 'loaded content';\n"
+            "+        resolve();\n"
+            "+      }, 100);\n"
+            "+    });\n"
+            "   }\n"
+        ),
+        "artifactChecks": {"warnings": [], "ranVerificationCommand": True},
+    }
+
+    grade = build_deterministic_grade(result)
+
+    assert "no-fixed-waits" not in grade["failedCheckIds"]
+    assert grade["cap"] is None
+
+
+def test_deterministic_grader_still_flags_async_timer_in_test_files() -> None:
+    result = {
+        "mode": "fix",
+        "task": "Fix the flaky async loader timing bug.",
+        "changedDiff": (
+            "--- a/tests/loader.spec.ts\n"
+            "+++ b/tests/loader.spec.ts\n"
+            "-test('loads', async () => {\n"
+            "+test('loads', async () => {\n"
+            "+  await new Promise<void>((resolve) => {\n"
+            "+    setTimeout(() => resolve(), 100);\n"
+            "+  });\n"
+            " });\n"
+        ),
+        "artifactChecks": {"warnings": [], "ranVerificationCommand": True},
+    }
+
+    grade = build_deterministic_grade(result)
+
+    assert "no-fixed-waits" in grade["failedCheckIds"]
+    assert grade["cap"] == 0.59
+
+
+def test_deterministic_grader_still_flags_wait_for_timeout() -> None:
+    result = {
+        "mode": "fix",
+        "task": "Fix the flaky async loader timing bug.",
+        "changedDiff": (
+            "--- a/src/loader.ts\n"
+            "+++ b/src/loader.ts\n"
+            "+await page.waitForTimeout(500)\n"
+        ),
+        "artifactChecks": {"warnings": [], "ranVerificationCommand": True},
+    }
+
+    grade = build_deterministic_grade(result)
+
+    assert "no-fixed-waits" in grade["failedCheckIds"]
+    assert grade["cap"] == 0.59
+
+
+def test_deterministic_grader_allows_documented_skip_when_required() -> None:
+    result = {
+        "mode": "build",
+        "task": "Write a test for the missing wishlist feature.",
+        "passCriteria": [
+            "Creates test.skip() with detailed TODO comment explaining what was looked for and why it is skipped",
+        ],
+        "changedDiff": (
+            "--- a/tests/wishlist.spec.ts\n"
+            "+++ b/tests/wishlist.spec.ts\n"
+            "+test.skip('wishlist feature is absent', async ({ page }) => {})\n"
+        ),
+        "artifactChecks": {"warnings": [], "ranVerificationCommand": True},
+    }
+
+    grade = build_deterministic_grade(result)
+
+    assert "no-skip-or-only" not in grade["failedCheckIds"]
+    assert grade["cap"] is None
+
+
+def test_deterministic_grader_still_flags_only_when_skip_is_allowed() -> None:
+    result = {
+        "mode": "build",
+        "passCriteria": [
+            "Creates test.skip() with detailed TODO comment explaining what was looked for and why it is skipped",
+        ],
+        "changedDiff": (
+            "--- a/tests/wishlist.spec.ts\n"
+            "+++ b/tests/wishlist.spec.ts\n"
+            "+test.only('wishlist feature is absent', async ({ page }) => {})\n"
+        ),
+        "artifactChecks": {"warnings": [], "ranVerificationCommand": True},
+    }
+
+    grade = build_deterministic_grade(result)
+
+    assert "no-skip-or-only" in grade["failedCheckIds"]
+    assert grade["cap"] == 0.49
+
+
 def test_deterministic_grader_flags_missing_required_implementation_change() -> None:
     result = {
         "mode": "fix",

@@ -40,7 +40,7 @@ def build_deterministic_grade(result: dict) -> dict:
             0.69,
         )
 
-    if added_line_matches(diff, fixed_wait_pattern()):
+    if added_fixed_wait_violations(diff, task_text):
         add_failed_check(
             checks,
             caps,
@@ -48,12 +48,20 @@ def build_deterministic_grade(result: dict) -> dict:
             "Changed diff adds fixed waits or arbitrary sleeps.",
             0.59,
         )
-    if added_line_matches(diff, skip_or_only_pattern()):
+    if added_line_matches(diff, only_pattern()):
         add_failed_check(
             checks,
             caps,
             "no-skip-or-only",
-            "Changed diff adds skip/only markers.",
+            "Changed diff adds only markers.",
+            0.49,
+        )
+    if added_line_matches(diff, skip_pattern()) and not allows_documented_skip(task_text):
+        add_failed_check(
+            checks,
+            caps,
+            "no-skip-or-only",
+            "Changed diff adds skip markers without an explicit documented-skip contract.",
             0.49,
         )
     if added_line_matches(diff, trivial_assertion_pattern()):
@@ -219,12 +227,135 @@ def added_line_matches(diff: str, pattern: re.Pattern) -> bool:
     )
 
 
+def added_fixed_wait_violations(diff: str, task_text: str) -> list[str]:
+    pattern = fixed_wait_pattern()
+    violations: list[str] = []
+    for file_path, section in diff_file_sections(diff).items():
+        for line in section["added"]:
+            if not pattern.search(line):
+                continue
+            if is_existing_async_implementation_timer(file_path, section, line, task_text):
+                continue
+            violations.append(f"{file_path}:{line.strip()}")
+    return violations
+
+
+def diff_file_sections(diff: str) -> dict[str, dict[str, list[str]]]:
+    sections: dict[str, dict[str, list[str]]] = {}
+    current_file = ""
+
+    def current_section() -> dict[str, list[str]]:
+        if current_file not in sections:
+            sections[current_file] = {"added": [], "removed": []}
+        return sections[current_file]
+
+    for raw_line in diff.splitlines():
+        if raw_line.startswith("+++ "):
+            current_file = normalize_diff_path(raw_line[4:].strip())
+            current_section()
+            continue
+        if raw_line.startswith("+") and not raw_line.startswith("+++"):
+            current_section()["added"].append(raw_line[1:])
+            continue
+        if raw_line.startswith("-") and not raw_line.startswith("---"):
+            current_section()["removed"].append(raw_line[1:])
+
+    return sections
+
+
+def normalize_diff_path(path: str) -> str:
+    if path == "/dev/null":
+        return ""
+    if path.startswith(("a/", "b/")):
+        return path[2:]
+    return path
+
+
+def is_existing_async_implementation_timer(
+    file_path: str, section: dict[str, list[str]], line: str, task_text: str
+) -> bool:
+    if "settimeout" not in line.lower():
+        return False
+    if not file_path or is_test_path(file_path):
+        return False
+    added_text = "\n".join(section["added"]).lower()
+    removed_text = "\n".join(section["removed"]).lower()
+    return (
+        "settimeout" in removed_text
+        and "new promise" in added_text
+        and "resolve" in added_text
+        and task_suggests_async_timing_fix(task_text)
+    )
+
+
+def is_test_path(path: str) -> bool:
+    normalized = path.lower().replace("\\", "/")
+    parts = normalized.split("/")
+    return (
+        "tests" in parts
+        or "test" in parts
+        or "e2e" in parts
+        or normalized.endswith(
+            (
+                ".spec.ts",
+                ".spec.tsx",
+                ".spec.js",
+                ".spec.jsx",
+                ".test.ts",
+                ".test.tsx",
+                ".test.js",
+                ".test.jsx",
+            )
+        )
+    )
+
+
+def task_suggests_async_timing_fix(task_text: str) -> bool:
+    return any(
+        needle in task_text
+        for needle in (
+            "async",
+            "await",
+            "delayed",
+            "eventual",
+            "flaky",
+            "load",
+            "loader",
+            "promise",
+            "race",
+            "timing",
+            "timeout",
+            "wait",
+        )
+    )
+
+
 def fixed_wait_pattern() -> re.Pattern:
     return re.compile(r"\b(waitForTimeout|sleep|setTimeout|cy\.wait)\s*\(", re.I)
 
 
-def skip_or_only_pattern() -> re.Pattern:
-    return re.compile(r"\b(test|it|describe)\.(skip|only)\s*\(|\.(skip|only)\s*\(")
+def skip_pattern() -> re.Pattern:
+    return re.compile(r"\b(test|it|describe)\.skip\s*\(|\.skip\s*\(")
+
+
+def only_pattern() -> re.Pattern:
+    return re.compile(r"\b(test|it|describe)\.only\s*\(|\.only\s*\(")
+
+
+def allows_documented_skip(task_text: str) -> bool:
+    has_skip_contract = (
+        "test.skip" in task_text
+        or "skipped test" in task_text
+        or "skip with" in task_text
+        or "skipped todo" in task_text
+    )
+    has_documentation_contract = (
+        "todo" in task_text
+        or "detailed" in task_text
+        or "explanation" in task_text
+        or "explaining" in task_text
+    )
+    return has_skip_contract and has_documentation_contract
 
 
 def trivial_assertion_pattern() -> re.Pattern:
