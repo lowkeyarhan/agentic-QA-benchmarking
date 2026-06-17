@@ -1,0 +1,70 @@
+Cleaning benchmark results and runs...
+Local binary:  /Users/lowkeyarhan/Documents/supatest/cli/dist/index.js
+Prod binary:   /opt/homebrew/lib/node_modules/@supatest/cli/dist/index.js
+Eval suites:   E1,E2,E12,E4,E70
+Run prefix:    compare-5eval-20260616
+
+=== Starting local run (compare-5eval-20260616-local) ===
+Run ID: compare-5eval-20260616-local
+Evals: E1, E2, E12, E4, E70
+Agents: supatest [premium]
+Parallelism: 4
+Timeout: 1200s per agent run
+
+  E1 supatest [premium]                    n/a pending  77446ms
+ E70 supatest [premium]                    n/a pending  22989ms
+ E12 supatest [premium]                    n/a pending  144689ms
+  E2 supatest [premium]                    n/a pending  169111ms
+  E4 supatest [premium]                    n/a pending  221107ms
+
+Scoring 5 completed runs with judge batches of 5...
+
+Scores:
+  E1 supatest [premium]                  6p/0f pass     77446ms
+  E2 supatest [premium]                  2p/0f pass     169111ms
+ E12 supatest [premium]                  2p/0f pass     144689ms
+  E4 supatest [premium]                  4p/0f pass     221107ms
+ E70 supatest [premium]                  1p/2f fail     22989ms
+
+Results: /Users/lowkeyarhan/Documents/supatest/benchmark/results/compare-5eval-20260616-local
+Summary: /Users/lowkeyarhan/Documents/supatest/benchmark/results/compare-5eval-20260616-local/scores.md
+Combined JSON: /Users/lowkeyarhan/Documents/supatest/benchmark/results/compare-5eval-20260616-local/run.json
+=== Finished local run ===
+
+=== Starting prod run (compare-5eval-20260616-prod) ===
+Run ID: compare-5eval-20260616-prod
+Evals: E1, E2, E12, E4, E70
+Agents: supatest [premium]
+Parallelism: 4
+Timeout: 1200s per agent run
+
+  E1 supatest [premium]                    n/a pending  39796ms
+ E12 supatest [premium]                    n/a pending  49766ms
+  E4 supatest [premium]                    n/a pending  53444ms
+ E70 supatest [premium]                    n/a pending  20725ms
+  E2 supatest [premium]                    n/a pending  161820ms
+
+Scoring 5 completed runs with judge batches of 5...
+
+Scores:
+  E1 supatest [premium]                  6p/0f pass     39796ms
+  E2 supatest [premium]                  2p/0f pass     161820ms
+ E12 supatest [premium]                  2p/1f partial  49766ms
+  E4 supatest [premium]                  4p/0f pass     53444ms
+ E70 supatest [premium]                  4p/1f fail     20725ms
+
+Results: /Users/lowkeyarhan/Documents/supatest/benchmark/results/compare-5eval-20260616-prod
+Summary: /Users/lowkeyarhan/Documents/supatest/benchmark/results/compare-5eval-20260616-prod/scores.md
+Combined JSON: /Users/lowkeyarhan/Documents/supatest/benchmark/results/compare-5eval-20260616-prod/run.json
+=== Finished prod run ===
+
+Traceback (most recent call last):
+  File "/Users/lowkeyarhan/Documents/supatest/benchmark/scripts/compare-local-prod-results.py", line 252, in <module>
+    raise SystemExit(main())
+                     ~~~~^^
+  File "/Users/lowkeyarhan/Documents/supatest/benchmark/scripts/compare-local-prod-results.py", line 241, in main
+    report = build_report(local_dir, prod_dir)
+  File "/Users/lowkeyarhan/Documents/supatest/benchmark/scripts/compare-local-prod-results.py", line 73, in build_report
+    local_runs = {run["evalId"]: run for run in load_runs(local_dir)}
+                  ~~~^^^^^^^^^^
+TypeError: string indices must be integers, not 'str'
