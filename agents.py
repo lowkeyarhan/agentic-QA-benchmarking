@@ -115,7 +115,10 @@ def run_agent(
         stdin=subprocess.PIPE if stdin_input is not None else None,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
-        env=agent_environment(agent),
+        env={
+            **agent_environment(agent),
+            "SUPATEST_RUN_ARTIFACT_DIR": str(output_dir),
+        },
         start_new_session=True,
     )
 
@@ -445,7 +448,38 @@ def agent_environment(agent: str | None = None) -> dict[str, str]:
         env["SUPATEST_EVAL_TELEMETRY"] = (
             "1" if benchmark_supatest_eval_telemetry_enabled() else "0"
         )
+        apply_supatest_bundled_mcp_env(env)
     return env
+
+
+def benchmark_truthy_env(name: str, default: str = "1") -> bool:
+    raw = os.getenv(name, default).strip().lower()
+    return raw not in {"", "0", "false", "no", "off", "none"}
+
+
+def apply_supatest_bundled_mcp_env(env: dict[str, str]) -> None:
+    if benchmark_truthy_env("BENCHMARK_SUPATEST_GRAPHIFY_MCP", "1"):
+        env["SUPATEST_GRAPHIFY_MCP"] = "1"
+
+    morph_key = (
+        os.getenv("BENCHMARK_SUPATEST_MORPH_API_KEY", "").strip()
+        or os.getenv("MORPH_API_KEY", "").strip()
+        or os.getenv("SUPATEST_MORPH_API_KEY", "").strip()
+        or os.getenv("BENCHMARK_SUPATEST_API_KEY", "").strip()
+        or os.getenv("SUPATEST_API_KEY", "").strip()
+    )
+    if morph_key:
+        env["MORPH_API_KEY"] = morph_key
+        env["SUPATEST_MORPH_API_KEY"] = morph_key
+
+    morph_url = (
+        os.getenv("BENCHMARK_SUPATEST_MORPH_API_URL", "").strip()
+        or os.getenv("SUPATEST_MORPH_API_URL", "").strip()
+        or os.getenv("MORPH_API_URL", "").strip()
+    )
+    if morph_url:
+        env["SUPATEST_MORPH_API_URL"] = morph_url
+        env["MORPH_API_URL"] = morph_url
 
 
 def benchmark_supatest_eval_telemetry_enabled() -> bool:

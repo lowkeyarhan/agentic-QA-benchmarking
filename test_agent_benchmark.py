@@ -117,6 +117,44 @@ def test_supatest_agent_environment_can_disable_eval_telemetry(monkeypatch) -> N
     assert env["SUPATEST_EVAL_TELEMETRY"] == "0"
 
 
+def test_supatest_agent_environment_enables_bundled_mcp_by_default(monkeypatch) -> None:
+    monkeypatch.delenv("BENCHMARK_SUPATEST_GRAPHIFY_MCP", raising=False)
+    monkeypatch.delenv("BENCHMARK_SUPATEST_MORPH_API_KEY", raising=False)
+    monkeypatch.delenv("MORPH_API_KEY", raising=False)
+
+    env = agent_environment("supatest")
+
+    assert env["SUPATEST_GRAPHIFY_MCP"] == "1"
+    assert "MORPH_API_KEY" not in env
+
+
+def test_supatest_agent_environment_passes_morph_key(monkeypatch) -> None:
+    monkeypatch.setenv("BENCHMARK_SUPATEST_MORPH_API_KEY", "morph_test_key")
+
+    env = agent_environment("supatest")
+
+    assert env["MORPH_API_KEY"] == "morph_test_key"
+    assert env["SUPATEST_MORPH_API_KEY"] == "morph_test_key"
+
+
+def test_supatest_agent_environment_falls_back_to_supatest_api_key(monkeypatch) -> None:
+    monkeypatch.delenv("BENCHMARK_SUPATEST_MORPH_API_KEY", raising=False)
+    monkeypatch.setenv("BENCHMARK_SUPATEST_API_KEY", "cli_test_key")
+
+    env = agent_environment("supatest")
+
+    assert env["MORPH_API_KEY"] == "cli_test_key"
+    assert env["SUPATEST_MORPH_API_KEY"] == "cli_test_key"
+
+
+def test_supatest_agent_environment_can_disable_graphify_mcp(monkeypatch) -> None:
+    monkeypatch.setenv("BENCHMARK_SUPATEST_GRAPHIFY_MCP", "0")
+
+    env = agent_environment("supatest")
+
+    assert "SUPATEST_GRAPHIFY_MCP" not in env
+
+
 def test_run_agent_records_monotonic_elapsed_duration(tmp_path, monkeypatch) -> None:
     project_dir = tmp_path / "project"
     project_dir.mkdir()
@@ -867,6 +905,176 @@ def test_artifact_checks_detect_created_tests_and_verification() -> None:
     assert checks["warnings"] == []
 
 
+def test_artifact_checks_count_verify_fix_node_command() -> None:
+    fixture = load_fixture("E122")
+    run = SimpleNamespace(
+        changed_files=["src/formatter.ts"],
+        transcript="node verify-fix.mjs\nPASS formatCurrency\nPASS formatPercent",
+    )
+
+    checks = build_artifact_checks(fixture, run)
+
+    assert checks["ranVerificationCommand"] is True
+    assert "verification-command-not-observed" not in checks["warnings"]
+
+
+def test_artifact_checks_allow_no_change_for_stale_log_eval() -> None:
+    fixture = load_fixture("E121")
+    run = SimpleNamespace(
+        changed_files=[],
+        transcript=(
+            "The failure log is stale evidence. "
+            "Current source already satisfies both assertions."
+        ),
+    )
+
+    checks = build_artifact_checks(fixture, run)
+
+    assert checks["changedRelevantFiles"] == []
+    assert "expected-artifact-change-missing" not in checks["warnings"]
+
+
+def test_artifact_checks_verify_inline_playwright_metadata(tmp_path) -> None:
+    fixture = load_fixture("E11")
+    (tmp_path / "tests").mkdir()
+    (tmp_path / "tests" / "checkout.spec.ts").write_text(
+        """
+import { test } from '@playwright/test';
+
+test('requires first name', {
+  tag: ['@feature:checkout', '@priority:high', '@test_type:regression'],
+}, async ({ page }) => {});
+
+test('valid checkout', {
+  tag: ['@feature:checkout', '@priority:critical', '@test_type:smoke'],
+}, async ({ page }) => {});
+"""
+    )
+    run = SimpleNamespace(
+        changed_files=["tests/checkout.spec.ts"],
+        project_dir=tmp_path,
+        transcript="npx playwright test tests/checkout.spec.ts",
+    )
+
+    checks = build_artifact_checks(fixture, run)
+    metadata = checks["playwrightMetadata"]
+
+    assert metadata["required"] is True
+    assert metadata["passed"] is True
+    assert metadata["totalTests"] == 2
+    assert metadata["taggedTests"] == 2
+    assert metadata["missing"] == []
+
+
+def test_artifact_checks_verify_helper_playwright_metadata(tmp_path) -> None:
+    fixture = load_fixture("E11")
+    (tmp_path / "tests").mkdir()
+    (tmp_path / "tests" / "checkout.spec.ts").write_text(
+        """
+import { test } from '@playwright/test';
+
+const checkoutMetadata = (
+  priority: 'high' | 'medium' | 'low',
+  testType: 'smoke' | 'regression' | 'e2e'
+) => ({
+  tag: ['@feature:checkout', `@priority:${priority}`, `@test_type:${testType}`],
+});
+
+test('requires first name', checkoutMetadata('high', 'regression'), async ({ page }) => {});
+test('complete checkout', checkoutMetadata('high', 'e2e'), async ({ page }) => {});
+"""
+    )
+    run = SimpleNamespace(
+        changed_files=["tests/checkout.spec.ts"],
+        project_dir=tmp_path,
+        transcript="npx playwright test tests/checkout.spec.ts",
+    )
+
+    checks = build_artifact_checks(fixture, run)
+    metadata = checks["playwrightMetadata"]
+
+    assert metadata["passed"] is True
+    assert metadata["totalTests"] == 2
+    assert metadata["taggedTests"] == 2
+
+
+def test_artifact_checks_flag_title_only_playwright_metadata(tmp_path) -> None:
+    fixture = load_fixture("E11")
+    (tmp_path / "tests").mkdir()
+    (tmp_path / "tests" / "checkout.spec.ts").write_text(
+        """
+import { test } from '@playwright/test';
+
+test('@feature:checkout @priority:high @test_type:regression requires first name', async ({ page }) => {});
+"""
+    )
+    run = SimpleNamespace(
+        changed_files=["tests/checkout.spec.ts"],
+        project_dir=tmp_path,
+        transcript="npx playwright test tests/checkout.spec.ts",
+    )
+
+    checks = build_artifact_checks(fixture, run)
+    metadata = checks["playwrightMetadata"]
+
+    assert metadata["required"] is True
+    assert metadata["passed"] is False
+    assert metadata["totalTests"] == 1
+    assert metadata["missing"][0]["missingTags"] == [
+        "@feature:",
+        "@priority:",
+        "@test_type:",
+    ]
+
+
+def test_recover_pending_result_recomputes_artifact_checks(tmp_path) -> None:
+    fixture = load_fixture("E11")
+    case_run_dir = tmp_path / "case-001" / "supatest"
+    project = copy_project(fixture, case_run_dir / "project")
+    (project / "tests" / "checkout.spec.ts").write_text(
+        """
+import { test } from '@playwright/test';
+
+test('requires first name', {
+  tag: ['@feature:checkout', '@priority:high', '@test_type:regression'],
+}, async ({ page }) => {});
+"""
+    )
+    transcript_path = case_run_dir / "transcript.log"
+    transcript_path.write_text("npx playwright test tests/checkout.spec.ts\n")
+    pending_result = {
+        "runId": "verify",
+        "caseId": "case-001",
+        "evalId": "E11",
+        "evalName": fixture.name,
+        "agent": "supatest",
+        "mode": fixture.mode,
+        "exitCode": 0,
+        "timedOut": False,
+        "durationMs": 100,
+        "projectDir": str(project),
+        "transcriptPath": str(transcript_path),
+        "changedFiles": ["tests/checkout.spec.ts"],
+        "changedDiff": "",
+        "artifactChecks": {"warnings": []},
+        "artifactWarnings": [],
+        "passCriteria": fixture.pass_criteria,
+        "failCriteria": fixture.fail_criteria,
+    }
+    (case_run_dir / run_benchmark.PENDING_RESULT_FILE).write_text(
+        json.dumps(pending_result)
+    )
+
+    recovered = run_benchmark.recover_pending_result(
+        "verify", fixture, "supatest", "case-001", case_run_dir
+    )
+    metadata = recovered.result["artifactChecks"]["playwrightMetadata"]
+
+    assert metadata["passed"] is True
+    assert metadata["totalTests"] == 1
+    assert recovered.result["changedDiff"]
+
+
 def test_artifact_checks_warn_when_build_only_changes_noise() -> None:
     fixture = load_fixture("E7")
     run = SimpleNamespace(
@@ -924,6 +1132,59 @@ def test_deterministic_grader_flags_fixed_waits_and_skips() -> None:
     assert "no-skip-or-only" in grade["failedCheckIds"]
     assert "no-trivial-assertions" in grade["failedCheckIds"]
     assert grade["cap"] == 0.49
+
+
+def test_deterministic_grader_floors_stale_evidence_no_change_report(tmp_path) -> None:
+    transcript = tmp_path / "transcript.log"
+    transcript.write_text(
+        "The failure log is stale evidence. The current source already satisfies "
+        "the assertions: add-to-cart and .inventory_item_name. No files changed."
+    )
+    result = {
+        "mode": "fix",
+        "task": "Fix the failing selector tests without making a cosmetic edit.",
+        "passCriteria": [
+            "If current source already satisfies the logged failures, identify stale evidence.",
+        ],
+        "changedFiles": [],
+        "changedDiff": "",
+        "transcriptPath": str(transcript),
+        "artifactChecks": {"warnings": [], "ranVerificationCommand": True},
+    }
+
+    grade = build_deterministic_grade(result)
+
+    assert grade["floor"] == 0.69
+    assert grade["cap"] is None
+    assert "stale-evidence-no-change-report" not in grade["failedCheckIds"]
+
+
+def test_deterministic_grader_does_not_floor_noisy_stale_report(tmp_path) -> None:
+    transcript = tmp_path / "transcript.log"
+    transcript.write_text(
+        "The failure log is stale evidence. The current source already satisfies "
+        "the assertions: add-to-cart and .inventory_item_name. No files changed."
+    )
+    result = {
+        "mode": "fix",
+        "task": "Fix the failing selector tests without making a cosmetic edit.",
+        "passCriteria": [
+            "If current source already satisfies the logged failures, identify stale evidence.",
+        ],
+        "changedFiles": ["package-lock.json"],
+        "changedDiff": "",
+        "transcriptPath": str(transcript),
+        "artifactChecks": {
+            "warnings": ["only-noisy-files-changed"],
+            "ranVerificationCommand": True,
+        },
+    }
+
+    grade = build_deterministic_grade(result)
+
+    assert grade["floor"] is None
+    assert grade["cap"] == 0.39
+    assert "no-noisy-artifacts-only" in grade["failedCheckIds"]
 
 
 def test_deterministic_grader_allows_existing_async_timer_implementation_fix() -> None:
@@ -1086,6 +1347,31 @@ def test_deterministic_grader_flags_missing_mobile_inspect() -> None:
 
     assert "maestro-inspect-required" in grade["failedCheckIds"]
     assert grade["cap"] == 0.69
+
+
+def test_deterministic_grader_scores_playwright_metadata_floor() -> None:
+    result = {
+        "mode": "build",
+        "changedDiff": "+test('checkout', { tag: ['@feature:checkout', '@priority:high', '@test_type:regression'] }, async () => {})\n",
+        "artifactChecks": {
+            "warnings": [],
+            "ranVerificationCommand": True,
+            "playwrightMetadata": {
+                "required": True,
+                "passed": True,
+                "requiredTags": ["@feature:", "@priority:", "@test_type:"],
+                "totalTests": 1,
+                "taggedTests": 1,
+                "missing": [],
+            },
+        },
+    }
+
+    grade = build_deterministic_grade(result)
+
+    assert "playwright-metadata-tags" not in grade["failedCheckIds"]
+    assert grade["cap"] is None
+    assert grade["floor"] == 0.9
 
 
 def test_token_usage_parser_reads_codex_footer() -> None:
@@ -1332,6 +1618,77 @@ def test_eval_telemetry_parser_reads_nested_supatest_and_cursor_tool_shapes(
     assert telemetry["commandCategories"] == {"search": 1, "test": 1}
     assert telemetry["didRunTests"] is True
     assert telemetry["didWrite"] is True
+
+
+def test_commands_report_extracts_tools_graphify_and_rtk(tmp_path) -> None:
+    from benchmark_commands import build_commands_report_from_transcript, write_commands_json
+
+    transcript = tmp_path / "transcript.log"
+    transcript.write_text(
+        "\n".join(
+            [
+                json.dumps(
+                    {
+                        "type": "assistant",
+                        "message": {
+                            "role": "assistant",
+                            "content": [
+                                {
+                                    "type": "tool_use",
+                                    "name": "Bash",
+                                    "input": {
+                                        "command": "supatest graphify query \"login selector\""
+                                    },
+                                }
+                            ],
+                        },
+                    }
+                ),
+                json.dumps(
+                    {
+                        "type": "assistant",
+                        "message": {
+                            "role": "assistant",
+                            "content": [
+                                {
+                                    "type": "tool_use",
+                                    "name": "Bash",
+                                    "input": {"command": "rtk git status"},
+                                }
+                            ],
+                        },
+                    }
+                ),
+                json.dumps(
+                    {
+                        "type": "assistant",
+                        "message": {
+                            "role": "assistant",
+                            "content": [
+                                {
+                                    "type": "tool_use",
+                                    "name": "mcp__graphify__query_graph",
+                                    "input": {"query": "InventoryPage"},
+                                }
+                            ],
+                        },
+                    }
+                ),
+            ]
+        )
+    )
+
+    report = build_commands_report_from_transcript("supatest:premium", transcript)
+    assert report["summary"]["totalInvocations"] == 3
+    assert report["summary"]["supatestFeatures"]["graphify"] == 2
+    assert report["summary"]["supatestFeatures"]["graphify-mcp"] == 1
+    assert report["summary"]["supatestFeatures"]["rtk"] == 1
+    assert report["summary"]["commandCategories"]["graphify"] == 1
+
+    commands_path = write_commands_json(tmp_path, report)
+    assert commands_path.exists()
+    parsed = json.loads(commands_path.read_text())
+    assert parsed["invocations"][0]["command"].startswith("supatest graphify")
 
 
 def test_failure_taxonomy_flags_plan_overtooling_and_missing_artifact() -> None:
@@ -2482,6 +2839,83 @@ def test_deterministic_artifact_cap_prevents_inflated_judge_score(
     assert scored["judgeDiagnostics"]["deterministicChecks"][0]["id"] == (
         "expected-artifact-change"
     )
+
+
+def test_deterministic_metadata_floor_corrects_low_judge_score(
+    monkeypatch,
+) -> None:
+    class LowJudge:
+        def generate(self, _prompt, schema):
+            assert schema is BatchJudgeResponse
+            return (
+                BatchJudgeResponse(
+                    results=[
+                        BatchJudgeCaseScore(
+                            resultId="r001",
+                            score=0.2,
+                            result="fail",
+                            passedChecks=0,
+                            failedChecks=2,
+                            reason="Metadata object form was not used.",
+                        )
+                    ]
+                ),
+                0,
+            )
+
+    monkeypatch.setattr(run_benchmark, "make_judge_model", lambda: LowJudge())
+    result = {
+        "runId": "verify",
+        "caseId": "case-001",
+        "evalId": "E11",
+        "evalName": "Metadata Tags on Every Test",
+        "agent": "supatest",
+        "mode": "build",
+        "exitCode": 0,
+        "timedOut": False,
+        "durationMs": 123,
+        "projectDir": "runs/verify/case-001/supatest/project",
+        "transcriptPath": "runs/verify/case-001/supatest/transcript.log",
+        "changedFiles": ["tests/checkout.spec.ts"],
+        "changedDiff": "+test('checkout', { tag: ['@feature:checkout', '@priority:high', '@test_type:regression'] }, async () => {})\n",
+        "artifactWarnings": [],
+        "artifactChecks": {
+            "warnings": [],
+            "ranVerificationCommand": True,
+            "playwrightMetadata": {
+                "required": True,
+                "passed": True,
+                "requiredTags": ["@feature:", "@priority:", "@test_type:"],
+                "totalTests": 1,
+                "taggedTests": 1,
+                "missing": [],
+            },
+        },
+        "passCriteria": [
+            "Every test() has a Playwright metadata object with tag: ['@feature:*', '@priority:*', '@test_type:*']",
+        ],
+        "failCriteria": ["No tags", "Wrong format for framework"],
+    }
+    pending = run_benchmark.PendingResult(
+        result,
+        LLMTestCase(
+            input="Add metadata tags to every checkout test.",
+            actual_output="Exit code: 0\nTimed out: False\nChanged files include checkout spec.",
+            expected_output="Pass criteria:\n- every test has required tags",
+        ),
+    )
+
+    scored = run_benchmark.score_pending_results("verify", [pending])[0]
+
+    assert scored["scorePercent"] == 90
+    assert scored["result"] == "pass"
+    assert scored["scoreSource"] == "batch-judge+deterministic-floor"
+    assert scored["failedChecks"] == 0
+    assert scored["passedChecks"] == 1
+    assert scored["judgeDiagnostics"]["deterministicFloors"]["reasons"] == [
+        "Every changed Playwright test has required metadata tag dimensions."
+    ]
+    assert scored["deterministicGrade"]["floor"] == 0.9
 
 
 def test_batch_scoring_can_chunk_large_runs(monkeypatch) -> None:

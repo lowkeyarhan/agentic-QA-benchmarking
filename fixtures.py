@@ -4,6 +4,7 @@ import json
 import os
 import re
 import shutil
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -239,7 +240,46 @@ def copy_project(fixture: EvalFixture, destination: Path) -> Path:
             ignore=PROJECT_COPY_IGNORE,
         )
     apply_fixture_modifications(fixture, project_destination)
+    prepare_bundled_context_tools(project_destination)
     return project_destination
+
+
+def resolve_supatest_binary() -> str | None:
+    explicit = (os.getenv("BENCHMARK_SUPATEST_BINARY") or "").strip()
+    if explicit:
+        return explicit
+    return shutil.which("supatest")
+
+
+def prepare_bundled_context_tools(project_dir: Path) -> None:
+    raw = os.getenv("BENCHMARK_SUPATEST_PREPARE_GRAPHIFY", "1").strip().lower()
+    if raw in {"", "0", "false", "no", "off", "none"}:
+        return
+
+    graph_path = project_dir / "graphify-out" / "graph.json"
+    if graph_path.exists():
+        return
+
+    binary = resolve_supatest_binary()
+    if not binary:
+        return
+
+    timeout_raw = os.getenv("BENCHMARK_SUPATEST_GRAPHIFY_TIMEOUT_SECONDS", "120").strip()
+    try:
+        timeout_seconds = max(1, int(timeout_raw))
+    except ValueError:
+        timeout_seconds = 120
+
+    try:
+        subprocess.run(
+            [binary, "graphify", "update", ".", "--no-cluster"],
+            cwd=project_dir,
+            check=False,
+            capture_output=True,
+            timeout=timeout_seconds,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return
 
 
 def base_template_project_dir(fixture: EvalFixture) -> Path | None:

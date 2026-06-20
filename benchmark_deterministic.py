@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 import re
 
 
@@ -56,7 +57,9 @@ def build_deterministic_grade(result: dict) -> dict:
             "Changed diff adds only markers.",
             0.49,
         )
-    if added_line_matches(diff, skip_pattern()) and not allows_documented_skip(task_text):
+    if added_line_matches(diff, skip_pattern()) and not allows_documented_skip(
+        task_text
+    ):
         add_failed_check(
             checks,
             caps,
@@ -140,6 +143,43 @@ def build_deterministic_grade(result: dict) -> dict:
             0.49,
         )
 
+    playwright_metadata = artifact_checks.get("playwrightMetadata") or {}
+    if playwright_metadata.get("required"):
+        if playwright_metadata.get("passed"):
+            checks.append(
+                {
+                    "id": "playwright-metadata-tags",
+                    "status": "passed",
+                    "evidence": (
+                        "Every changed Playwright test has required metadata tag "
+                        "dimensions."
+                    ),
+                    "floor": 0.9,
+                }
+            )
+        else:
+            missing_count = len(playwright_metadata.get("missing") or [])
+            add_failed_check(
+                checks,
+                caps,
+                "playwright-metadata-tags",
+                f"Missing required Playwright metadata tags in {missing_count} test(s).",
+                0.49,
+            )
+
+    if stale_evidence_no_change_floor(result, task_text, artifact_checks, changed_files):
+        checks.append(
+            {
+                "id": "stale-evidence-no-change-report",
+                "status": "passed",
+                "evidence": (
+                    "Current files already satisfy a stale failure log and the "
+                    "agent avoided a cosmetic diff."
+                ),
+                "floor": 0.69,
+            }
+        )
+
     if forbids_adb_bash(task_text) and command_text_contains(
         telemetry, evidence, ("adb ", "xcrun ", "simctl")
     ):
@@ -172,7 +212,12 @@ def build_deterministic_grade(result: dict) -> dict:
     return {
         "checks": checks,
         "caps": caps,
+        "floors": deterministic_score_floors_from_checks(checks),
         "cap": min((item["cap"] for item in caps), default=None),
+        "floor": max(
+            (item["floor"] for item in deterministic_score_floors_from_checks(checks)),
+            default=None,
+        ),
         "failedCheckIds": [item["id"] for item in checks if item["status"] == "failed"],
     }
 
@@ -189,6 +234,22 @@ def add_failed_check(
         }
     )
     caps.append({"checkId": check_id, "cap": cap, "reason": evidence})
+
+
+def deterministic_score_floors_from_checks(checks: list[dict]) -> list[dict]:
+    floors = []
+    for check in checks:
+        floor = check.get("floor")
+        if floor is None:
+            continue
+        floors.append(
+            {
+                "checkId": check["id"],
+                "floor": floor,
+                "reason": check.get("evidence") or check["id"],
+            }
+        )
+    return floors
 
 
 def infer_passed_checks(
@@ -219,6 +280,81 @@ def benchmark_text(result: dict) -> str:
     ).lower()
 
 
+def stale_evidence_no_change_floor(
+    result: dict, task_text: str, artifact_checks: dict, changed_files: list[str]
+) -> bool:
+    if changed_files:
+        return False
+    if not task_allows_no_artifact_change(task_text):
+        return False
+
+    transcript = result_transcript_text(result).lower()
+    if not transcript:
+        return False
+
+    stale_terms = (
+        "stale evidence",
+        "failure log is stale",
+        "failure log was stale",
+        "stale failure",
+    )
+    source_terms = (
+        "current source",
+        "source file already",
+        "already contains the correct",
+        "already has the correct",
+        "already satisfies",
+    )
+    no_diff_terms = (
+        "no files changed",
+        "no edit is needed",
+        "no changes needed",
+        "no files need changing",
+        "no change is needed",
+    )
+    has_current_values = "add-to-cart" in transcript and ".inventory_item_name" in transcript
+    has_verification_or_blocker = bool(artifact_checks.get("ranVerificationCommand")) or (
+        "blocked" in transcript and "verify" in transcript
+    )
+
+    return (
+        any(term in transcript for term in stale_terms)
+        and any(term in transcript for term in source_terms)
+        and any(term in transcript for term in no_diff_terms)
+        and has_current_values
+        and has_verification_or_blocker
+    )
+
+
+def task_allows_no_artifact_change(text: str) -> bool:
+    phrases = (
+        "no cosmetic diff",
+        "without making a cosmetic edit",
+        "without a cosmetic edit",
+        "does not rewrite identical",
+        "do not rewrite identical",
+        "current source already satisfies",
+        "current files already satisfy",
+        "failure log as stale",
+        "failure log is stale",
+        "stale evidence",
+    )
+    return any(phrase in text for phrase in phrases)
+
+
+def result_transcript_text(result: dict) -> str:
+    transcript_path = result.get("transcriptPath")
+    if not transcript_path:
+        return str(result.get("evidence") or "")
+    path = Path(str(transcript_path))
+    if not path.exists() or not path.is_file():
+        return str(result.get("evidence") or "")
+    try:
+        return path.read_text(errors="replace")
+    except OSError:
+        return str(result.get("evidence") or "")
+
+
 def added_line_matches(diff: str, pattern: re.Pattern) -> bool:
     return any(
         pattern.search(line[1:])
@@ -234,7 +370,9 @@ def added_fixed_wait_violations(diff: str, task_text: str) -> list[str]:
         for line in section["added"]:
             if not pattern.search(line):
                 continue
-            if is_existing_async_implementation_timer(file_path, section, line, task_text):
+            if is_existing_async_implementation_timer(
+                file_path, section, line, task_text
+            ):
                 continue
             violations.append(f"{file_path}:{line.strip()}")
     return violations

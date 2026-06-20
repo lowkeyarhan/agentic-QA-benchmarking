@@ -1,0 +1,11 @@
+FAIL verify-fix.mjs
+
+formatCurrency
+  Expected: $12.50
+  Received: 12.5 USD
+
+formatPercent
+  Expected: 8.25%
+  Received: 0.0825%
+
+Results: 0 passed, 2 failed

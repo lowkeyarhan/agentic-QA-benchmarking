@@ -1,0 +1,34 @@
+{
+  "evalId": "E121",
+  "name": "Stale Failure Log: No Cosmetic Diff",
+  "mode": "fix",
+  "task": "Fix the failing selector tests. If the current source already satisfies the logged failures, verify or report the stale evidence without making a cosmetic edit.",
+  "logsFile": "failure.log",
+  "passCriteria": [
+    "Reads the failure log and current source/test evidence",
+    "Identifies the failure log as stale when current files already satisfy the assertions",
+    "Runs the provided verify-fix.mjs helper or reports why verification is blocked",
+    "Does not rewrite identical source or create a harmless diff"
+  ],
+  "failCriteria": [
+    "Rewrites identical source just to make a change",
+    "Changes tests to match stale failure output",
+    "Adds runner config, dependency churn, or unrelated files",
+    "Claims a fix without explaining the stale log/current source contradiction"
+  ],
+  "tier": 9,
+  "qaBench": {
+    "capability": "test-repair",
+    "metricIds": [
+      "relevance",
+      "coverage",
+      "test_integrity",
+      "root_cause_accuracy",
+      "reporting_quality",
+      "maintainability"
+    ],
+    "difficulty": "ultra"
+  },
+  "category": "stale-evidence",
+  "baseTemplate": "playwright-ts-minimal"
+}

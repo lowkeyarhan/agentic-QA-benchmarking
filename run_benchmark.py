@@ -105,6 +105,7 @@ from benchmark_judge import (  # noqa: E402
     score_pending_results as _score_pending_results,
     duration_ms,
 )
+from benchmark_commands import resolve_commands_report, write_commands_json, write_run_commands_bundle
 from benchmark_telemetry import (  # noqa: E402
     build_eval_telemetry,
     empty_eval_telemetry,
@@ -338,7 +339,7 @@ def main() -> int:
 
     timeout_seconds = int(os.environ["BENCHMARK_TIMEOUT_SECONDS"])
     write_summary(
-        results_dir, run_id, eval_ids, agents, parallelism, timeout_seconds, results
+        results_dir, runs_dir, run_id, eval_ids, agents, parallelism, timeout_seconds, results
     )
     dashboard_issue = upload_supatest_eval_dashboard(
         run_id, eval_ids, agents, parallelism, timeout_seconds, results
@@ -347,6 +348,7 @@ def main() -> int:
     print(f"Results: {results_dir}")
     print(f"Summary: {results_dir / 'scores.md'}")
     print(f"Combined JSON: {results_dir / 'run.json'}")
+    print(f"Commands bundle: {results_dir / 'commands.json'}")
     if dashboard_issue:
         print(f"Supatest eval dashboard upload failed: {dashboard_issue}")
         if os.getenv("BENCHMARK_SUPATEST_EVAL_DASHBOARD_STRICT") == "1":
@@ -471,6 +473,8 @@ def result_from_agent_run(
     telemetry = build_eval_telemetry(
         agent, run.transcript_path, case_run_dir, run.duration_ms
     )
+    commands_report = resolve_commands_report(agent, run.transcript_path, case_run_dir)
+    commands_path = write_commands_json(case_run_dir, commands_report)
     changed_diff = build_changed_diff(
         fixture.project_dir, run.project_dir, run.changed_files
     )
@@ -492,6 +496,8 @@ def result_from_agent_run(
         "artifactWarnings": artifact_checks["warnings"],
         "tokenUsage": token_usage,
         "telemetry": telemetry,
+        "commandsPath": str(commands_path),
+        "commandsSummary": commands_report.get("summary"),
         "fixtureHash": fixture_content_hash(fixture.eval_id),
         "qaBench": qa_bench_eval_metadata(fixture),
         "passCriteria": fixture.pass_criteria,
@@ -567,7 +573,7 @@ def score_existing_run(
         print(format_score_line(result))
 
     write_summary(
-        results_dir, run_id, eval_ids, agents, parallelism, timeout_seconds, results
+        results_dir, runs_dir, run_id, eval_ids, agents, parallelism, timeout_seconds, results
     )
     dashboard_issue = upload_supatest_eval_dashboard(
         run_id, eval_ids, agents, parallelism, timeout_seconds, results
@@ -576,6 +582,7 @@ def score_existing_run(
     print(f"Results: {results_dir}")
     print(f"Summary: {results_dir / 'scores.md'}")
     print(f"Combined JSON: {results_dir / 'run.json'}")
+    print(f"Commands bundle: {results_dir / 'commands.json'}")
     if dashboard_issue:
         print(f"Supatest eval dashboard upload failed: {dashboard_issue}")
         if os.getenv("BENCHMARK_SUPATEST_EVAL_DASHBOARD_STRICT") == "1":
@@ -594,6 +601,14 @@ def recover_pending_result(
     if pending_path.exists():
         result = json.loads(pending_path.read_text())
         run = agent_run_from_result(fixture, agent, case_run_dir, result)
+        artifact_checks = build_artifact_checks(fixture, run)
+        changed_diff = build_changed_diff(
+            fixture.project_dir, run.project_dir, run.changed_files
+        )
+        result["artifactChecks"] = artifact_checks
+        result["artifactWarnings"] = artifact_checks["warnings"]
+        result["changedDiff"] = changed_diff
+        result["changedFiles"] = run.changed_files
         result.setdefault(
             "recovery",
             {
@@ -603,7 +618,7 @@ def recover_pending_result(
         )
         return PendingResult(
             result,
-            make_test_case(fixture, run, str(result.get("changedDiff") or "")),
+            make_test_case(fixture, run, changed_diff),
         )
 
     run = reconstruct_agent_run_from_artifacts(fixture, agent, case_run_dir)
@@ -1048,6 +1063,7 @@ def summarize_agent_diagnostics(results: list[dict]) -> dict:
 
 def write_summary(
     results_dir: Path,
+    runs_dir: Path,
     run_id: str,
     eval_ids: list[str],
     agents: list[str],
@@ -1148,6 +1164,7 @@ def write_summary(
             indent=2,
         )
     )
+    write_run_commands_bundle(run_id, runs_dir, results_dir, ordered_results)
 
 
 def upload_supatest_eval_dashboard(

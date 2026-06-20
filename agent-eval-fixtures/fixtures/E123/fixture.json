@@ -1,0 +1,33 @@
+{
+  "evalId": "E123",
+  "name": "Metadata Governance With Existing Flow Preservation",
+  "mode": "build",
+  "task": "Add Playwright native metadata to every existing checkout-flow test(). Use object form with tag: ['@feature:checkout', '@priority:<level>', '@test_type:<type>']. Preserve the existing page-object flow and assertions; do not add new scenarios or rewrite the flow.",
+  "logsFile": null,
+  "passCriteria": [
+    "Every existing checkout test() has native Playwright metadata object form",
+    "Each touched test includes @feature:checkout, @priority:<level>, and @test_type:<type>",
+    "Existing page-object calls and assertions are preserved",
+    "No new scenarios, page-object rewrites, or title-only metadata"
+  ],
+  "failCriteria": [
+    "Puts required metadata only in test titles",
+    "Rewrites page objects or changes checkout flow logic",
+    "Adds extra scenarios instead of annotating existing tests",
+    "Misses one or more required metadata dimensions"
+  ],
+  "tier": 9,
+  "qaBench": {
+    "capability": "metadata-governance",
+    "metricIds": [
+      "relevance",
+      "coverage",
+      "metadata_quality",
+      "maintainability",
+      "test_integrity"
+    ],
+    "difficulty": "ultra"
+  },
+  "category": "metadata-governance",
+  "baseTemplate": "playwright-ts-minimal"
+}

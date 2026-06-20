@@ -80,7 +80,7 @@ def build_artifact_checks(fixture, run) -> dict:
     ]
     ran_verification = bool(
         re.search(
-            r"\b(npx\s+playwright|playwright\s+test|npm\s+(test|run)|pnpm\s+(test|run)|yarn\s+(test|run)|vitest|cypress|wdio|maestro\s+test|pytest)\b",
+            r"\b(npx\s+playwright|playwright\s+test|node\s+(?:\./)?verify-fix\.mjs|npm\s+(test|run)|pnpm\s+(test|run)|yarn\s+(test|run)|vitest|cypress|wdio|maestro\s+test|pytest)\b",
             transcript,
         )
     )
@@ -97,6 +97,10 @@ def build_artifact_checks(fixture, run) -> dict:
     if rate_limited:
         warnings.append("rate-limit-observed")
 
+    playwright_metadata = build_playwright_metadata_checks(
+        fixture, run, changed_test_files
+    )
+
     return {
         "changedFileCount": len(changed_files),
         "changedRelevantFiles": changed_relevant_files,
@@ -108,6 +112,7 @@ def build_artifact_checks(fixture, run) -> dict:
         "ranVerificationCommand": ran_verification,
         "rateLimited": rate_limited,
         "warnings": warnings,
+        "playwrightMetadata": playwright_metadata,
     }
 
 
@@ -146,6 +151,8 @@ def expects_artifact_change(fixture) -> bool:
         return False
     if fixture.mode == "report":
         return True
+    if explicitly_allows_no_artifact_change(text):
+        return False
     if explicitly_requires_artifact_change(text):
         return True
     if any(
@@ -163,6 +170,22 @@ def expects_artifact_change(fixture) -> bool:
     if fixture.mode in {"build", "fix", "test-feature"}:
         return True
     return explicitly_requires_artifact_change(text)
+
+
+def explicitly_allows_no_artifact_change(text: str) -> bool:
+    no_change_phrases = (
+        "no cosmetic diff",
+        "without making a cosmetic edit",
+        "without a cosmetic edit",
+        "does not rewrite identical",
+        "do not rewrite identical",
+        "current source already satisfies",
+        "current files already satisfy",
+        "failure log as stale",
+        "failure log is stale",
+        "stale evidence",
+    )
+    return any(phrase in text for phrase in no_change_phrases)
 
 
 def explicitly_requires_artifact_change(text: str) -> bool:
@@ -194,3 +217,336 @@ def fixture_expectation_text(fixture) -> str:
             "\n".join(fixture.fail_criteria),
         ]
     ).lower()
+
+
+REQUIRED_PLAYWRIGHT_METADATA_TAGS = ("@feature:", "@priority:", "@test_type:")
+
+
+def build_playwright_metadata_checks(
+    fixture, run, changed_test_files: list[str]
+) -> dict:
+    required_tags = list(REQUIRED_PLAYWRIGHT_METADATA_TAGS)
+    required = requires_playwright_metadata_tags(fixture)
+    check = {
+        "required": required,
+        "passed": None,
+        "requiredTags": required_tags,
+        "files": [],
+        "totalTests": 0,
+        "taggedTests": 0,
+        "missing": [],
+    }
+    if not required:
+        return check
+
+    project_dir = getattr(run, "project_dir", None)
+    if not project_dir:
+        check["passed"] = False
+        check["missing"].append(
+            {
+                "file": None,
+                "test": None,
+                "missingTags": required_tags,
+                "reason": "project directory unavailable",
+            }
+        )
+        return check
+
+    playwright_files = [
+        path
+        for path in changed_test_files
+        if path.lower().endswith((".spec.ts", ".spec.tsx", ".spec.js", ".spec.jsx"))
+    ]
+    if not playwright_files:
+        check["passed"] = False
+        check["missing"].append(
+            {
+                "file": None,
+                "test": None,
+                "missingTags": required_tags,
+                "reason": "no changed Playwright spec files",
+            }
+        )
+        return check
+
+    root = Path(project_dir)
+    for relative in playwright_files:
+        path = root / relative
+        if not path.exists() or not path.is_file():
+            file_check = {
+                "file": relative,
+                "totalTests": 0,
+                "taggedTests": 0,
+                "missing": [
+                    {
+                        "file": relative,
+                        "test": None,
+                        "missingTags": required_tags,
+                        "reason": "changed spec file unavailable",
+                    }
+                ],
+            }
+        else:
+            file_check = analyze_playwright_metadata_file(relative, path.read_text())
+        check["files"].append(file_check)
+        check["totalTests"] += file_check["totalTests"]
+        check["taggedTests"] += file_check["taggedTests"]
+        check["missing"].extend(file_check["missing"])
+
+    check["passed"] = check["totalTests"] > 0 and not check["missing"]
+    return check
+
+
+def requires_playwright_metadata_tags(fixture) -> bool:
+    text = fixture_expectation_text(fixture)
+    qa_bench = getattr(fixture, "qa_bench", None)
+    qa_bench = qa_bench if isinstance(qa_bench, dict) else {}
+    if qa_bench.get("capability") == "metadata-governance":
+        return True
+    metadata_terms = (
+        "metadata object",
+        "tag:",
+        "@feature:",
+        "@priority:",
+        "@test_type:",
+    )
+    return (
+        "playwright" in text
+        and "every test" in text
+        and any(term in text for term in metadata_terms)
+    )
+
+
+def analyze_playwright_metadata_file(relative: str, text: str) -> dict:
+    resolvers = build_metadata_resolvers(text)
+    missing = []
+    total_tests = 0
+    tagged_tests = 0
+
+    for call in iter_playwright_test_calls(text):
+        total_tests += 1
+        args = split_top_level_args(call["args"])
+        title = first_string_literal(args[0]) if args else f"line {call['line']}"
+        metadata_arg = args[1].strip() if len(args) >= 3 else ""
+        tags = extract_metadata_tags(metadata_arg, resolvers)
+        missing_tags = [
+            tag for tag in REQUIRED_PLAYWRIGHT_METADATA_TAGS if not has_tag(tags, tag)
+        ]
+        if missing_tags:
+            missing.append(
+                {
+                    "file": relative,
+                    "line": call["line"],
+                    "test": title,
+                    "missingTags": missing_tags,
+                }
+            )
+        else:
+            tagged_tests += 1
+
+    return {
+        "file": relative,
+        "totalTests": total_tests,
+        "taggedTests": tagged_tests,
+        "missing": missing,
+    }
+
+
+def build_metadata_resolvers(text: str) -> dict[str, set[str]]:
+    resolvers: dict[str, set[str]] = {}
+    for match in re.finditer(r"\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=", text):
+        name = match.group(1)
+        tags = extract_assignment_tags(text, match.end())
+        if tags:
+            resolvers[name] = tags
+
+    for match in re.finditer(r"\bfunction\s+([A-Za-z_$][\w$]*)\s*\(", text):
+        name = match.group(1)
+        body_start = text.find("{", match.end())
+        if body_start == -1:
+            continue
+        body_end = find_matching(text, body_start, "{", "}")
+        if body_end is None:
+            continue
+        body = text[body_start : body_end + 1]
+        tags = extract_returned_tags(body)
+        if tags:
+            resolvers[name] = tags
+    return resolvers
+
+
+def extract_assignment_tags(text: str, start_index: int) -> set[str]:
+    statement_end = find_statement_end(text, start_index)
+    statement = text[start_index:statement_end]
+    arrow_index = statement.find("=>")
+    if arrow_index != -1:
+        tags = extract_returned_tags(statement[arrow_index + 2 :])
+        if tags:
+            return tags
+    stripped = statement.strip()
+    if stripped.startswith("{"):
+        end = find_matching(stripped, 0, "{", "}")
+        if end is not None:
+            return literal_tags(stripped[: end + 1])
+    return set()
+
+
+def extract_returned_tags(text: str) -> set[str]:
+    brace_index = text.find("{")
+    while brace_index != -1:
+        end = find_matching(text, brace_index, "{", "}")
+        if end is None:
+            return set()
+        tags = literal_tags(text[brace_index : end + 1])
+        if tags:
+            return tags
+        brace_index = text.find("{", end + 1)
+    return set()
+
+
+def iter_playwright_test_calls(text: str) -> list[dict]:
+    calls = []
+    pattern = re.compile(r"(?<![\w.])test(?:\.(?:only|skip|fixme))?\s*\(")
+    for match in pattern.finditer(text):
+        open_index = match.end() - 1
+        close_index = find_matching(text, open_index, "(", ")")
+        if close_index is None:
+            continue
+        calls.append(
+            {
+                "args": text[open_index + 1 : close_index],
+                "line": text.count("\n", 0, match.start()) + 1,
+            }
+        )
+    return calls
+
+
+def split_top_level_args(args: str) -> list[str]:
+    parts: list[str] = []
+    start = 0
+    stack: list[str] = []
+    quote: str | None = None
+    escaped = False
+    index = 0
+    while index < len(args):
+        char = args[index]
+        if quote:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == quote:
+                quote = None
+            index += 1
+            continue
+        if char in {"'", '"', "`"}:
+            quote = char
+        elif char in "([{":
+            stack.append({")": "(", "]": "[", "}": "{"}.get(char, char))
+        elif char in ")]}":
+            if stack:
+                stack.pop()
+        elif char == "," and not stack:
+            parts.append(args[start:index].strip())
+            start = index + 1
+        index += 1
+    tail = args[start:].strip()
+    if tail:
+        parts.append(tail)
+    return parts
+
+
+def extract_metadata_tags(
+    metadata_arg: str, resolvers: dict[str, set[str]]
+) -> set[str]:
+    stripped = metadata_arg.strip()
+    if not stripped:
+        return set()
+    if stripped.startswith("{"):
+        end = find_matching(stripped, 0, "{", "}")
+        return literal_tags(stripped[: end + 1] if end is not None else stripped)
+
+    identifier = re.match(r"^([A-Za-z_$][\w$]*)$", stripped)
+    if identifier:
+        return resolvers.get(identifier.group(1), set())
+
+    call = re.match(r"^([A-Za-z_$][\w$]*)\s*\(", stripped)
+    if call:
+        return resolvers.get(call.group(1), set())
+
+    return set()
+
+
+def literal_tags(text: str) -> set[str]:
+    return {
+        match.group(1)
+        for match in re.finditer(r"""['"`](@[A-Za-z0-9_-]+:[^'"`,\]\s}]+)""", text)
+    }
+
+
+def has_tag(tags: set[str], required_prefix: str) -> bool:
+    return any(tag.startswith(required_prefix) for tag in tags)
+
+
+def first_string_literal(text: str) -> str:
+    match = re.search(r"""['"`]([^'"`]+)['"`]""", text)
+    return match.group(1) if match else text.strip()[:80]
+
+
+def find_statement_end(text: str, start_index: int) -> int:
+    quote: str | None = None
+    escaped = False
+    stack: list[str] = []
+    index = start_index
+    while index < len(text):
+        char = text[index]
+        if quote:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == quote:
+                quote = None
+            index += 1
+            continue
+        if char in {"'", '"', "`"}:
+            quote = char
+        elif char in "([{":
+            stack.append(char)
+        elif char in ")]}":
+            if stack:
+                stack.pop()
+        elif char == ";" and not stack:
+            return index
+        index += 1
+    return len(text)
+
+
+def find_matching(
+    text: str, open_index: int, open_char: str, close_char: str
+) -> int | None:
+    quote: str | None = None
+    escaped = False
+    depth = 0
+    index = open_index
+    while index < len(text):
+        char = text[index]
+        if quote:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == quote:
+                quote = None
+            index += 1
+            continue
+        if char in {"'", '"', "`"}:
+            quote = char
+        elif char == open_char:
+            depth += 1
+        elif char == close_char:
+            depth -= 1
+            if depth == 0:
+                return index
+        index += 1
+    return None

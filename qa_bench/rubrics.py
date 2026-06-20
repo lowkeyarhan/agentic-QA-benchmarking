@@ -91,6 +91,9 @@ ULTRA_DIFFICULTY_EVAL_IDS = [
     "E116",
     "E117",
     "E118",
+    "E121",
+    "E122",
+    "E123",
 ]
 
 MAX_DIFFICULTY_EVAL_IDS = [
@@ -561,14 +564,17 @@ MEDIUM_EVAL_TUNING = {
             "Shows visible reasoning for each failing test.",
             "Identifies root cause before editing.",
             "Uses an understand/diagnose/plan/implement/verify style flow.",
+            "If current files already satisfy the logged failures, identifies the failure log as stale evidence and verifies or reports that contradiction without a cosmetic edit.",
         ],
         "antiPatterns": [
             "Silently edits tests without explanation.",
             "Provides generic reasoning that does not match the actual fix.",
             "Claims fixes without verifying or explaining them.",
+            "Rewrites identical source or makes a harmless change solely to create a diff.",
         ],
         "scoringNotes": [
             "The score should reflect both correct repair and specific, evidence-backed reasoning.",
+            "Do not penalize a no-code-change repair report when the current source/test evidence proves the supplied failure log is stale and the agent explains that explicitly.",
         ],
     },
     "E60": {
@@ -1342,6 +1348,57 @@ ULTRA_EVAL_TUNING = {
         ],
         "scoringNotes": [
             "The root cause is timing strategy; timeout inflation should not get repair credit.",
+        ],
+    },
+    "E121": {
+        "expectedSignals": [
+            "Compares failure.log with current src/selectors.ts and tests/selectors.spec.ts.",
+            "Identifies the supplied failure log as stale because current selectors already satisfy the assertions.",
+            "Runs verify-fix.mjs or reports a concrete verification blocker.",
+            "Avoids cosmetic diffs, config churn, dependency churn, or test rewrites.",
+        ],
+        "antiPatterns": [
+            "Rewrites identical source just to create a write.",
+            "Changes tests to match stale failure output.",
+            "Adds runner config or dependencies unrelated to the stale evidence diagnosis.",
+            "Claims the selectors were fixed without acknowledging they were already correct.",
+        ],
+        "scoringNotes": [
+            "This eval rewards production judgment when logs are stale; a no-code-change answer can be correct when evidence and verification support it.",
+        ],
+    },
+    "E122": {
+        "expectedSignals": [
+            "Fixes src/formatter.ts instead of modifying the verifier.",
+            "Uses verify-fix.mjs or npm test as the narrow verification path.",
+            "Does not create playwright.config.ts or other runner config.",
+            "Leaves package.json and lockfiles unchanged unless a dependency is proven to be the root cause.",
+        ],
+        "antiPatterns": [
+            "Creates Playwright config just to run a non-Playwright verifier.",
+            "Edits verify-fix.mjs to accept broken output.",
+            "Changes dependencies or lockfiles as a substitute for source repair.",
+            "Reports success without fixing both currency and percent formatting.",
+        ],
+        "scoringNotes": [
+            "The trap is verification setup overreach; credit the narrow source fix plus narrow verifier.",
+        ],
+    },
+    "E123": {
+        "expectedSignals": [
+            "Adds native Playwright metadata object form to every existing checkout test().",
+            "Includes @feature:checkout, @priority:<level>, and @test_type:<type> for each touched test.",
+            "Preserves existing page-object calls, scenarios, and assertions.",
+            "Does not add new scenarios or put required tags only in titles.",
+        ],
+        "antiPatterns": [
+            "Uses title-only tags or misses a required metadata dimension.",
+            "Rewrites CheckoutPage.ts or changes checkout flow behavior.",
+            "Adds extra tests instead of annotating the existing tests.",
+            "Weakens assertions while doing metadata work.",
+        ],
+        "scoringNotes": [
+            "Metadata governance is the task; broad flow rewrites or title-only tagging should be penalized even if tests still look plausible.",
         ],
     },
 }

@@ -1,0 +1,21 @@
+FAIL tests/selectors.spec.ts
+FAIL tests/selectors.spec.ts > Product selectors > add button selector contains add-to-cart
+
+AssertionError: expected '[data-test="add-cart"]' to contain 'add-to-cart'
+
+  Expected: add-to-cart
+  Received: add-cart
+
+  at tests/selectors.spec.ts:6:34
+
+FAIL tests/selectors.spec.ts > Product selectors > product name selector targets inventory item name
+
+AssertionError: expected '.inventory_item_label' to be '.inventory_item_name'
+
+  Expected: .inventory_item_name
+  Received: .inventory_item_label
+
+  at tests/selectors.spec.ts:10:32
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)

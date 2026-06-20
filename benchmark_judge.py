@@ -836,7 +836,12 @@ def apply_deterministic_score_caps(result: dict) -> None:
     deterministic_grade = build_deterministic_grade(result)
     result["deterministicGrade"] = deterministic_grade
     cap, cap_reasons = deterministic_score_cap(result, deterministic_grade)
-    if cap is None or result.get("score") is None or float(result["score"]) <= cap:
+    if result.get("score") is None:
+        diagnostics = result.setdefault("judgeDiagnostics", {})
+        diagnostics["deterministicChecks"] = deterministic_grade.get("checks") or []
+        return
+    if cap is None or float(result["score"]) <= cap:
+        apply_deterministic_score_floor(result, deterministic_grade, cap)
         diagnostics = result.setdefault("judgeDiagnostics", {})
         diagnostics["deterministicChecks"] = deterministic_grade.get("checks") or []
         return
@@ -863,6 +868,41 @@ def apply_deterministic_score_caps(result: dict) -> None:
     ).strip()
 
 
+def apply_deterministic_score_floor(
+    result: dict, deterministic_grade: dict, cap: float | None
+) -> None:
+    floor, floor_reasons = deterministic_score_floor(result, deterministic_grade)
+    if floor is None or result.get("score") is None:
+        return
+    effective_floor = min(floor, cap) if cap is not None else floor
+    if float(result["score"]) >= effective_floor:
+        return
+
+    original_score = float(result["score"])
+    result["score"] = effective_floor
+    result["scorePercent"] = round(effective_floor * 100)
+    result["result"] = result_label(effective_floor, bool(result.get("timedOut")))
+    result["scoreSource"] = (
+        f"{result.get('scoreSource') or 'judge'}+deterministic-floor"
+    )
+    if result.get("failedChecks") is not None:
+        result["failedChecks"] = 0
+    if result.get("passedChecks") is not None:
+        result["passedChecks"] = max(1, int(result.get("passedChecks") or 0))
+
+    diagnostics = result.setdefault("judgeDiagnostics", {})
+    diagnostics["deterministicFloors"] = {
+        "originalScore": original_score,
+        "flooredScore": effective_floor,
+        "reasons": floor_reasons,
+        "checks": deterministic_grade.get("floors") or [],
+    }
+    reason_suffix = " Deterministic floor applied: " + ", ".join(floor_reasons) + "."
+    result["reason"] = (
+        str(result.get("reason") or "").rstrip() + reason_suffix
+    ).strip()
+
+
 def deterministic_score_cap(
     result: dict, deterministic_grade: dict | None = None
 ) -> tuple[float | None, list[str]]:
@@ -871,6 +911,16 @@ def deterministic_score_cap(
     cap = min((float(item["cap"]) for item in caps), default=None)
     reasons = [str(item.get("reason") or item.get("checkId")) for item in caps]
     return cap, reasons
+
+
+def deterministic_score_floor(
+    result: dict, deterministic_grade: dict | None = None
+) -> tuple[float | None, list[str]]:
+    grade = deterministic_grade or build_deterministic_grade(result)
+    floors = grade.get("floors") or []
+    floor = max((float(item["floor"]) for item in floors), default=None)
+    reasons = [str(item.get("reason") or item.get("checkId")) for item in floors]
+    return floor, reasons
 
 
 def min_cap(current: float | None, candidate: float) -> float:

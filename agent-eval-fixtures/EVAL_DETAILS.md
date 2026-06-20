@@ -101,7 +101,7 @@ Cross-flow, root-cause analysis from logs, must avoid weakening assertions, robu
 
 ---
 
-## Ultra (tier 7-9) — 20 evals
+## Ultra (tier 7-9) — 23 evals
 
 Competing evidence, stale references, scoped edits, strong judgment required.
 
@@ -127,6 +127,9 @@ Competing evidence, stale references, scoped edits, strong judgment required.
 | E116    | 8    | build  | API Mocking: Intercept and Conditionally Respond              | Mock inventory API with page.route()               |
 | E117    | 8    | report | Bug Report from Checkout Failure Logs                         | Analyze failure log for root cause (non-editing)   |
 | E118    | 9    | fix    | Toast Race Condition: Replace waitForTimeout with Waits       | Remove waitForTimeout, use state-based waits       |
+| E121    | 9    | fix    | Stale Failure Log: No Cosmetic Diff                           | Current source is already correct; no fake edit    |
+| E122    | 9    | fix    | Verification Harness Trap: No Playwright Config Churn         | Use verify-fix.mjs, do not add runner config       |
+| E123    | 9    | build  | Metadata Governance With Existing Flow Preservation           | Add native metadata without rewriting flow         |
 
 ---
 

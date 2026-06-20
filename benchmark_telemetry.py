@@ -88,6 +88,9 @@ def telemetry_candidate_paths(
         ("run-telemetry-json", case_run_dir / "telemetry.json"),
         ("run-telemetry-jsonl", case_run_dir / "telemetry.jsonl"),
         ("run-usage-jsonl", case_run_dir / "usage.jsonl"),
+        ("run-commands-json", case_run_dir / "commands.json"),
+        ("run-supatest-commands-json", case_run_dir / ".supatest" / "commands.json"),
+        ("project-supatest-commands-json", case_run_dir / "project" / ".supatest" / "commands.json"),
         ("run-supatest-telemetry-json", case_run_dir / ".supatest" / "telemetry.json"),
         (
             "run-supatest-telemetry-jsonl",
@@ -440,6 +443,8 @@ def categorize_shell_command(command: str) -> str | None:
         return "read"
     if re.match(r"^(npm|pnpm|yarn)\s+(install|add|i)\b", lower):
         return "dependency-install"
+    if "graphify" in lower:
+        return "graphify"
     if "maestro" in lower:
         return "mobile-runtime"
     return "other"

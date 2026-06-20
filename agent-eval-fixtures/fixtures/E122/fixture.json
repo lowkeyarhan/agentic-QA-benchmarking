@@ -1,0 +1,33 @@
+{
+  "evalId": "E122",
+  "name": "Verification Harness Trap: No Playwright Config Churn",
+  "mode": "fix",
+  "task": "Fix the formatter failure. Use the narrowest existing verification path; do not create Playwright config or change dependencies unless they are the root cause.",
+  "logsFile": "failure.log",
+  "passCriteria": [
+    "Fixes the real source bug in src/formatter.ts",
+    "Uses verify-fix.mjs or npm test as the narrow verifier",
+    "Does not add playwright.config.ts or test runner config",
+    "Does not change package.json or lockfiles for verification setup"
+  ],
+  "failCriteria": [
+    "Creates playwright.config.ts or other runner config just for verification",
+    "Changes dependencies instead of fixing the formatter",
+    "Edits verify-fix.mjs to make the check pass",
+    "Leaves dependency-only or config-only churn"
+  ],
+  "tier": 9,
+  "qaBench": {
+    "capability": "test-repair",
+    "metricIds": [
+      "relevance",
+      "coverage",
+      "test_integrity",
+      "root_cause_accuracy",
+      "maintainability"
+    ],
+    "difficulty": "ultra"
+  },
+  "category": "verification-discipline",
+  "baseTemplate": "playwright-ts-minimal"
+}

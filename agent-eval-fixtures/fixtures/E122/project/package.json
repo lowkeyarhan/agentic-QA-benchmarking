@@ -1,0 +1,9 @@
+{
+  "scripts": {
+    "test": "node verify-fix.mjs",
+    "verify": "node verify-fix.mjs"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.0"
+  }
+}
